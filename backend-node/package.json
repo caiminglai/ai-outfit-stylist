@@ -1,0 +1,37 @@
+{
+  "name": "style-ai-backend",
+  "version": "1.0.0",
+  "description": "Style AI Node.js 后端(从 Python Flask 迁移)",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js",
+    "seed": "node db/seed.js",
+    "format": "prettier --write \"**/*.js\"",
+    "format:check": "prettier --check \"**/*.js\"",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "test": "node --test test/"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "bcryptjs": "^3.0.3",
+    "better-sqlite3": "^13.0.3",
+    "compression": "^1.8.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "express-rate-limit": "^8.6.1",
+    "helmet": "^8.3.0",
+    "multer": "^1.4.5-lts.1",
+    "openai": "^4.77.0"
+  },
+  "devDependencies": {
+    "eslint": "^9.39.1",
+    "eslint-config-prettier": "^10.1.8",
+    "globals": "^16.5.0",
+    "prettier": "^3.8.4"
+  }
+}

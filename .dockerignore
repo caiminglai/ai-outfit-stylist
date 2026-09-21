@@ -1,0 +1,30 @@
+# ===== 依赖与构建产物 =====
+# 宿主机 node_modules 是 Windows 版，盖进镜像会让 better-sqlite3 的原生绑定失效
+**/node_modules
+# dist 在镜像内重新构建，避免把本机的旧产物烤进去
+app/dist
+
+# ===== 运行时数据（全部走 compose 挂载，不该进镜像）=====
+backend-node/db/styleai.db
+backend-node/db/styleai.db-shm
+backend-node/db/styleai.db-wal
+backend-node/uploads
+backend-node/logs
+
+# ===== 密钥（仓库与镜像都是公开的）=====
+.env
+**/.env
+
+# ===== 模型文件（体积大，运行时只读挂到 /models）=====
+models
+
+# ===== 版本控制与编辑器 =====
+.git
+**/.gitignore
+**/.vscode
+**/.history
+
+# ===== 容器里用不到的本机脚本与文档 =====
+dev.bat
+npm-patch.js
+**/*.md

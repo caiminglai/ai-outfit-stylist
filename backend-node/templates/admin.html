@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>后端管理 — 私人形象定制AI</title>
+  <!-- 样式已提取为独立文件 -->
+  <link rel="stylesheet" href="/static/admin/admin.css">
+</head>
+<body>
+
+<!-- ════════════════════════════════════════════════
+  顶部导航
+════════════════════════════════════════════════ -->
+<header>
+  <h1>后端管理中心</h1>
+  <span class="sub">私人形象定制AI · 规则引擎 & 库存管理</span>
+  <nav>
+    <button class="nav-btn active" data-section="rules">规则编辑器</button>
+    <button class="nav-btn" data-section="inventory">库存管理</button>
+    <button class="nav-btn" data-section="models">模型管理</button>
+    <button class="nav-btn" data-section="tables">数据库表结构</button>
+    <button class="nav-btn" data-section="data">数据浏览</button>
+    <button class="nav-btn" data-section="functions">函数逻辑</button>
+    <button class="nav-btn" data-section="source">源代码</button>
+    <button class="nav-btn" data-section="routes">接口路由</button>
+  </nav>
+</header>
+
+<!-- ════════════════════════════════════════════════
+  统计概览
+════════════════════════════════════════════════ -->
+<div id="stats-bar">
+  <div class="stat-card"><span class="label">规则组</span><span class="value" id="stat-rule_groups">-</span></div>
+  <div class="stat-card"><span class="label">规则条件</span><span class="value" id="stat-rule_conditions">-</span></div>
+  <div class="stat-card"><span class="label">规则动作</span><span class="value" id="stat-rule_actions">-</span></div>
+  <div class="stat-card"><span class="label">库存商品</span><span class="value" id="stat-inventory_products">-</span></div>
+  <div class="stat-card"><span class="label">商品分类</span><span class="value" id="stat-inventory_categories">-</span></div>
+  <div class="stat-card"><span class="label">3D模型</span><span class="value" id="stat-models">-</span></div>
+  <div class="stat-card"><span class="label">顾客会话</span><span class="value" id="stat-customer_sessions">-</span></div>
+  <div class="stat-card"><span class="label">推荐记录</span><span class="value" id="stat-recommendation_logs">-</span></div>
+</div>
+
+<!-- ════════════════════════════════════════════════
+  主内容区
+════════════════════════════════════════════════ -->
+<main>
+  <!-- 左侧边栏 -->
+  <aside id="sidebar">
+    <div class="sidebar-group">
+      <div class="sidebar-title">管理功能</div>
+      <div id="sidebar-functions">
+        <div class="sidebar-item active" data-nav="rules"><span>📋</span><span>规则编辑器</span></div>
+        <div class="sidebar-item" data-nav="inventory"><span>📦</span><span>库存管理</span></div>
+        <div class="sidebar-item" data-nav="models"><span>🎭</span><span>模型管理</span></div>
+      </div>
+    </div>
+    <div class="sidebar-group">
+      <div class="sidebar-title">数据表</div>
+      <div id="sidebar-tables"></div>
+    </div>
+    <div class="sidebar-group">
+      <div class="sidebar-title">模块文件</div>
+      <div id="sidebar-modules"></div>
+    </div>
+  </aside>
+
+  <!-- 右侧内容 -->
+  <div id="content">
+    <!-- Section: 规则编辑器 -->
+    <div id="section-rules" class="section active">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+        <h2 style="margin:0;">规则编辑器</h2>
+        <div style="display:flex;gap:8px;">
+          <button class="btn btn-sm" id="rules-preview-btn">🧪 规则试算</button>
+          <button class="btn btn-primary btn-sm" id="rules-create-btn">+ 新建规则</button>
+        </div>
+      </div>
+      <div class="rules-toolbar">
+        <select id="filter-mode">
+          <option value="">全部模式</option>
+          <option value="store">门店模式</option>
+          <option value="personal">个人衣橱</option>
+        </select>
+        <select id="filter-gender">
+          <option value="">全部性别</option>
+          <option value="女">女</option>
+          <option value="男">男</option>
+        </select>
+        <select id="filter-category">
+          <option value="">全部类别</option>
+          <option value="outfit">穿搭</option>
+          <option value="makeup">美妆</option>
+          <option value="hairstyle">发型</option>
+          <option value="accessory">配饰</option>
+        </select>
+        <select id="filter-scenario">
+          <option value="">全部场景</option>
+          <option value="通勤">通勤</option>
+          <option value="约会">约会</option>
+          <option value="面试">面试</option>
+          <option value="休闲">休闲</option>
+          <option value="聚会">聚会</option>
+        </select>
+        <select id="filter-enabled">
+          <option value="">全部状态</option>
+          <option value="true">已启用</option>
+          <option value="false">已停用</option>
+        </select>
+        <button class="btn btn-sm" id="rules-refresh">🔄 刷新</button>
+        <span id="rules-count" style="color:var(--muted);font-size:12px;margin-left:auto;"></span>
+      </div>
+      <div id="rules-container" class="loading">加载中...</div>
+    </div>
+
+    <!-- Section: 库存管理 -->
+    <div id="section-inventory" class="section">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+        <h2 style="margin:0;">库存管理</h2>
+        <div style="display:flex;gap:8px;">
+          <button class="btn btn-sm" id="inv-category-btn">📂 分类管理</button>
+          <button class="btn btn-primary btn-sm" id="inv-create-btn">+ 新增商品</button>
+        </div>
+      </div>
+      <div class="inv-toolbar">
+        <select id="inv-filter-category"><option value="">全部分类</option></select>
+        <select id="inv-filter-stock">
+          <option value="">全部库存</option>
+          <option value="in">有货</option>
+          <option value="out">缺货</option>
+        </select>
+        <input type="text" id="inv-search" placeholder="搜索商品名称/SKU..." style="width:200px;">
+        <button class="btn btn-sm" id="inv-refresh">🔄 刷新</button>
+        <span id="inv-count" style="color:var(--muted);font-size:12px;margin-left:auto;"></span>
+      </div>
+      <div id="inv-container" class="loading">加载中...</div>
+    </div>
+
+    <!-- Section: 模型管理 -->
+    <div id="section-models" class="section">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+        <h2 style="margin:0;">3D模型管理</h2>
+        <div style="display:flex;gap:8px;">
+          <button class="btn btn-sm" id="models-scan-btn">🔄 扫描模型</button>
+          <button class="btn btn-primary btn-sm" id="models-enable-all-btn">✅ 全部启用</button>
+        </div>
+      </div>
+      <div class="inv-toolbar">
+        <select id="model-filter-source">
+          <option value="">全部来源</option>
+          <option value="原神">原神</option>
+          <option value="鸣潮">鸣潮</option>
+          <option value="尘白禁区">尘白禁区</option>
+          <option value="星渊">星渊</option>
+          <option value="其他">其他</option>
+        </select>
+        <select id="model-filter-status">
+          <option value="">全部状态</option>
+          <option value="enabled">已启用</option>
+          <option value="disabled">已禁用</option>
+        </select>
+        <input type="text" id="model-search" placeholder="搜索模型名称..." style="width:200px;">
+        <span id="models-count" style="color:var(--muted);font-size:12px;margin-left:auto;"></span>
+      </div>
+      <div id="models-container" class="loading">加载中...</div>
+    </div>
+
+    <!-- Section: 表结构 -->
+    <div id="section-tables" class="section">
+      <h2>数据库表结构</h2>
+      <div id="tables-container" class="loading">加载中...</div>
+    </div>
+
+    <!-- Section: 数据浏览 -->
+    <div id="section-data" class="section">
+      <h2>数据浏览</h2>
+      <div class="rules-toolbar">
+        <select id="data-table-select"></select>
+        <button class="btn btn-sm" id="data-refresh">刷新</button>
+        <span style="color:var(--muted);font-size:12px">每页</span>
+        <select id="data-per-page" style="width:auto;">
+          <option value="10">10</option>
+          <option value="20" selected>20</option>
+          <option value="50">50</option>
+          <option value="100">100</option>
+        </select>
+        <span style="color:var(--muted);font-size:12px">条</span>
+      </div>
+      <div id="data-container" class="loading">请选择表查看数据</div>
+      <div id="data-pagination" class="pagination" style="display:none;"></div>
+    </div>
+
+    <!-- Section: 函数逻辑 -->
+    <div id="section-functions" class="section">
+      <h2>函数逻辑 & 业务代码</h2>
+      <div id="functions-container" class="loading">加载中...</div>
+    </div>
+
+    <!-- Section: 源代码 -->
+    <div id="section-source" class="section">
+      <h2>源代码查看</h2>
+      <div class="rules-toolbar">
+        <select id="source-file-select" style="flex:1;"></select>
+        <button class="btn btn-sm" id="source-load">加载</button>
+      </div>
+      <pre class="code" id="source-content">选择文件后点击加载...</pre>
+    </div>
+
+    <!-- Section: API路由 -->
+    <div id="section-routes" class="section">
+      <h2>接口路由列表</h2>
+      <div id="routes-container" class="loading">加载中...</div>
+    </div>
+  </div>
+</main>
+
+<!-- ════════════════════════════════════════════════
+  模态框：规则编辑
+════════════════════════════════════════════════ -->
+<div class="modal-overlay" id="rule-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 id="rule-modal-title">新建规则</h3>
+      <button class="modal-close" onclick="closeRuleModal()">×</button>
+    </div>
+    <div class="modal-body" id="rule-modal-body"></div>
+    <div class="modal-footer">
+      <button class="btn" onclick="closeRuleModal()">取消</button>
+      <button class="btn btn-primary" id="rule-save-btn">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════
+  模态框：商品编辑
+════════════════════════════════════════════════ -->
+<div class="modal-overlay" id="product-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 id="product-modal-title">新增商品</h3>
+      <button class="modal-close" onclick="closeProductModal()">×</button>
+    </div>
+    <div class="modal-body" id="product-modal-body"></div>
+    <div class="modal-footer">
+      <button class="btn" onclick="closeProductModal()">取消</button>
+      <button class="btn btn-primary" id="product-save-btn">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════
+  模态框：分类管理
+════════════════════════════════════════════════ -->
+<div class="modal-overlay" id="category-modal">
+  <div class="modal" style="max-width:500px;">
+    <div class="modal-header">
+      <h3>商品分类管理</h3>
+      <button class="modal-close" onclick="closeCategoryModal()">×</button>
+    </div>
+    <div class="modal-body" id="category-modal-body"></div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════
+  模态框：规则试算
+════════════════════════════════════════════════ -->
+<div class="modal-overlay" id="preview-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <h3>规则试算</h3>
+      <button class="modal-close" onclick="closePreviewModal()">×</button>
+    </div>
+    <div class="modal-body" id="preview-modal-body"></div>
+    <div class="modal-footer">
+      <button class="btn" onclick="closePreviewModal()">关闭</button>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════
+  JavaScript 模块（按依赖顺序加载）
+
+  加载顺序：
+  1. admin-utils.js   — 全局状态、常量、工具函数（无依赖）
+  2. admin-rules.js   — 规则编辑器（依赖 utils）
+  3. admin-inventory.js — 库存管理（依赖 utils）
+  4. admin-models.js  — 3D模型管理（依赖 utils）
+  5. admin-data.js    — 数据浏览/表结构/函数/源码/路由（依赖 utils）
+  6. 内联初始化脚本   — Token验证 + 导航绑定 + 初始加载
+════════════════════════════════════════════════ -->
+<script src="/static/admin/admin-utils.js"></script>
+<script src="/static/admin/admin-rules.js"></script>
+<script src="/static/admin/admin-inventory.js"></script>
+<script src="/static/admin/admin-models.js"></script>
+<script src="/static/admin/admin-data.js"></script>
+<script>
+/* Token 验证（页面入口守卫） */
+(function() {
+  var token = localStorage.getItem('admin_token');
+  if (!token) { window.location.replace('/admin/login'); return; }
+  var xhr = new XMLHttpRequest();
+  xhr.open('GET', '/api/auth/admin/verify', true);
+  xhr.setRequestHeader('Authorization', 'Bearer ' + token);
+  xhr.timeout = 5000;
+  xhr.onreadystatechange = function() {
+    if (xhr.readyState !== 4) return;
+    try {
+      var d = JSON.parse(xhr.responseText);
+      if (!d.success || !d.data || !d.data.valid) {
+        localStorage.removeItem('admin_token');
+        window.location.replace('/admin/login');
+      }
+    } catch(e) {
+      localStorage.removeItem('admin_token');
+      window.location.replace('/admin/login');
+    }
+  };
+  xhr.send();
+})();
+
+/* 导航按钮绑定 */
+document.querySelectorAll('.nav-btn').forEach(function(btn) {
+  btn.addEventListener('click', function() { switchSection(btn.dataset.section); });
+});
+document.querySelectorAll('#sidebar-functions .sidebar-item').forEach(function(item) {
+  item.addEventListener('click', function() { switchSection(item.dataset.nav); });
+});
+
+/* 初始化加载 */
+loadStats();
+loadCategories().then(function() { loadRules(); });
+</script>
+
+</body>
+</html>
