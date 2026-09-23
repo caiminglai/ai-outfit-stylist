@@ -1,0 +1,58 @@
+# 环境与密钥
+.env
+.env.local
+*.key
+*.pem
+
+# Node.js
+node_modules/
+dist/
+app/dist/
+
+# 数据库(主库文件不入库,避免频繁变动和泄露用户数据)
+*.db-shm
+*.db-wal
+*.sqlite3
+*.bak
+*.bak.*
+
+# 上传文件
+backend-node/uploads/
+
+# 维护脚本产物
+backend-node/scripts/scan-report.json
+
+# 日志
+*.log
+backend-node/logs/
+
+# 模型文件(体积大,不纳入 git,本地存放即可)
+models/
+!models/.gitkeep
+
+# 构建产物日志
+build-out.log
+build-err.log
+backend-out.log
+backend-err.log
+
+# IDE
+.vscode/
+.idea/
+
+# 系统文件
+.DS_Store
+Thumbs.db
+
+# TRAE SOLO CN 虚拟文件系统目录(重解析点)
+Administrator/
+AppData/
+
+# 编辑器本地历史
+.history/
+
+# 临时编译目录
+.tmp-better-sqlite3/
+
+# AI工具配置
+CLAUDE.md

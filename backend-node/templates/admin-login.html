@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>管理后台 - 私人形象定制AI</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,"Microsoft YaHei",system-ui,sans-serif;background:linear-gradient(135deg,#0d1117 0%,#161b22 40%,#1a1e2e 100%);min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px}
+.login-box{background:rgba(30,35,50,0.95);border-radius:20px;padding:40px 36px;width:380px;box-shadow:0 12px 48px rgba(75,63,227,0.2);border:1px solid rgba(75,63,227,0.3)}
+.login-box h1{font-size:22px;color:#A9AEFF;text-align:center;margin-bottom:4px;font-weight:600;letter-spacing:0.5px}
+.login-box .subtitle{color:#6F6FFF;font-size:13px;text-align:center;margin-bottom:30px;opacity:0.8}
+.input-group{margin-bottom:20px}
+.input-group label{display:block;color:#A9AEFF;font-size:13px;margin-bottom:8px;font-weight:500}
+.input-group input{width:100%;padding:13px 16px;border:1px solid rgba(75,63,227,0.3);border-radius:12px;font-size:14px;color:#e5e5e5;background:rgba(13,17,23,0.6);transition:border-color 0.2s}
+.input-group input::placeholder{color:#52525b}
+.input-group input:focus{outline:none;border-color:#6F6FFF;background:rgba(13,17,23,0.8)}
+.btn{width:100%;padding:13px;border:none;border-radius:12px;background:linear-gradient(135deg,#4B3FE3 0%,#6F6FFF 100%);color:#fff;font-size:14px;font-weight:500;cursor:pointer;transition:transform 0.15s,box-shadow 0.15s;letter-spacing:0.3px}
+.btn:hover{transform:scale(1.02);box-shadow:0 6px 24px rgba(75,63,227,0.4)}
+.btn:active{transform:scale(0.98)}
+.btn:disabled{opacity:0.6;cursor:not-allowed;transform:none}
+.err{color:#F87454;text-align:center;margin-top:14px;font-size:12px;min-height:18px}
+.decor{position:fixed;top:60px;right:80px;width:100px;height:100px;border-radius:50%;background:radial-gradient(circle,rgba(75,63,227,0.15) 0%,transparent 70%);animation:pulse 4s ease-in-out infinite}
+.decor2{position:fixed;bottom:80px;left:60px;width:80px;height:80px;border-radius:50%;background:radial-gradient(circle,rgba(111,111,255,0.1) 0%,transparent 70%);animation:pulse 5s ease-in-out infinite reverse}
+@keyframes pulse{0%,100%{transform:scale(1);opacity:0.6}50%{transform:scale(1.15);opacity:1}}
+@media(max-width:480px){
+  .login-box{width:100%;padding:30px 20px;margin:10px}
+  .login-box h1{font-size:18px}
+  .decor,.decor2{display:none}
+}
+</style>
+</head>
+<body>
+<div class="decor"></div>
+<div class="decor2"></div>
+<div class="login-box">
+  <h1>私人形象定制 AI</h1>
+  <p class="subtitle">管理后台登录</p>
+  <div class="input-group">
+    <label>管理员账号</label>
+    <input type="text" id="username" placeholder="admin" value="admin">
+  </div>
+  <div class="input-group">
+    <label>登录密码</label>
+    <input type="password" id="pwd" placeholder="请输入密码" autocomplete="current-password">
+  </div>
+  <button class="btn" id="loginBtn">登 录</button>
+  <p class="err" id="err"></p>
+</div>
+<script>
+(function(){
+  var loginBtn = document.getElementById('loginBtn');
+  var errEl = document.getElementById('err');
+  var usernameEl = document.getElementById('username');
+  var pwdEl = document.getElementById('pwd');
+
+  function getBase() {
+    var p = window.location.pathname;
+    // /admin/ 或 /admin/login
+    if (p.indexOf('/admin') === 0) return '/admin';
+    return '';
+  }
+
+  function setLoading(loading) {
+    loginBtn.disabled = loading;
+    loginBtn.textContent = loading ? '登录中...' : '登 录';
+  }
+
+  loginBtn.onclick = function() {
+    var username = usernameEl.value.trim() || 'admin';
+    var pwd = pwdEl.value;
+    errEl.textContent = '';
+
+    if (!pwd) { errEl.textContent = '请输入密码'; return; }
+
+    setLoading(true);
+    var xhr = new XMLHttpRequest();
+    xhr.open('POST', '/api/auth/admin/login', true);
+    xhr.setRequestHeader('Content-Type', 'application/json');
+    xhr.timeout = 10000;
+
+    xhr.onreadystatechange = function() {
+      if (xhr.readyState !== 4) return;
+      setLoading(false);
+      if (xhr.status === 200) {
+        try {
+          var d = JSON.parse(xhr.responseText);
+          if (d.success && d.data && d.data.token) {
+            localStorage.setItem('admin_token', d.data.token);
+            window.location.href = getBase() + '/';
+          } else {
+            errEl.textContent = d.message || '登录失败';
+          }
+        } catch(e) { errEl.textContent = '响应解析失败'; }
+      } else if (xhr.status === 401) {
+        errEl.textContent = '账号或密码错误';
+      } else {
+        try { var d = JSON.parse(xhr.responseText); errEl.textContent = d.message || '登录失败'; }
+        catch(e) { errEl.textContent = '登录失败 (' + xhr.status + ')'; }
+      }
+    };
+
+    xhr.onerror = function() { setLoading(false); errEl.textContent = '网络连接失败'; };
+    xhr.ontimeout = function() { setLoading(false); errEl.textContent = '请求超时'; };
+    xhr.send(JSON.stringify({ username: username, password: pwd }));
+  };
+
+  pwdEl.onkeypress = function(e) { if (e.key === 'Enter') loginBtn.click(); };
+  pwdEl.focus();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>创作者中心 — 私人形象定制AI</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; background: #12141a; color: #e8eaf0; min-height: 100vh; padding: 20px 16px 60px; }
+    .wrap { max-width: 860px; margin: 0 auto; }
+    h1 { font-size: 20px; margin-bottom: 6px; }
+    .sub { color: #8b93a7; font-size: 13px; line-height: 1.6; margin-bottom: 18px; }
+    .tabs { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
+    .tab { padding: 9px 16px; border-radius: 8px; border: 1px solid #2a3040; background: #14171f; color: #a8b0c2; font-size: 14px; cursor: pointer; }
+    .tab.on { background: #24304a; border-color: #3d5a8a; color: #dbe6f8; }
+    .pane { display: none; }
+    .pane.on { display: block; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 14px; }
+    .work { background: #1b1f28; border: 1px solid #2a3040; border-radius: 12px; overflow: hidden; cursor: pointer; }
+    .work .cover { height: 120px; background: #20242f center/cover no-repeat; display: flex; align-items: center; justify-content: center; color: #5d6577; font-size: 12px; }
+    .work .body { padding: 11px 12px 13px; }
+    .work h3 { font-size: 14px; margin-bottom: 5px; }
+    .work p { font-size: 12px; color: #8b93a7; line-height: 1.5; }
+    .meta { margin-top: 8px; font-size: 11px; color: #6f7789; display: flex; gap: 10px; }
+    .tag { display: inline-block; font-size: 11px; padding: 1px 7px; border-radius: 20px; background: #24304a; color: #a8c4ee; margin-right: 6px; }
+    .badge { padding: 2px 9px; border-radius: 20px; font-size: 12px; }
+    .b-pending { background: #3a3218; color: #ffd479; }
+    .b-approved { background: #1c3526; color: #7ddba3; }
+    .b-rejected { background: #3a1f22; color: #ff9ba1; }
+    .card { background: #1b1f28; border: 1px solid #2a3040; border-radius: 12px; padding: 18px; margin-bottom: 16px; }
+    label { display: block; font-size: 13px; color: #a8b0c2; margin: 14px 0 6px; }
+    label:first-child { margin-top: 0; }
+    input[type=text], select, textarea { width: 100%; padding: 10px; border-radius: 8px; border: 1px solid #2a3040; background: #14171f; color: #e8eaf0; font-size: 14px; font-family: inherit; }
+    textarea { min-height: 150px; resize: vertical; font-family: ui-monospace, Consolas, monospace; font-size: 12px; }
+    input[type=file] { font-size: 13px; color: #a8b0c2; }
+    button.act { margin-top: 14px; padding: 11px 22px; border: 0; border-radius: 8px; background: #ffd479; color: #2a220a; font-size: 15px; font-weight: 600; cursor: pointer; }
+    button.act:disabled { opacity: .5; cursor: not-allowed; }
+    button.ghost { background: #24304a; color: #dbe6f8; }
+    .msg { font-size: 13px; margin-top: 10px; min-height: 18px; }
+    .msg.err { color: #ff9ba1; }
+    .msg.ok { color: #7ddba3; }
+    .stats { display: flex; gap: 18px; flex-wrap: wrap; margin-bottom: 14px; font-size: 13px; color: #8b93a7; }
+    .stats b { color: #e8eaf0; font-size: 17px; display: block; }
+    .mine { border-bottom: 1px solid #242a37; padding: 11px 0; display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; }
+    .mine:last-child { border-bottom: 0; }
+    .mine .share { font-size: 11px; color: #8ab4f8; word-break: break-all; }
+    .mask { position: fixed; inset: 0; background: rgba(0,0,0,.72); display: none; align-items: center; justify-content: center; padding: 18px; z-index: 20; }
+    .mask.on { display: flex; }
+    .sheet { background: #1b1f28; border: 1px solid #2a3040; border-radius: 14px; max-width: 620px; width: 100%; max-height: 86vh; overflow: auto; padding: 20px; }
+    .sheet pre { background: #14171f; border: 1px solid #2a3040; border-radius: 8px; padding: 12px; font-size: 12px; white-space: pre-wrap; word-break: break-all; margin-top: 12px; }
+    .empty { color: #6f7789; font-size: 13px; padding: 20px 0; }
+    a { color: #8ab4f8; }
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <h1>创作者中心</h1>
+  <p class="sub">提交你的搭配、模型或推荐规则；审核通过后进广场，按精选与浏览量排序。把你专属的分享链接发到站外，带回来的人头数会记在你的作品上。</p>
+
+  <div class="tabs">
+    <div class="tab on" data-pane="plaza">广场</div>
+    <div class="tab" data-pane="submit">我要提交</div>
+    <div class="tab" data-pane="mine">我的作品</div>
+  </div>
+
+  <div class="pane on" id="pane-plaza">
+    <div class="tabs">
+      <div class="tab on" data-type="">全部</div>
+      <div class="tab" data-type="outfit">搭配</div>
+      <div class="tab" data-type="makeup">化妆</div>
+      <div class="tab" data-type="rule">推荐规则</div>
+    </div>
+    <div id="plaza-list" class="grid"></div>
+    <div id="plaza-msg" class="msg"></div>
+  </div>
+
+  <div class="pane" id="pane-submit">
+    <div class="card">
+      <label for="f-type">类型</label>
+      <select id="f-type">
+        <option value="outfit">搭配</option>
+        <option value="makeup">化妆</option>
+        <option value="rule">推荐规则</option>
+      </select>
+      <label for="f-title">标题（40 字内）</label>
+      <input type="text" id="f-title" maxlength="40" placeholder="例：小个子秋冬通勤三套">
+      <label for="f-summary">简介（300 字内）</label>
+      <textarea id="f-summary" rows="3" maxlength="300" style="min-height:auto;font-family:inherit;font-size:14px" placeholder="说清楚适合谁、什么场合"></textarea>
+      <label for="f-cover">封面图（可选，jpg / png / webp）</label>
+      <input type="file" id="f-cover" accept="image/jpeg,image/png,image/webp">
+      <label for="f-lines">内容（每行一条，会原样展示在广场）</label>
+      <textarea id="f-lines" style="font-family:inherit;font-size:14px"></textarea>
+      <label for="f-note">补充说明（可选，200 字内）</label>
+      <input type="text" id="f-note" maxlength="200">
+      <button class="act" id="f-submit">提交审核</button>
+      <div class="msg" id="f-msg"></div>
+    </div>
+    <p class="sub">一行写一条就行，不用管格式。后台审核时看到的就是你这里写的样子。<b>不要填别人的手机号、身份证等个人信息。</b></p>
+  </div>
+
+  <div class="pane" id="pane-mine">
+    <div class="card">
+      <div class="stats" id="mine-stats"></div>
+      <div id="mine-list"></div>
+      <button class="act ghost" id="mine-refresh">刷新</button>
+    </div>
+  </div>
+
+  <p class="sub"><a href="/">返回展厅</a> · <a href="/pay.html">付款与凭证</a></p>
+</div>
+
+<div class="mask" id="mask">
+  <div class="sheet">
+    <div id="sheet-body"></div>
+    <button class="act ghost" id="sheet-close">关闭</button>
+  </div>
+</div>
+
+<script>
+var TYPE_CN = { outfit: '搭配', makeup: '化妆', rule: '推荐规则', model: '模型' }; // model 已停,只用于显示历史数据
+var STATUS_CN = { pending: ['待审核', 'b-pending'], approved: ['已上架', 'b-approved'], rejected: ['未通过', 'b-rejected'] };
+var HINT = {
+  outfit: '例：\n黑色高领毛衣\n直筒西裤\n切尔西靴',
+  makeup: '例：\n自然通勤底妆\n豆沙色唇膏\n适合：干皮 / 黄一白',
+  rule: '例：\n条件：女 + 冬季\n推荐：通勤、简约\n排除：荧光绿',
+};
+var NOTE_HINT = {
+  outfit: '例：身高 155–162 优先',
+  makeup: '例：适合通勤淡妆，需与衣橱风格一致',
+  rule: '例：优先级 10，冬季首页第一位用',
+};
+
+/* 详情里的"内容"渲染。历史数据可能是英文键的 JSON，那种情况原样贴出来，不猜格式 */
+function payloadView(p) {
+  var d = p;
+  if (typeof d === 'string') {
+    try { d = JSON.parse(d); } catch (e) { return '<pre>' + esc(d) + '</pre>'; }
+  }
+  if (!d || typeof d !== 'object') return '';
+  if (!Array.isArray(d['内容'])) return '<pre>' + esc(JSON.stringify(d, null, 2)) + '</pre>';
+  var html = '<ul style="font-size:13px;line-height:1.9;margin-top:12px;padding-left:20px">' +
+    d['内容'].map(function (x) { return '<li>' + esc(x) + '</li>'; }).join('') + '</ul>';
+  if (d['备注']) html += '<p style="font-size:12px;color:#8b93a7;margin-top:8px">补充说明：' + esc(d['备注']) + '</p>';
+  return html;
+}
+
+function esc(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+    return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+  });
+}
+
+/* 游客身份单独存一份，不和展厅 SPA 共用 key：
+   SPA 那边写进 localStorage 的 id 是浏览器自己拼的，服务端没有登记，
+   混用会让本页提交时被 loginRequired 挡成 401。
+   服务端 users 表里的游客记录不会过期，所以这里也不按时间淘汰身份。 */
+var SID_KEY = 'style_ai_guest', TS_KEY = 'style_ai_guest_ts';
+
+async function ensureSession(force) {
+  /* 已登录正式账号:用账号那条服务端身份,作品才会跟着手机号走 */
+  var acct = null;
+  try { acct = JSON.parse(localStorage.getItem('style_ai_account') || 'null'); } catch (e) { acct = null; }
+  if (acct && acct.sessionId) {
+    localStorage.setItem(SID_KEY, acct.sessionId);
+    return acct.sessionId;
+  }
+  var sid = localStorage.getItem(SID_KEY);
+  if (sid && !force) return sid;
+  var res = await fetch('/api/auth/guest', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}),
+  });
+  var data = await res.json();
+  if (!data.success) throw new Error('游客身份注册失败');
+  sid = data.data.session_id;
+  localStorage.setItem(SID_KEY, sid);
+  localStorage.setItem(TS_KEY, String(Date.now()));
+  return sid;
+}
+
+async function api(path, opts) {
+  opts = opts || {};
+  opts.headers = opts.headers || {};
+  opts.headers['X-Session-Id'] = await ensureSession();
+  if (opts.json !== undefined) {
+    opts.headers['Content-Type'] = 'application/json';
+    opts.body = JSON.stringify(opts.json);
+    delete opts.json;
+  }
+  var res = await fetch(path, opts);
+  if (res.status === 401) {
+    opts.headers['X-Session-Id'] = await ensureSession(true);
+    res = await fetch(path, opts);
+  }
+  var data = await res.json();
+  if (!data.success) throw new Error((data.error && data.error.message) || data.message || '请求失败');
+  return data.data;
+}
+
+/* ── Tab 切换 ── */
+document.querySelectorAll('.wrap > .tabs > .tab').forEach(function (tab) {
+  tab.addEventListener('click', function () {
+    document.querySelectorAll('.wrap > .tabs > .tab').forEach(function (t) { t.classList.remove('on'); });
+    document.querySelectorAll('.pane').forEach(function (p) { p.classList.remove('on'); });
+    tab.classList.add('on');
+    document.getElementById('pane-' + tab.dataset.pane).classList.add('on');
+    if (tab.dataset.pane === 'plaza') loadPlaza();
+    if (tab.dataset.pane === 'mine') loadMine();
+  });
+});
+
+/* ── 广场 ── */
+var plazaType = '';
+document.querySelectorAll('#pane-plaza .tab').forEach(function (tab) {
+  tab.addEventListener('click', function () {
+    document.querySelectorAll('#pane-plaza .tab').forEach(function (t) { t.classList.remove('on'); });
+    tab.classList.add('on');
+    plazaType = tab.dataset.type;
+    loadPlaza();
+  });
+});
+
+function coverStyle(url) {
+  return url ? 'background-image:url(' + esc(url) + ')' : '';
+}
+
+async function loadPlaza() {
+  var box = document.getElementById('plaza-list');
+  var msg = document.getElementById('plaza-msg');
+  msg.textContent = '加载中…'; msg.className = 'msg';
+  try {
+    var data = await api('/api/creator/works?limit=24' + (plazaType ? '&type=' + plazaType : ''));
+    msg.textContent = data.total ? ('共 ' + data.total + ' 件') : '';
+    msg.className = 'msg';
+    if (!data.items.length) { box.innerHTML = '<div class="empty">还没有通过审核的作品</div>'; return; }
+    box.innerHTML = data.items.map(function (w) {
+      return '<div class="work" data-id="' + w.id + '">' +
+        '<div class="cover" style="' + coverStyle(w.cover_url) + '">' + (w.cover_url ? '' : '无封面') + '</div>' +
+        '<div class="body"><h3>' + esc(w.title) + '</h3>' +
+        '<p><span class="tag">' + esc(TYPE_CN[w.type] || w.type) + '</span>' + esc(w.summary || '') + '</p>' +
+        '<div class="meta"><span>' + esc(w.author_name || '') + '</span><span>浏览 ' + w.heat + '</span><span>分享带量 ' + w.share_views + '</span></div>' +
+        '</div></div>';
+    }).join('');
+    box.querySelectorAll('.work').forEach(function (el) {
+      el.addEventListener('click', function () { openWork(el.dataset.id, ''); });
+    });
+  } catch (e) {
+    msg.textContent = e.message; msg.className = 'msg err';
+  }
+}
+
+async function openWork(id, ref) {
+  try {
+    var w = await api('/api/creator/works/' + encodeURIComponent(id) + (ref ? '?ref=' + encodeURIComponent(ref) : ''));
+    var link = location.origin + '/creator.html?work=' + w.id + '&ref=' + w.share_code;
+    document.getElementById('sheet-body').innerHTML =
+      '<h3 style="font-size:17px;margin-bottom:8px">' + esc(w.title) + '</h3>' +
+      '<p style="font-size:13px;color:#8b93a7;line-height:1.7"><span class="tag">' + esc(TYPE_CN[w.type] || w.type) + '</span>' +
+      esc(w.author_name) + ' · 浏览 ' + w.heat + ' · 分享带量 ' + w.share_views + '</p>' +
+      (w.summary ? '<p style="font-size:13px;margin-top:10px;line-height:1.7">' + esc(w.summary) + '</p>' : '') +
+      '<p style="font-size:12px;color:#8ab4f8;margin-top:12px;word-break:break-all">' + esc(link) + '</p>' +
+      payloadView(w.payload);
+    document.getElementById('mask').classList.add('on');
+  } catch (e) {
+    document.getElementById('plaza-msg').textContent = e.message;
+    document.getElementById('plaza-msg').className = 'msg err';
+  }
+}
+document.getElementById('sheet-close').addEventListener('click', function () {
+  document.getElementById('mask').classList.remove('on');
+});
+
+/* ── 提交 ── */
+function syncHint() {
+  var t = document.getElementById('f-type').value;
+  document.getElementById('f-lines').placeholder = HINT[t];
+  document.getElementById('f-note').placeholder = NOTE_HINT[t];
+}
+document.getElementById('f-type').addEventListener('change', syncHint);
+
+document.getElementById('f-submit').addEventListener('click', async function () {
+  var btn = this, msg = document.getElementById('f-msg');
+  var title = document.getElementById('f-title').value.trim();
+  if (!title) { msg.textContent = '请填写标题'; msg.className = 'msg err'; return; }
+  var lines = document.getElementById('f-lines').value.split('\n')
+    .map(function (s) { return s.trim(); }).filter(Boolean);
+  if (!lines.length) { msg.textContent = '内容至少写一行'; msg.className = 'msg err'; return; }
+  var payload = { '内容': lines };
+  var note = document.getElementById('f-note').value.trim();
+  if (note) payload['备注'] = note;
+  btn.disabled = true; msg.textContent = '提交中…'; msg.className = 'msg';
+  try {
+    var coverUrl = '';
+    var file = document.getElementById('f-cover').files[0];
+    if (file) {
+      var fd = new FormData();
+      fd.append('file', file);
+      var up = await api('/api/creator/cover', { method: 'POST', body: fd });
+      coverUrl = up.url;
+    }
+    var res = await api('/api/creator/works', {
+      method: 'POST',
+      json: {
+        type: document.getElementById('f-type').value,
+        title: title,
+        summary: document.getElementById('f-summary').value.trim(),
+        cover_url: coverUrl,
+        payload: payload,
+      },
+    });
+    msg.textContent = '已提交，等待审核（编号 ' + res.id + '）'; msg.className = 'msg ok';
+    document.getElementById('f-title').value = '';
+    document.getElementById('f-lines').value = '';
+    document.getElementById('f-note').value = '';
+    document.getElementById('f-cover').value = '';
+  } catch (e) {
+    msg.textContent = e.message; msg.className = 'msg err';
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+/* ── 我的作品 ── */
+document.getElementById('mine-refresh').addEventListener('click', loadMine);
+
+async function loadMine() {
+  var box = document.getElementById('mine-list');
+  var stats = document.getElementById('mine-stats');
+  box.innerHTML = '<div class="empty">加载中…</div>';
+  try {
+    var data = await api('/api/creator/my');
+    var t = data.totals;
+    stats.innerHTML =
+      '<div><b>' + data.items.length + '</b>提交</div>' +
+      '<div><b>' + t.approved + '</b>已上架</div>' +
+      '<div><b>' + t.pending + '</b>待审核</div>' +
+      '<div><b>' + t.rejected + '</b>未通过</div>' +
+      '<div><b>' + t.heat + '</b>总浏览</div>' +
+      '<div><b>' + t.share_views + '</b>分享带量</div>';
+    if (!data.items.length) { box.innerHTML = '<div class="empty">还没有提交过作品</div>'; return; }
+    box.innerHTML = data.items.map(function (w) {
+      var st = STATUS_CN[w.status] || [w.status, 'b-pending'];
+      var link = location.origin + '/creator.html?work=' + w.id + '&ref=' + w.share_code;
+      return '<div class="mine"><div><div><span class="tag">' + esc(TYPE_CN[w.type] || w.type) + '</span>' +
+        '<b style="font-size:14px">' + esc(w.title) + '</b> <span class="badge ' + st[1] + '">' + esc(st[0]) + '</span></div>' +
+        '<div class="share">' + esc(link) + '</div>' +
+        (w.admin_note ? '<div style="font-size:12px;color:#8b93a7;margin-top:4px">备注：' + esc(w.admin_note) + '</div>' : '') +
+        '</div><div style="text-align:right;font-size:12px;color:#6f7789;white-space:nowrap">浏览 ' + w.heat +
+        '<br>带量 ' + w.share_views + '</div></div>';
+    }).join('');
+  } catch (e) {
+    box.innerHTML = '<div class="empty">' + esc(e.message) + '</div>';
+  }
+}
+
+/* ── 入口：带 work+ref 的分享链接直接展开详情并计入作者带量 ── */
+(async function init() {
+  syncHint();
+  var params = new URLSearchParams(location.search);
+  await loadPlaza();
+  var work = params.get('work');
+  if (work) openWork(work, params.get('ref') || '');
+})();
+</script>
+</body>
+</html>

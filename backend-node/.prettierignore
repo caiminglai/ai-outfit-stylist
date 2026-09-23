@@ -1,0 +1,9 @@
+node_modules/
+package-lock.json
+styleai.db*
+*.sqlite
+*.bak
+uploads/
+static/
+templates/
+scripts/scan-report.json

@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>付款与凭证提交 — 私人形象定制AI</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; background: #12141a; color: #e8eaf0; min-height: 100vh; padding: 20px 16px 60px; }
+    .wrap { max-width: 520px; margin: 0 auto; }
+    h1 { font-size: 20px; margin-bottom: 6px; }
+    .sub { color: #8b93a7; font-size: 13px; line-height: 1.6; margin-bottom: 20px; }
+    .card { background: #1b1f28; border: 1px solid #2a3040; border-radius: 12px; padding: 18px; margin-bottom: 16px; }
+    .price { font-size: 30px; font-weight: 700; color: #ffd479; }
+    .price small { font-size: 14px; color: #8b93a7; font-weight: 400; margin-left: 6px; }
+    .tabs { display: flex; gap: 8px; margin: 16px 0 12px; }
+    .tab { flex: 1; padding: 10px; text-align: center; border-radius: 8px; border: 1px solid #2a3040; background: #14171f; color: #a8b0c2; font-size: 14px; cursor: pointer; }
+    .tab.on { background: #24304a; border-color: #3d5a8a; color: #dbe6f8; }
+    .qr { display: none; text-align: center; }
+    .qr.on { display: block; }
+    .qr img { width: 240px; max-width: 80%; border-radius: 10px; background: #fff; padding: 8px; }
+    .qr p { font-size: 12px; color: #8b93a7; margin-top: 8px; }
+    label { display: block; font-size: 13px; color: #a8b0c2; margin: 14px 0 6px; }
+    input[type=file] { width: 100%; font-size: 13px; color: #a8b0c2; }
+    button.act { width: 100%; margin-top: 14px; padding: 12px; border: 0; border-radius: 8px; background: #ffd479; color: #2a220a; font-size: 15px; font-weight: 600; cursor: pointer; }
+    button.act:disabled { opacity: .5; cursor: not-allowed; }
+    .row { display: flex; align-items: center; justify-content: space-between; font-size: 13px; padding: 7px 0; border-bottom: 1px solid #242a37; }
+    .row:last-child { border-bottom: 0; }
+    .row span:first-child { color: #8b93a7; }
+    .badge { padding: 2px 9px; border-radius: 20px; font-size: 12px; }
+    .b-pending { background: #3a3218; color: #ffd479; }
+    .b-approved { background: #1c3526; color: #7ddba3; }
+    .b-rejected { background: #3a1f22; color: #ff9ba1; }
+    .msg { font-size: 13px; margin-top: 10px; min-height: 18px; }
+    .msg.err { color: #ff9ba1; }
+    .msg.ok { color: #7ddba3; }
+    .note { font-size: 12px; color: #6f7789; line-height: 1.7; }
+    a { color: #8ab4f8; }
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <h1>付款与凭证提交</h1>
+  <p class="sub">扫码付款后把付款截图传上来，我们看到截图后人工确认并放行服务。</p>
+
+  <div class="card">
+    <div class="price" id="price">—<small id="price-title"></small></div>
+    <div class="tabs">
+      <div class="tab on" data-ch="wechat">微信支付</div>
+      <div class="tab" data-ch="alipay">支付宝</div>
+    </div>
+    <div class="qr on" id="qr-wechat"><img alt="微信收款码" src="/wechat-qr.png"><p>长按识别或截图后在微信里扫码</p></div>
+    <div class="qr" id="qr-alipay"><img alt="支付宝收款码" src="/alipay-qr.png"><p>长按识别或截图后在支付宝里扫码</p></div>
+  </div>
+
+  <div class="card">
+    <label for="proof">付款截图（jpg / png / webp，10MB 以内）</label>
+    <input type="file" id="proof" accept="image/jpeg,image/png,image/webp">
+    <button class="act" id="submit">提交凭证</button>
+    <div class="msg" id="msg"></div>
+  </div>
+
+  <div class="card">
+    <div class="row"><span>当前状态</span><span id="my-status">未提交</span></div>
+    <div class="row"><span>金额</span><span id="my-amount">—</span></div>
+    <div class="row"><span>提交时间</span><span id="my-time">—</span></div>
+    <div class="row"><span>备注</span><span id="my-note">—</span></div>
+  </div>
+
+  <p class="note">本页只登记付款凭证，不直接扣款；实际收款走商户号通道后会换成一键支付。</p>
+  <p class="note"><a href="/">返回展厅</a></p>
+</div>
+
+<script>
+/* 游客身份单独存一份，不和展厅 SPA 共用 key：
+   SPA 那边写进 localStorage 的 id 是浏览器自己拼的，服务端没有登记，
+   混用会让本页提交凭证时被 loginRequired 挡成 401。
+   服务端 users 表里的游客记录不会过期，所以这里也不按时间淘汰身份。 */
+var SID_KEY = 'style_ai_guest', TS_KEY = 'style_ai_guest_ts';
+
+function esc(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+    return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+  });
+}
+
+async function ensureSession(force) {
+  var sid = localStorage.getItem(SID_KEY);
+  if (sid && !force) return sid;
+  var res = await fetch('/api/auth/guest', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({}),
+  });
+  var data = await res.json();
+  if (!data.success) throw new Error('游客身份注册失败');
+  sid = data.data.session_id;
+  localStorage.setItem(SID_KEY, sid);
+  localStorage.setItem(TS_KEY, String(Date.now()));
+  return sid;
+}
+
+async function api(path, opts) {
+  opts = opts || {};
+  opts.headers = opts.headers || {};
+  opts.headers['X-Session-Id'] = await ensureSession();
+  var res = await fetch(path, opts);
+  if (res.status === 401) {
+    opts.headers['X-Session-Id'] = await ensureSession(true);
+    res = await fetch(path, opts);
+  }
+  return res.json();
+}
+
+function setMsg(text, cls) {
+  var el = document.getElementById('msg');
+  el.textContent = text;
+  el.className = 'msg' + (cls ? ' ' + cls : '');
+}
+
+function showMine(row) {
+  if (!row) return;
+  var map = { pending: ['待确认', 'b-pending'], approved: ['已确认', 'b-approved'], rejected: ['未通过', 'b-rejected'] };
+  var st = map[row.status] || [row.status, 'b-pending'];
+  document.getElementById('my-status').innerHTML = '<span class="badge ' + st[1] + '">' + esc(st[0]) + '</span>';
+  document.getElementById('my-amount').textContent = '¥' + row.amount;
+  document.getElementById('my-time').textContent = row.created_at || '—';
+  document.getElementById('my-note').textContent = row.admin_note || '—';
+}
+
+document.querySelectorAll('.tab').forEach(function (tab) {
+  tab.addEventListener('click', function () {
+    document.querySelectorAll('.tab').forEach(function (t) { t.classList.remove('on'); });
+    document.querySelectorAll('.qr').forEach(function (q) { q.classList.remove('on'); });
+    tab.classList.add('on');
+    document.getElementById('qr-' + tab.dataset.ch).classList.add('on');
+  });
+});
+
+document.getElementById('submit').addEventListener('click', async function () {
+  var btn = this;
+  var file = document.getElementById('proof').files[0];
+  if (!file) return setMsg('请先选择付款截图', 'err');
+  btn.disabled = true;
+  setMsg('上传中…');
+  try {
+    var fd = new FormData();
+    fd.append('file', file);
+    fd.append('channel', document.querySelector('.tab.on').dataset.ch);
+    var data = await api('/api/payment/deposit', { method: 'POST', body: fd });
+    if (!data.success) throw new Error((data.error && data.error.message) || data.message || '提交失败');
+    setMsg('已提交，等待人工确认（编号 ' + data.data.id + '）', 'ok');
+    document.getElementById('proof').value = '';
+    await loadMine();
+  } catch (e) {
+    setMsg(e.message || '提交失败', 'err');
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+async function loadMine() {
+  try {
+    var data = await api('/api/payment/my');
+    if (data.success && data.data) showMine(data.data);
+  } catch (e) { /* 首访无凭证，忽略 */ }
+}
+
+(async function init() {
+  try {
+    var cfg = await (await fetch('/api/payment/qrcodes')).json();
+    if (cfg.success) {
+      document.getElementById('price').firstChild.nodeValue = '¥' + cfg.data.amount;
+      document.getElementById('price-title').textContent = cfg.data.title;
+    }
+    await loadMine();
+  } catch (e) {
+    setMsg('页面初始化失败：' + e.message, 'err');
+  }
+})();
+</script>
+</body>
+</html>

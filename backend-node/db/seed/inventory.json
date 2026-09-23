@@ -1,0 +1,40 @@
+{
+  "inventory_categories": [
+    {
+      "id": 1,
+      "name": "上装",
+      "code": "top",
+      "sort_order": 1
+    },
+    {
+      "id": 2,
+      "name": "下装",
+      "code": "bottom",
+      "sort_order": 2
+    },
+    {
+      "id": 3,
+      "name": "鞋履",
+      "code": "shoes",
+      "sort_order": 3
+    },
+    {
+      "id": 4,
+      "name": "配饰",
+      "code": "accessory",
+      "sort_order": 4
+    },
+    {
+      "id": 5,
+      "name": "美妆",
+      "code": "makeup",
+      "sort_order": 5
+    },
+    {
+      "id": 6,
+      "name": "发型",
+      "code": "hairstyle",
+      "sort_order": 6
+    }
+  ]
+}
