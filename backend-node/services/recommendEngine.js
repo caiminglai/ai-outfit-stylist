@@ -157,7 +157,7 @@ function getRecommendations(skinTone, faceShape, scenario) {
 // ============================================================
 
 // 推荐类别常量
-const CATEGORIES = ['穿搭', '妆容', '发型', '配饰'];
+const CATEGORIES = ['穿搭', '妆容', '发型', '配饰', '姿势'];
 
 /**
  * 解析规则条件的 value(JSON 字符串)
@@ -171,8 +171,17 @@ function parseConditionValue(rawValue) {
 }
 
 /**
- * 检查单个条件是否命中
+ * 条件值别名 → 规范值
+ * 种子数据里"姿势"类规则的条件值有两种写法:
+ * store 模式 8 组写 posture、personal 模式 8 组写 pose,
+ * 而 matchRules 用 CATEGORY_CN_TO_EN 把中文类别统一翻成 posture,
+ * 导致 pose 那 8 组(拍照姿势)永远匹配不上。这里做一次归一。
  */
+const COND_VALUE_ALIASES = {
+  category: { pose: 'posture' },
+};
+
+/** 检查单个条件是否命中 */
 function checkSingleCondition(condition, profile) {
   const parsed = parseConditionValue(condition.value);
   const field = condition.field;
@@ -186,6 +195,12 @@ function checkSingleCondition(condition, profile) {
     condVal = parsed[field];
   } else {
     condVal = parsed;
+  }
+
+  // 别名归一(pose → posture 等)
+  const alias = COND_VALUE_ALIASES[field];
+  if (alias && typeof condVal === 'string' && alias[condVal]) {
+    condVal = alias[condVal];
   }
 
   // "all" 表示不限,始终命中
@@ -206,6 +221,11 @@ function checkSingleCondition(condition, profile) {
       }
     }
     if (!Array.isArray(valList)) valList = [valList];
+    // 兼容逗号/顿号分隔的字符串写法(如 "小麦色,古铜色")
+    valList = valList
+      .flatMap((v) => (typeof v === 'string' ? v.split(/[、,，]/) : [v]))
+      .map((v) => String(v).trim())
+      .filter(Boolean);
     return valList.some((v) => String(v) === String(profileVal));
   } else if (operator === 'ne') {
     return String(profileVal) !== String(condVal);
@@ -268,11 +288,12 @@ function matchRules(profile, mode = 'store', category = null, incrementHitCount 
     params.push(gender);
   }
 
-  // 按 scenario 筛选
-  const scenario = profile.scenario;
-  if (scenario) {
+  // 按 scenario 筛选(姿势类按拍照场景分档,优先用 photo_scene)
+  const scenarioKey =
+    category === '姿势' ? profile.photo_scene || profile.scenario : profile.scenario;
+  if (scenarioKey) {
     query += ' AND (scenario = ? OR scenario IS NULL)';
-    params.push(scenario);
+    params.push(scenarioKey);
   }
 
   // 按 category 筛选
@@ -312,7 +333,12 @@ function matchRules(profile, mode = 'store', category = null, incrementHitCount 
 
     // 把 rule_groups.category(中文) 转成英文,与规则条件 category 值(outfit)对齐
     // 修复 bug:之前赋中文 '穿搭' 导致 category 条件永远不匹配,规则引擎从未真正工作
-    const evalProfile = { ...profile, category: CATEGORY_CN_TO_EN[group.category] || group.category };
+    // scenario 同样用 scenarioKey,保证 SQL 预筛与条件评估用同一个口径(姿势类走 photo_scene)
+    const evalProfile = {
+      ...profile,
+      scenario: scenarioKey,
+      category: CATEGORY_CN_TO_EN[group.category] || group.category,
+    };
     const [hit, score, conditionDetails] = evaluateGroup(group, conditions, evalProfile);
 
     if (hit) {
@@ -337,7 +363,7 @@ function matchRules(profile, mode = 'store', category = null, incrementHitCount 
       // 累加命中次数
       if (incrementHitCount) {
         try {
-          db.prepare('UPDATE rule_groups SET hit_count = hit_count + 1 WHERE id = ?').run(group.id);
+          db.prepare('UPDATE rule_groups SET hit_count = hit_count + 1, last_hit_at = datetime(\'now\') WHERE id = ?').run(group.id);
         } catch {
           // 不影响主流程
         }
@@ -367,6 +393,7 @@ function buildRecommendation(profile, mode = 'store', incrementHitCount = true) 
     妆容: [],
     发型: [],
     配饰: [],
+    姿势: [],
     _mode: mode,
     _computed: {},
     algorithm_analysis: null,
@@ -398,12 +425,20 @@ function buildRecommendation(profile, mode = 'store', incrementHitCount = true) 
 
   // 3. 填充 algorithm_analysis(个人模式的深度分析报告)
   if (mode === 'personal') {
-    const advices = [];
+    const sections = [];
+    const metrics = [];
+
+    // 数字摘要:身高+体重才有 BMI,三围才有体型/腰臀比
+    if (enriched.bmi) metrics.push(`BMI ${enriched.bmi}(${enriched.bmi_level})`);
+    if (enriched.body_shape) metrics.push(`体型 ${enriched.body_shape}`);
+    if (enriched.wh_ratio) metrics.push(`腰臀比 ${enriched.wh_ratio}`);
+    if (enriched.leg_ratio) metrics.push(`腿身比 ${enriched.leg_ratio}`);
+    if (enriched.shoulder_ratio) metrics.push(`肩宽比 ${enriched.shoulder_ratio}`);
 
     // 体型分析
     if (enriched.body_shape_key) {
       const outfitAdvice = getBodyShapeOutfitAdvice(enriched.body_shape_key);
-      advices.push({
+      sections.push({
         title: `体型分析:${enriched.body_shape}`,
         advices: [outfitAdvice],
       });
@@ -412,20 +447,21 @@ function buildRecommendation(profile, mode = 'store', incrementHitCount = true) 
     // 脸型分析
     if (enriched.face_shape) {
       const faceGuide = getFaceShapeGuide(enriched.face_shape);
-      advices.push({
+      sections.push({
         title: `脸型分析:${enriched.face_shape}`,
         advices: [
           faceGuide.face_analysis,
           `发型建议:${faceGuide.hair_advice}`,
           `妆容建议:${faceGuide.makeup_advice}`,
           `修容建议:${faceGuide.contour_advice}`,
+          `配饰建议:${faceGuide.accessory_advice}`,
         ],
       });
     }
 
     // 肤色配色建议
     if (enriched.color_match) {
-      advices.push({
+      sections.push({
         title: '肤色配色建议',
         advices: [
           `适合色系:${enriched.color_match}`,
@@ -437,19 +473,14 @@ function buildRecommendation(profile, mode = 'store', incrementHitCount = true) 
 
     // 体态建议
     if (enriched.posture_advice) {
-      advices.push({
+      sections.push({
         title: '体态建议',
         advices: [enriched.posture_advice],
       });
     }
 
-    if (advices.length > 0) {
-      result.algorithm_analysis = {
-        body_analysis: advices.find((a) => a.title.includes('体型')) || null,
-        face_analysis: advices.find((a) => a.title.includes('脸型')) || null,
-        optimization:
-          advices.find((a) => a.title.includes('肤色') || a.title.includes('体态')) || null,
-      };
+    if (sections.length > 0) {
+      result.algorithm_analysis = { sections, metrics };
     }
   }
 

@@ -6,15 +6,152 @@ const express = require('express');
 const db = require('../db/init');
 const { sendSuccess, sendError } = require('../utils/response');
 const { adminLoginRequired } = require('../middleware/auth');
-const { explainGroup } = require('../services/ruleExplainer');
+const { explainGroup, FIELD_LABELS, OPERATOR_LABELS, ACTION_LABELS } = require('../services/ruleExplainer');
 const { buildRecommendation } = require('../services/recommendEngine');
 
 const router = express.Router();
 
-/** 获取规则组列表 */
-router.get('/groups', (req, res) => {
+// ============================================================
+// 条件/动作的校验与归一化
+// 引擎 checkSingleCondition 取匹配值时要求 value 是 {"<field>": ...} 形状,
+// 键名对不上就永远不命中,所以写入端必须强制归一成这个形状。
+// ============================================================
+
+/** 规则条件可用字段:直接取自可解释性模块的字段标签表(单一数据源,避免三处写歪) */
+const CONDITION_FIELDS = Object.keys(FIELD_LABELS);
+
+const CONDITION_OPERATORS = ['eq', 'in', 'ne'];
+
+/** 把用户填的值切成候选列表(支持中英文逗号/顿号) */
+function splitList(value) {
+  return String(value)
+    .split(/[、,，]/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+/**
+ * 校验并归一化一条条件
+ * @returns {{ok: true, row: object} | {ok: false, error: string}}
+ */
+function normalizeCondition(input, idx) {
+  const field = String(input.field || '').trim();
+  const operator = String(input.operator || 'eq').trim();
+  const weight = Number(input.weight) > 0 ? Number(input.weight) : 1;
+
+  if (!CONDITION_FIELDS.includes(field)) {
+    return { ok: false, error: `第 ${idx + 1} 条条件字段无效: ${field || '(空)'}` };
+  }
+  if (!CONDITION_OPERATORS.includes(operator)) {
+    return { ok: false, error: `第 ${idx + 1} 条条件操作符无效: ${operator}(只能用 ${CONDITION_OPERATORS.join('/')})` };
+  }
+
+  let value = input.value;
+  // 已经是 {field: x} 形状的对象直接采用
+  if (value && typeof value === 'object' && !Array.isArray(value)) {
+    value = field in value ? value[field] : Object.values(value)[0];
+  }
+  if (value === null || value === undefined || String(value).trim() === '') {
+    value = 'all';
+  }
+
+  let stored;
+  if (operator === 'in') {
+    const list = Array.isArray(value) ? value : splitList(value);
+    if (list.length === 0) return { ok: false, error: `第 ${idx + 1} 条条件"属于"缺少候选值` };
+    stored = { [field]: list };
+  } else {
+    stored = { [field]: Array.isArray(value) ? value.join('、') : String(value).trim() };
+  }
+
+  return { ok: true, row: { field, operator, value: JSON.stringify(stored), weight } };
+}
+
+/** 校验并归一化一条动作 */
+function normalizeAction(input, idx, sortOrder) {
+  const actionType = String(input.action_type || '').trim();
+  const content = String(input.content ?? '').trim();
+  if (!actionType) return { ok: false, error: `第 ${idx + 1} 条动作缺少类型` };
+  if (!(actionType in ACTION_LABELS)) {
+    return { ok: false, error: `第 ${idx + 1} 条动作类型无效: ${actionType}(前台不认这个键,需先在后端加中文标签)` };
+  }
+  if (!content) return { ok: false, error: `第 ${idx + 1} 条动作(${actionType})内容为空` };
+  return {
+    ok: true,
+    row: { action_type: actionType, content, sort_order: Number.isFinite(input.sort_order) ? input.sort_order : sortOrder },
+  };
+}
+
+/**
+ * 整体替换某规则组的条件与动作
+ * 调用方必须在事务内使用
+ */
+function replaceChildren(groupId, conditions, actions) {
+  db.prepare('DELETE FROM rule_conditions WHERE group_id = ?').run(groupId);
+  db.prepare('DELETE FROM rule_actions WHERE group_id = ?').run(groupId);
+
+  const insCond = db.prepare(
+    'INSERT INTO rule_conditions (group_id, field, operator, value, weight) VALUES (?, ?, ?, ?, ?)',
+  );
+  const insAct = db.prepare(
+    'INSERT INTO rule_actions (group_id, action_type, content, sort_order) VALUES (?, ?, ?, ?)',
+  );
+  for (const c of conditions) insCond.run(groupId, c.field, c.operator, c.value, c.weight);
+  for (const a of actions) insAct.run(groupId, a.action_type, a.content, a.sort_order);
+}
+
+/** 校验条件+动作数组,全部合法才返回 {conditions, actions},否则返回 error */
+function validateChildren(body) {
+  const conditions = [];
+  const actions = [];
+  const rawConds = Array.isArray(body.conditions) ? body.conditions : [];
+  const rawActs = Array.isArray(body.actions) ? body.actions : [];
+
+  for (const [i, raw] of rawConds.entries()) {
+    const r = normalizeCondition(raw, i);
+    if (!r.ok) return { error: r.error };
+    conditions.push(r.row);
+  }
+  for (const [i, raw] of rawActs.entries()) {
+    const r = normalizeAction(raw, i, i);
+    if (!r.ok) return { error: r.error };
+    actions.push(r.row);
+  }
+  return { conditions, actions };
+}
+
+/**
+ * 后台编辑器元数据
+ * 下拉项全部由后端给出(字段/动作标签表 + 库里实际用到的类别和场景),
+ * 避免前端写死一版、后端另一版,保存时静默改坏数据。
+ */
+router.get('/schema', adminLoginRequired, (req, res) => {
   try {
-    const { mode, category, enabled } = req.query;
+    const categories = db
+      .prepare("SELECT DISTINCT category FROM rule_groups WHERE category IS NOT NULL ORDER BY category")
+      .all()
+      .map((r) => r.category);
+    const scenarios = db
+      .prepare("SELECT DISTINCT scenario FROM rule_groups WHERE scenario IS NOT NULL ORDER BY scenario")
+      .all()
+      .map((r) => r.scenario);
+
+    return sendSuccess(res, {
+      fields: CONDITION_FIELDS.map((f) => ({ value: f, label: FIELD_LABELS[f] })),
+      operators: CONDITION_OPERATORS.map((o) => ({ value: o, label: OPERATOR_LABELS[o] || '等于' })),
+      actionTypes: Object.entries(ACTION_LABELS).map(([value, label]) => ({ value, label })),
+      categories,
+      scenarios,
+    });
+  } catch (err) {
+    return sendError(res, '获取失败', 500);
+  }
+});
+
+/** 获取规则组列表(管理员) */
+router.get('/groups', adminLoginRequired, (req, res) => {
+  try {
+    const { mode, category, enabled, hit } = req.query;
     let sql = 'SELECT * FROM rule_groups WHERE 1=1';
     const params = [];
 
@@ -30,17 +167,41 @@ router.get('/groups', (req, res) => {
       sql += ' AND enabled = ?';
       params.push(enabled === 'true' || enabled === '1' ? 1 : 0);
     }
+    if (hit === 'never') {
+      sql += ' AND hit_count = 0';
+    }
 
     sql += ' ORDER BY priority DESC, created_at DESC';
     const groups = db.prepare(sql).all(...params);
+
+    // 批量挂载条件与动作(列表页要显示命中条件,编辑弹窗也直接用这份数据)
+    if (groups.length > 0) {
+      const ids = groups.map((g) => g.id);
+      const ph = ids.map(() => '?').join(',');
+      const conds = db
+        .prepare(`SELECT * FROM rule_conditions WHERE group_id IN (${ph}) ORDER BY id`)
+        .all(...ids);
+      const acts = db
+        .prepare(`SELECT * FROM rule_actions WHERE group_id IN (${ph}) ORDER BY sort_order`)
+        .all(...ids);
+      const condMap = {};
+      const actMap = {};
+      for (const c of conds) (condMap[c.group_id] ||= []).push(c);
+      for (const a of acts) (actMap[a.group_id] ||= []).push(a);
+      for (const g of groups) {
+        g.conditions = condMap[g.id] || [];
+        g.actions = actMap[g.id] || [];
+      }
+    }
+
     return sendSuccess(res, { groups, total: groups.length });
   } catch (err) {
     return sendError(res, '获取失败', 500);
   }
 });
 
-/** 获取单个规则组详情(含条件和动作) */
-router.get('/groups/:id', (req, res) => {
+/** 获取单个规则组详情(含条件和动作,管理员) */
+router.get('/groups/:id', adminLoginRequired, (req, res) => {
   try {
     const id = parseInt(req.params.id, 10);
     const group = db.prepare('SELECT * FROM rule_groups WHERE id = ?').get(id);
@@ -75,26 +236,43 @@ router.post('/groups', adminLoginRequired, (req, res) => {
       enabled,
     } = req.body || {};
 
-    const result = db
-      .prepare(
-        `INSERT INTO rule_groups
+    if (!name || !category) {
+      return sendError(res, '规则名称和分类不能为空', 400);
+    }
+
+    const children = validateChildren(req.body || {});
+    if (children.error) return sendError(res, children.error, 400);
+    if (children.conditions.length === 0) {
+      return sendError(res, '至少需要一条命中条件', 400);
+    }
+    if (children.actions.length === 0) {
+      return sendError(res, '至少需要一条推荐动作', 400);
+    }
+
+    const createGroup = db.transaction(() => {
+      const info = db
+        .prepare(
+          `INSERT INTO rule_groups
         (name, mode, gender, category, scenario, region, age_range, description, priority, enabled)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      )
-      .run(
-        name,
-        mode || 'store',
-        gender || null,
-        category,
-        scenario || null,
-        region || null,
-        age_range || null,
-        description || null,
-        priority || 0,
-        enabled !== false ? 1 : 0,
-      );
+        )
+        .run(
+          name,
+          mode || 'store',
+          gender || null,
+          category,
+          scenario || null,
+          region || null,
+          age_range || null,
+          description || null,
+          priority || 0,
+          enabled !== false ? 1 : 0,
+        );
+      replaceChildren(info.lastInsertRowid, children.conditions, children.actions);
+      return info.lastInsertRowid;
+    });
 
-    return sendSuccess(res, { id: result.lastInsertRowid });
+    return sendSuccess(res, { id: createGroup() });
   } catch (err) {
     console.error('[规则] 创建失败:', err);
     return sendError(res, '创建失败', 500);
@@ -105,38 +283,69 @@ router.post('/groups', adminLoginRequired, (req, res) => {
 router.put('/groups/:id', adminLoginRequired, (req, res) => {
   try {
     const id = parseInt(req.params.id, 10);
-    const {
-      name,
-      mode,
-      gender,
-      category,
-      scenario,
-      region,
-      age_range,
-      description,
-      priority,
-      enabled,
-    } = req.body || {};
+    const body = req.body || {};
+    const existing = db.prepare('SELECT * FROM rule_groups WHERE id = ?').get(id);
+    if (!existing) {
+      return sendError(res, '规则组不存在', 404);
+    }
 
-    db.prepare(
-      `UPDATE rule_groups SET
+    const pick = (key) => (body[key] !== undefined ? body[key] : existing[key]);
+    const fields = {
+      name: pick('name'),
+      mode: pick('mode'),
+      gender: pick('gender'),
+      category: pick('category'),
+      scenario: pick('scenario'),
+      region: pick('region'),
+      age_range: pick('age_range'),
+      description: pick('description'),
+      priority: pick('priority') || 0,
+      enabled:
+        body.enabled === undefined
+          ? existing.enabled
+          : body.enabled === false || body.enabled === 0 || body.enabled === '0' || body.enabled === 'false'
+            ? 0
+            : 1,
+    };
+
+    // 只有请求真的带了条件/动作数组时才整体替换,避免部分更新把子表清空
+    const hasChildren = Array.isArray(body.conditions) || Array.isArray(body.actions);
+    let children = { conditions: [], actions: [] };
+    if (hasChildren) {
+      const validated = validateChildren(body);
+      if (validated.error) return sendError(res, validated.error, 400);
+      if (validated.conditions.length === 0) {
+        return sendError(res, '至少需要一条命中条件', 400);
+      }
+      if (validated.actions.length === 0) {
+        return sendError(res, '至少需要一条推荐动作', 400);
+      }
+      children = validated;
+    }
+
+    const updateGroup = db.transaction(() => {
+      db.prepare(
+        `UPDATE rule_groups SET
         name=?, mode=?, gender=?, category=?, scenario=?,
         region=?, age_range=?, description=?, priority=?, enabled=?
        WHERE id=?`,
-    ).run(
-      name,
-      mode,
-      gender || null,
-      category,
-      scenario || null,
-      region || null,
-      age_range || null,
-      description || null,
-      priority || 0,
-      enabled !== false ? 1 : 0,
-      id,
-    );
+      ).run(
+        fields.name,
+        fields.mode,
+        fields.gender || null,
+        fields.category,
+        fields.scenario || null,
+        fields.region || null,
+        fields.age_range || null,
+        fields.description || null,
+        fields.priority,
+        fields.enabled,
+        id,
+      );
+      if (hasChildren) replaceChildren(id, children.conditions, children.actions);
+    });
 
+    updateGroup();
     return sendSuccess(res, null);
   } catch (err) {
     console.error('[规则] 更新失败:', err);
@@ -190,7 +399,8 @@ router.post('/preview', adminLoginRequired, (req, res) => {
       (recommendation.穿搭?.length || 0) +
       (recommendation.妆容?.length || 0) +
       (recommendation.发型?.length || 0) +
-      (recommendation.配饰?.length || 0);
+      (recommendation.配饰?.length || 0) +
+      (recommendation.姿势?.length || 0);
 
     return sendSuccess(res, { recommendation, total });
   } catch (err) {

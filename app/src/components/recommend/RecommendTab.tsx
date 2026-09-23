@@ -10,6 +10,7 @@ export const TABS = [
   { key: '妆容', label: '妆造', icon: '💄' },
   { key: '发型', label: '发型', icon: '💇' },
   { key: '配饰', label: '配饰', icon: '💎' },
+  { key: '姿势', label: '姿势', icon: '📷' },
 ] as const;
 
 /** 推荐字段中文映射(覆盖所有 action_type,避免前端显示原始英文 key) */

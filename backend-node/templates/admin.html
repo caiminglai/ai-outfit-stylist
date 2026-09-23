@@ -18,6 +18,8 @@
   <nav>
     <button class="nav-btn active" data-section="rules">规则编辑器</button>
     <button class="nav-btn" data-section="inventory">库存管理</button>
+    <button class="nav-btn" data-section="payments">收款凭证</button>
+    <button class="nav-btn" data-section="creator">创作者作品</button>
     <button class="nav-btn" data-section="models">模型管理</button>
     <button class="nav-btn" data-section="tables">数据库表结构</button>
     <button class="nav-btn" data-section="data">数据浏览</button>
@@ -107,6 +109,10 @@
           <option value="true">已启用</option>
           <option value="false">已停用</option>
         </select>
+        <select id="filter-hit">
+          <option value="">全部命中情况</option>
+          <option value="never">从未命中</option>
+        </select>
         <button class="btn btn-sm" id="rules-refresh">🔄 刷新</button>
         <span id="rules-count" style="color:var(--muted);font-size:12px;margin-left:auto;"></span>
       </div>
@@ -134,6 +140,38 @@
         <span id="inv-count" style="color:var(--muted);font-size:12px;margin-left:auto;"></span>
       </div>
       <div id="inv-container" class="loading">加载中...</div>
+    </div>
+
+    <!-- Section: 收款凭证 -->
+    <div id="section-payments" class="section">
+      <h2>收款凭证审核</h2>
+      <div class="inv-toolbar">
+        <select id="deposit-filter">
+          <option value="">全部状态</option>
+          <option value="pending">待确认</option>
+          <option value="approved">已确认</option>
+          <option value="rejected">已驳回</option>
+        </select>
+        <button class="btn btn-sm" id="deposit-refresh">🔄 刷新</button>
+        <span id="deposit-count" style="color:var(--muted);font-size:12px;margin-left:auto;"></span>
+      </div>
+      <div id="deposit-container" class="loading">加载中...</div>
+    </div>
+
+    <!-- Section: 创作者作品 -->
+    <div id="section-creator" class="section">
+      <h2>创作者作品审核</h2>
+      <div class="inv-toolbar">
+        <select id="creator-filter">
+          <option value="">全部状态</option>
+          <option value="pending">待审核</option>
+          <option value="approved">已上架</option>
+          <option value="rejected">未通过</option>
+        </select>
+        <button class="btn btn-sm" id="creator-refresh">🔄 刷新</button>
+        <span id="creator-count" style="color:var(--muted);font-size:12px;margin-left:auto;"></span>
+      </div>
+      <div id="creator-container" class="loading">加载中...</div>
     </div>
 
     <!-- Section: 模型管理 -->
@@ -286,13 +324,15 @@
   3. admin-inventory.js — 库存管理（依赖 utils）
   4. admin-models.js  — 3D模型管理（依赖 utils）
   5. admin-data.js    — 数据浏览/表结构/函数/源码/路由（依赖 utils）
-  6. 内联初始化脚本   — Token验证 + 导航绑定 + 初始加载
+  6. admin-review.js  — 收款凭证 / 创作者作品审核（依赖 utils）
+  7. 内联初始化脚本   — Token验证 + 导航绑定 + 初始加载
 ════════════════════════════════════════════════ -->
 <script src="/static/admin/admin-utils.js"></script>
 <script src="/static/admin/admin-rules.js"></script>
 <script src="/static/admin/admin-inventory.js"></script>
 <script src="/static/admin/admin-models.js"></script>
 <script src="/static/admin/admin-data.js"></script>
+<script src="/static/admin/admin-review.js"></script>
 <script>
 /* Token 验证（页面入口守卫） */
 (function() {

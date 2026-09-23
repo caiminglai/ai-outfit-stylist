@@ -88,7 +88,7 @@ export default function CrossCabinetReport({ profile, compact }: CrossCabinetRep
   const fetchSeasonal = useCallback(async () => {
     setSeasonalLoading(true); setSeasonalError(''); setSeasonalData(null);
     try {
-      const data = await getSeasonalReminder(profile ?? undefined);
+      const data = await getSeasonalReminder();
       setSeasonalData(data);
     } catch (e: unknown) {
       setSeasonalError(e instanceof Error ? e.message : '获取季节提醒失败');

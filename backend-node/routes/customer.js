@@ -239,9 +239,14 @@ router.post('/session/:sessionId/recommend', (req, res) => {
     // 保存推荐日志
     let logId = null
     try {
+      // 日志表没有会话表那样的过期清理，快照只留画像字段、不带昵称
+      const snapshot = { ...profile }
+      delete snapshot.nickname
       const result = db
-        .prepare('INSERT INTO recommendation_logs (session_id, mode, result) VALUES (?, ?, ?)')
-        .run(sessionId, mode, JSON.stringify(recommendation))
+        .prepare(
+          'INSERT INTO recommendation_logs (session_id, mode, result, input_snapshot) VALUES (?, ?, ?, ?)',
+        )
+        .run(sessionId, mode, JSON.stringify(recommendation), JSON.stringify(snapshot))
       logId = result.lastInsertRowid
     } catch {
       // recommendation_logs 表可能不存在，不影响主流程

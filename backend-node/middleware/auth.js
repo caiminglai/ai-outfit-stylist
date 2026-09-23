@@ -21,10 +21,26 @@ function getCurrentUser(req) {
 }
 
 /**
+ * 前端本地就能生成 session id（展厅 SPA 从不调 /api/auth/guest），
+ * 首次访问时补一条游客记录，否则衣橱/化妆柜/配饰柜/跨柜搭配恒 401。
+ */
+function ensureGuestUser(sessionId) {
+  db.prepare('INSERT OR IGNORE INTO users (session_id) VALUES (?)').run(sessionId)
+  return db.prepare('SELECT * FROM users WHERE session_id = ?').get(sessionId) || null
+}
+
+/**
  * 游客登录验证中间件
  */
 function loginRequired(req, res, next) {
-  const user = getCurrentUser(req)
+  let user = getCurrentUser(req)
+  if (!user) {
+    const sessionId = getSessionId(req)
+    // 只接受与 UUID / sess_ 同形状的 id，挡住脚本乱填产生的垃圾行
+    if (typeof sessionId === 'string' && /^[A-Za-z0-9_-]{8,64}$/.test(sessionId)) {
+      user = ensureGuestUser(sessionId)
+    }
+  }
   if (!user) {
     return res.status(401).json({
       success: false,

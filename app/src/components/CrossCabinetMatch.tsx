@@ -3,7 +3,7 @@
  * 包含 MatchResultCard 组件和场合推荐的整体渲染
  */
 
-import type { CrossCabinetRecommendation, CabinetMatchResult, CabinetMatchedItem } from '../types';
+import type { CrossCabinetRecommendation, CabinetMatchResult } from '../types';
 import TipList from './ui/TipList';
 
 // ============================================================
@@ -18,7 +18,7 @@ function normalizeData(raw: Record<string, unknown>): CrossCabinetRecommendation
   }
 
   // 旧格式兼容：outfit/makeup/accessory 是扁平数组
-  const toAdvice = (items: unknown[], style?: string): CabinetMatchResult => {
+  const toAdvice = (items: unknown, style?: string): CabinetMatchResult => {
     const arr = Array.isArray(items) ? items : [];
     return {
       style: style || '',
@@ -54,6 +54,7 @@ function normalizeData(raw: Record<string, unknown>): CrossCabinetRecommendation
 interface MatchedItem {
   name: string;
   score?: number;
+  reasons?: string[];
 }
 
 /** 匹配结果卡片 props */
@@ -103,7 +104,12 @@ export function MatchResultCard({
           </span>
           <div className="flex flex-wrap gap-1.5 mt-1">
             {matched.map((m, i) => (
-              <span key={i} className="pill-tag" style={{ color: 'var(--good)', borderColor: 'var(--good)' }}>
+              <span
+                key={i}
+                className="pill-tag"
+                style={{ color: 'var(--good)', borderColor: 'var(--good)' }}
+                title={m.reasons?.length ? `得分依据：${m.reasons.join('、')}` : undefined}
+              >
                 {m.name}
                 {m.score != null && (
                   <span style={{ marginLeft: 4, opacity: 0.7 }}>{m.score}%</span>
@@ -111,6 +117,11 @@ export function MatchResultCard({
               </span>
             ))}
           </div>
+          {!!matched[0]?.reasons?.length && (
+            <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>
+              {matched[0].name} 排第一：{matched[0].reasons!.join('、')}
+            </div>
+          )}
         </div>
       )}
 

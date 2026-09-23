@@ -51,6 +51,13 @@ var VALUE_LABELS = {
   // shopping_wishlist
   'shopping_wishlist.status': { 'pending': '待买', 'bought': '已买' },
   'shopping_wishlist.priority': { 'low': '低', 'medium': '中', 'high': '高' },
+  // deposits 付款凭证
+  'deposits.channel': { 'wechat': '微信', 'alipay': '支付宝' },
+  'deposits.status': { 'pending': '待确认', 'approved': '已确认', 'rejected': '已驳回' },
+  // creator_works 创作者作品
+  'creator_works.type': { 'outfit': '搭配', 'makeup': '化妆', 'rule': '推荐规则', 'model': '模型' },
+  'creator_works.status': { 'pending': '待审核', 'approved': '已上架', 'rejected': '未通过' },
+  'creator_works.featured': { '1': '精选', '0': '普通', 1: '精选', 0: '普通' },
   // customer_sessions.synced
   'customer_sessions.synced': { '1': '已同步', '0': '未同步', 1: '已同步', 0: '未同步' },
   // recommendation_logs.mode
@@ -126,6 +133,8 @@ var TABLE_LABELS = {
   'admin_users': '管理员表',
   'model_configs': '3D模型配置表',
   'styleai_config': '系统配置表',
+  'deposits': '付款凭证表',
+  'creator_works': '创作者作品表',
 };
 
 /* ── 字段中英文注释 ── */
@@ -231,6 +240,7 @@ var COLUMN_COMMENTS = {
     'priority': '优先级',
     'enabled': '是否启用',
     'hit_count': '命中次数',
+    'last_hit_at': '最近命中时间',
     'created_at': '创建时间',
   },
   // rule_conditions 规则条件表
@@ -441,6 +451,36 @@ var COLUMN_COMMENTS = {
     'created_at': '创建时间',
     'updated_at': '更新时间',
   },
+  // deposits 付款凭证表
+  'deposits': {
+    'id': '主键ID',
+    'user_id': '用户ID',
+    'channel': '收款渠道',
+    'amount': '付款金额(元)',
+    'proof_url': '付款截图地址',
+    'status': '审核状态',
+    'admin_note': '审核备注',
+    'created_at': '提交时间',
+    'approved_at': '确认时间',
+  },
+  // creator_works 创作者作品表
+  'creator_works': {
+    'id': '主键ID',
+    'user_id': '作者用户ID',
+    'share_code': '分享码(统计带量用)',
+    'type': '作品类型',
+    'title': '标题',
+    'summary': '简介',
+    'cover_url': '封面图地址',
+    'payload': '提交内容(JSON)',
+    'status': '审核状态',
+    'admin_note': '审核备注',
+    'featured': '是否精选',
+    'heat': '浏览量',
+    'share_views': '分享带量',
+    'created_at': '提交时间',
+    'reviewed_at': '审核时间',
+  },
 };
 
 /* 获取字段中文注释 */
@@ -542,6 +582,8 @@ function switchSection(section) {
 
   if (section === 'rules') loadRules();
   if (section === 'inventory') loadInventory();
+  if (section === 'payments') loadDeposits();
+  if (section === 'creator') loadCreatorWorks();
   if (section === 'models') loadModels();
   if (section === 'tables' && State.tables.length === 0) loadTables();
   if (section === 'functions' && State.functions.length === 0) loadFunctions();

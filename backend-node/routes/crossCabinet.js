@@ -15,6 +15,40 @@ const router = express.Router()
 // 辅助函数
 // ============================================================
 
+/** 条目标签是否命中档案值(双向包含,兼容"上班通勤"与标签"通勤") */
+function tagHits(rawTags, value) {
+  if (!value) return false
+  const tags = parseJsonField(rawTags) || []
+  if (!Array.isArray(tags)) return false
+  return tags.some((t) => String(t).includes(value) || String(value).includes(String(t)))
+}
+
+/** 开封后是否仍在保质期内(未填开封日期视为正常) */
+function withinExpiry(item) {
+  if (!item.opened_date || !item.expiry_months) return true
+  const opened = new Date(item.opened_date)
+  if (Number.isNaN(opened.getTime())) return true
+  const expiry = new Date(opened)
+  expiry.setMonth(expiry.getMonth() + item.expiry_months)
+  return expiry > new Date()
+}
+
+/**
+ * 确定性打分:基础 40 分,每命中一个维度加权,最高 100
+ * 返回 { score, reasons } —— reasons 就是"这个分怎么来的"
+ */
+function scoreItem(dims) {
+  let score = 40
+  const reasons = []
+  for (const d of dims) {
+    if (d.hit) {
+      score += d.weight
+      reasons.push(d.label)
+    }
+  }
+  return { score: Math.min(100, score), reasons }
+}
+
 /** 跨柜联动推荐：针对场合统一推荐衣橱+化妆品+配饰 */
 function crossCabinetRecommend(profile, sessionId, occasion) {
   // 查询三柜数据
@@ -38,6 +72,8 @@ function crossCabinetRecommend(profile, sessionId, occasion) {
   const skinTone = profile.skin_tone || '自然'
   const faceShape = profile.face_shape || '鹅蛋脸'
   const currentSeason = getCurrentSeason()
+  // 冷暖皮适合的金属色(自然肤色不启用这一维度)
+  const preferredMetal = skinTone.includes('暖') ? '金' : skinTone.includes('冷') ? '银' : ''
 
   // 场合风格映射
   const occasionStyles = {
@@ -50,6 +86,7 @@ function crossCabinetRecommend(profile, sessionId, occasion) {
     婚礼: '正式典雅',
   }
   const occasionStyle = occasionStyles[occasion] || '百搭风格'
+  const occValue = occasion || profile.occasion || ''
 
   // 衣橱推荐
   const outfitMatched = wardrobeItems
@@ -57,11 +94,17 @@ function crossCabinetRecommend(profile, sessionId, occasion) {
       const seasons = parseJsonField(item.season_tags) || []
       return seasons.length === 0 || seasons.includes(currentSeason)
     })
-    .slice(0, 5)
     .map((item) => ({
       name: item.name,
-      score: Math.round(60 + Math.random() * 40),
+      ...scoreItem([
+        { label: `${currentSeason}季可穿`, weight: 20, hit: tagHits(item.season_tags, currentSeason) },
+        { label: '适合该场合', weight: 20, hit: tagHits(item.occasion_tags, occValue) },
+        { label: '风格与你相符', weight: 15, hit: tagHits(item.style_tags, profile.preferred_style) },
+        { label: '衬你的体型', weight: 15, hit: tagHits(item.fit_body_types, profile.body_type) },
+      ]),
     }))
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 5)
 
   const outfitCategories = [...new Set(wardrobeItems.map((i) => i.category))]
   const essentialTops = ['上衣', '衬衫', 'T恤', '外套']
@@ -78,11 +121,17 @@ function crossCabinetRecommend(profile, sessionId, occasion) {
       const skinFit = parseJsonField(item.skin_tone_fit) || []
       return skinFit.length === 0 || skinFit.includes(skinTone)
     })
-    .slice(0, 5)
     .map((item) => ({
       name: item.name,
-      score: Math.round(60 + Math.random() * 40),
+      ...scoreItem([
+        { label: '适配你的肤色', weight: 25, hit: tagHits(item.skin_tone_fit, skinTone) },
+        { label: '适配你的肤质', weight: 15, hit: tagHits(item.skin_type_fit, profile.skin_type) },
+        { label: '适合该场合', weight: 20, hit: tagHits(item.occasion_tags, occValue) },
+        { label: '在保质期内', weight: 15, hit: withinExpiry(item) },
+      ]),
     }))
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 5)
 
   const makeupCategories = [...new Set(cosmetics.map((i) => i.category))]
   const essentialMakeup = ['粉底', '口红', '眉笔', '眼影']
@@ -96,11 +145,18 @@ function crossCabinetRecommend(profile, sessionId, occasion) {
       const faceFit = parseJsonField(item.face_shape_fit) || []
       return faceFit.length === 0 || faceFit.includes(faceShape)
     })
-    .slice(0, 5)
     .map((item) => ({
       name: item.name,
-      score: Math.round(60 + Math.random() * 40),
+      ...scoreItem([
+        { label: '衬你的脸型', weight: 25, hit: tagHits(item.face_shape_fit, faceShape) },
+        { label: '长度适合你的颈长', weight: 10, hit: tagHits(item.neck_length_fit, profile.neck_length) },
+        { label: '适合该场合', weight: 20, hit: tagHits(item.occasion_tags, occValue) },
+        { label: '金属色衬肤色', weight: 15, hit: Boolean(preferredMetal) && String(item.metal_color || '').includes(preferredMetal) },
+        { label: '低致敏材质', weight: 10, hit: Boolean(item.allergy_safe) },
+      ]),
     }))
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 5)
 
   const accessoryCategories = [...new Set(accessories.map((i) => i.category))]
   const essentialAccessories = ['项链', '耳环', '戒指', '手表']
@@ -268,7 +324,7 @@ function analyzeBrandPreference(sessionId) {
   // 统计化妆品品牌
   const cosmetics = db
     .prepare(
-      'SELECT brand, COUNT(*) as count FROM user_cosmetics WHERE session_id = ? AND brand IS NOT NULL AND brand != "" GROUP BY brand ORDER BY count DESC LIMIT 10',
+      'SELECT brand, COUNT(*) as count FROM user_cosmetics WHERE session_id = ? AND brand IS NOT NULL AND length(brand) > 0 GROUP BY brand ORDER BY count DESC LIMIT 10',
     )
     .all(sessionId)
   const cosmeticBrands = cosmetics.map((r) => ({ brand: r.brand, count: r.count }))
@@ -276,7 +332,7 @@ function analyzeBrandPreference(sessionId) {
   // 统计配饰品牌
   const accessories = db
     .prepare(
-      'SELECT brand, COUNT(*) as count FROM user_accessories WHERE session_id = ? AND brand IS NOT NULL AND brand != "" GROUP BY brand ORDER BY count DESC LIMIT 10',
+      'SELECT brand, COUNT(*) as count FROM user_accessories WHERE session_id = ? AND brand IS NOT NULL AND length(brand) > 0 GROUP BY brand ORDER BY count DESC LIMIT 10',
     )
     .all(sessionId)
   const accessoryBrands = accessories.map((r) => ({ brand: r.brand, count: r.count }))
@@ -440,6 +496,9 @@ router.get('/recommend', (req, res) => {
       face_shape: req.query.face_shape || '鹅蛋脸',
       occasion: req.query.occasion || '上班通勤',
       body_type: req.query.body_type || '',
+      preferred_style: req.query.preferred_style || '',
+      skin_type: req.query.skin_type || '',
+      neck_length: req.query.neck_length || '',
     }
     const occasion = req.query.occasion || ''
     const result = crossCabinetRecommend(profile, sessionId, occasion || null)

@@ -212,7 +212,7 @@ cd ../backend-node; node --require ../npm-patch.js server.js
 
 | 模块 | 路径前缀 | 主要能力 | 鉴权 |
 |------|---------|---------|------|
-| 认证 | `/api/auth` | 游客/管理员登录 | 公开 |
+| 认证 | `/api/auth` | 游客身份 + 手机号注册/登录 + 管理员登录 | 公开 |
 | 顾客会话 | `/api/customer` | 临时会话 CRUD + 隐私声明 | 公开(按 session 隔离) |
 | 推荐 | `/api/recommend` | 规则引擎推荐(核心 `POST /engine`) | 公开;写历史需 `X-Session-Id` |
 | 规则 | `/api/rules` | 规则组/条件/动作 CRUD | 读公开;增删改需管理员 Token |
@@ -231,7 +231,7 @@ cd ../backend-node; node --require ../npm-patch.js server.js
 | 历史 | `/api/history` | 推荐历史 | 需 `X-Session-Id` |
 | 管理后台 | `/admin` | 后台页面 + 数据库浏览 | 管理员 Token |
 
-身份有两类:游客走 `X-Session-Id` 请求头(前端 `api.ts` 自动带,门店模式下顾客建档时由 `/api/customer` 下发,TTL 到期即失效);管理员走 `Authorization: Bearer <token>`(HMAC-SHA256 签名,24 小时有效),对应中间件 `loginRequired` 与 `adminLoginRequired`,均在 `middleware/auth.js`.
+身份有三类:游客走 `X-Session-Id` 请求头(前端 `api.ts` 自动带,本地生成、2 小时换一次;门店模式下顾客建档时由 `/api/customer` 下发,TTL 到期即失效);正式账号走 `POST /api/auth/register` / `POST /api/auth/login`(手机号 + bcrypt 密码),注册即分配一条固定的服务端 `session_id`,前端存进 `localStorage.style_ai_account` 并**覆盖**游客那条的 2 小时轮换,所以登录后衣橱/历史/作品都跟着手机号走,换浏览器只要重新登录就能找回;账号与身份的对应关系记在 `user_accounts` 表(不往 `users` 老表加列);管理员走 `Authorization: Bearer <token>`(HMAC-SHA256 签名,24 小时有效),对应中间件 `loginRequired` 与 `adminLoginRequired`,均在 `middleware/auth.js`.
 
 响应统一格式:`{ success: boolean, data?: any, error?: { code, message } }`
 

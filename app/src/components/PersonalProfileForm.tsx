@@ -111,6 +111,17 @@ const OCCASION_OPTIONS = [
   { value: '婚礼宴会', label: '婚礼宴会' },
 ] as const;
 
+/** 拍照场景:值与规则库"姿势"类规则的 scenario 条件值一一对应 */
+const PHOTO_SCENE_OPTIONS = [
+  { value: '日常街拍', label: '日常街拍' },
+  { value: '职业照', label: '证件照/职业照' },
+  { value: '旅行打卡', label: '旅行打卡' },
+  { value: '探店', label: '探店咖啡馆' },
+  { value: '户外写真', label: '户外写真' },
+  { value: '闺蜜合照', label: '闺蜜合照' },
+  { value: '自拍', label: '手机自拍' },
+] as const;
+
 const MAIN_GOAL_OPTIONS = [
   { value: '脸型修饰', label: '脸型修饰' },
   { value: '发型改造', label: '发型改造' },
@@ -186,8 +197,12 @@ export default function PersonalProfileForm({
     gender: initial?.gender,
     age_range: initial?.age_range,
     height_range: initial?.height_range,
+    height: initial?.height,
     region: initial?.region,
     weight: initial?.weight,
+    bust: initial?.bust,
+    waist: initial?.waist,
+    hip: initial?.hip,
     skin_tone_detail: initial?.skin_tone_detail,
     face_shape: initial?.face_shape,
     body_type_detail: initial?.body_type_detail,
@@ -199,6 +214,7 @@ export default function PersonalProfileForm({
     lip_thickness: initial?.lip_thickness,
     preferred_style: initial?.preferred_style,
     occasion: initial?.occasion,
+    photo_scene: initial?.photo_scene,
     main_goal: initial?.main_goal,
     height_wish: initial?.height_wish,
     weight_wish: initial?.weight_wish,
@@ -255,6 +271,25 @@ export default function PersonalProfileForm({
     );
   }
 
+  type NumberField = 'height' | 'weight' | 'bust' | 'waist' | 'hip';
+
+  function renderNumberInput(key: NumberField, label: string, placeholder: string) {
+    return (
+      <div className="flex-1 min-w-0">
+        <div className="text-xs mb-2" style={{ color: 'var(--muted)' }}>
+          {label}
+        </div>
+        <input
+          type="number"
+          placeholder={placeholder}
+          className="form-input"
+          value={profile[key] ?? ''}
+          onChange={(e) => update(key, e.target.value ? Number(e.target.value) : undefined)}
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-1">
       {/* ── 分区1: 基本信息 ── */}
@@ -302,6 +337,11 @@ export default function PersonalProfileForm({
         </div>
         {renderOptBtns(HEIGHT_RANGE_OPTIONS, 'height_range', 'grid-cols-4')}
 
+        <div className="flex gap-3 mt-4">
+          {renderNumberInput('height', '具体身高', 'cm，如 165')}
+          {renderNumberInput('weight', '体重', 'kg，如 55')}
+        </div>
+
         <div className="text-xs mb-2 mt-4" style={{ color: 'var(--muted)' }}>
           所在地区
         </div>
@@ -319,16 +359,14 @@ export default function PersonalProfileForm({
           ))}
         </div>
 
-        <div className="text-xs mb-2" style={{ color: 'var(--muted)' }}>
-          体重
+        <div className="text-xs mb-2 mt-4" style={{ color: 'var(--muted)' }}>
+          三围（选填，用于自动判断体型与腰臀比）
         </div>
-        <input
-          type="number"
-          placeholder="请输入体重(kg)"
-          className="form-input"
-          value={profile.weight ?? ''}
-          onChange={(e) => update('weight', e.target.value ? Number(e.target.value) : undefined)}
-        />
+        <div className="flex gap-3">
+          {renderNumberInput('bust', '胸围', 'cm')}
+          {renderNumberInput('waist', '腰围', 'cm')}
+          {renderNumberInput('hip', '臀围', 'cm')}
+        </div>
       </section>
 
       {/* ── 分区2: 肤色与脸型 ── */}
@@ -436,6 +474,11 @@ export default function PersonalProfileForm({
           主要场合
         </div>
         {renderOptBtns(OCCASION_OPTIONS, 'occasion', 'grid-cols-4')}
+
+        <div className="text-xs mb-2 mt-4" style={{ color: 'var(--muted)' }}>
+          拍照场景（选填，只影响姿势建议）
+        </div>
+        {renderOptBtns(PHOTO_SCENE_OPTIONS, 'photo_scene', 'grid-cols-4')}
 
         <div className="text-xs mb-2 mt-4" style={{ color: 'var(--muted)' }}>
           主要目标

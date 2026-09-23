@@ -35,6 +35,19 @@ const BODY_TYPE_OPTIONS = [
   { value: '苹果形', label: '苹果形' },
 ] as const;
 
+const AGE_RANGE_OPTIONS = [
+  { value: '18-25', label: '18-25' },
+  { value: '26-35', label: '26-35' },
+  { value: '36-45', label: '36-45' },
+  { value: '46+', label: '46+' },
+] as const;
+
+/** 值与规则库 region 条件取值一一对应(门店规则 6 组按南北分档) */
+const REGION_OPTIONS = [
+  { value: '北方', label: '北方', desc: '干冷、层级穿搭多' },
+  { value: '南方', label: '南方', desc: '湿润、轻薄通透' },
+] as const;
+
 const SCENARIO_OPTIONS = [
   { value: '通勤', label: '通勤', icon: '💼' },
   { value: '约会', label: '约会', icon: '💕' },
@@ -54,6 +67,10 @@ export default function CustomerForm({ initial, onSubmit, submitting, compact }:
   const [profile, setProfile] = useState<CustomerProfile>({
     nickname: initial?.nickname || '',
     gender: initial?.gender,
+    age_range: initial?.age_range,
+    region: initial?.region,
+    height: initial?.height,
+    weight: initial?.weight,
     skin_tone: initial?.skin_tone,
     face_shape: initial?.face_shape,
     body_type: initial?.body_type,
@@ -99,6 +116,41 @@ export default function CustomerForm({ initial, onSubmit, submitting, compact }:
               style={{ padding: '8px 10px' }}
             >
               <span className="mr-1">{opt.icon}</span>{opt.label}
+            </button>
+          ))}
+        </div>
+      </section>
+
+      {/* 年龄段 */}
+      <section className={sectionClass} style={{ borderBottom: '1px solid var(--line)', paddingBottom: '14px', marginBottom: '14px' }}>
+        <div className="section-title">年龄段</div>
+        <div className={`grid grid-cols-4 ${gap}`}>
+          {AGE_RANGE_OPTIONS.map(opt => (
+            <button
+              key={opt.value}
+              onClick={() => update('age_range', opt.value)}
+              className={`opt-btn ${profile.age_range === opt.value ? 'active' : ''}`}
+              style={{ textAlign: 'center', padding: '8px 4px', fontSize: '12px' }}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+      </section>
+
+      {/* 地区 */}
+      <section className={sectionClass} style={{ borderBottom: '1px solid var(--line)', paddingBottom: '14px', marginBottom: '14px' }}>
+        <div className="section-title">常居地区</div>
+        <div className={`flex ${gap}`}>
+          {REGION_OPTIONS.map(opt => (
+            <button
+              key={opt.value}
+              onClick={() => update('region', opt.value)}
+              className={`opt-btn flex-1 ${profile.region === opt.value ? 'active' : ''}`}
+              style={{ textAlign: 'center' }}
+            >
+              <div className="text-xs font-medium">{opt.label}</div>
+              {!compact && <div className="text-[10px] mt-0.5" style={{ opacity: 0.7 }}>{opt.desc}</div>}
             </button>
           ))}
         </div>
@@ -154,6 +206,33 @@ export default function CustomerForm({ initial, onSubmit, submitting, compact }:
               {opt.label}
             </button>
           ))}
+        </div>
+      </section>
+
+      {/* 身高体重(选填,填了才有 BMI/体型数字) */}
+      <section className={sectionClass} style={{ borderBottom: '1px solid var(--line)', paddingBottom: '14px', marginBottom: '14px' }}>
+        <div className="section-title">身高体重（选填）</div>
+        <div className="flex gap-3">
+          <div className="flex-1 min-w-0">
+            <div className="text-xs mb-2" style={{ color: 'var(--muted)' }}>身高</div>
+            <input
+              type="number"
+              placeholder="cm，如 165"
+              className="form-input"
+              value={profile.height ?? ''}
+              onChange={(e) => update('height', e.target.value ? Number(e.target.value) : undefined)}
+            />
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="text-xs mb-2" style={{ color: 'var(--muted)' }}>体重</div>
+            <input
+              type="number"
+              placeholder="kg，如 55"
+              className="form-input"
+              value={profile.weight ?? ''}
+              onChange={(e) => update('weight', e.target.value ? Number(e.target.value) : undefined)}
+            />
+          </div>
         </div>
       </section>
 

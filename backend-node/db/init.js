@@ -98,6 +98,26 @@ function initSchema() {
 }
 
 /**
+ * 给已存在的表补新列
+ * schema.sql 的 CREATE TABLE IF NOT EXISTS 不会改动已建好的表,
+ * 老库(本机/服务器)只能靠这里补列,否则引用新列的查询会直接报错。
+ */
+const MISSING_COLUMNS = [
+  ['rule_groups', 'last_hit_at', 'TEXT'],
+  ['recommendation_logs', 'input_snapshot', 'TEXT'],
+];
+
+function initMissingColumns() {
+  for (const [table, column, type] of MISSING_COLUMNS) {
+    const exists = db.prepare('SELECT 1 FROM pragma_table_info(?) WHERE name = ?').get(table, column);
+    if (!exists) {
+      db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${type}`);
+      console.log(`[数据库] ${table} 已补列 ${column}`);
+    }
+  }
+}
+
+/**
  * 检查并导入种子数据
  */
 function initSeedData() {
@@ -267,6 +287,7 @@ function cleanupExpiredSessions() {
  */
 function initAll() {
   initSchema();
+  initMissingColumns();
   initSeedData();
   initModelConfigs();
   // ★ 启动时清理失效模型记录:

@@ -65,6 +65,8 @@ const crossCabinetRoutes = require('./routes/crossCabinet');
 const clothingRoutes = require('./routes/clothing');
 const weatherRoutes = require('./routes/weather');
 const horoscopeRoutes = require('./routes/horoscope');
+const paymentRoutes = require('./routes/payment');
+const creatorRoutes = require('./routes/creator');
 
 const app = express();
 const PORT = parseInt(process.env.PORT || '5000', 10);
@@ -244,6 +246,8 @@ app.use('/api/cross-cabinet', loginRequired, crossCabinetRoutes);
 app.use('/api/clothing', loginRequired, clothingRoutes);
 app.use('/api/weather', weatherRoutes);
 app.use('/api/horoscope', horoscopeRoutes);
+app.use('/api/payment', paymentRoutes);
+app.use('/api/creator', creatorRoutes);
 // 管理后台 API
 app.use('/admin', adminRoutes);
 
@@ -255,6 +259,9 @@ if (fs.existsSync(frontendDist)) {
   // 展厅 importmap 里的 /three/** 由 vite 从 app/public/three 拷进 dist/three，必须显式挂载；
   // 漏挂载时它会落到下面的 SPA 兜底，被当成 index.html(text/html) 返回，浏览器直接拒绝执行模块链。
   app.use('/three', express.static(path.join(frontendDist, 'three')));
+  // 域名根目录的裸文件（favicon、微信业务域名校验文件 WW_verify_xxx.txt 等）必须先于 SPA 兜底命中，
+  // 否则会被 index.html 顶替成 200 + text/html，平台侧静默校验失败。index:false 让 / 仍走下面的兜底。
+  app.use(express.static(frontendDist, { index: false }));
   // SPA 回退:所有非 API 路由返回 index.html
   app.get('*', (req, res, next) => {
     if (
@@ -267,6 +274,8 @@ if (fs.existsSync(frontendDist)) {
     ) {
       return next();
     }
+    // 带扩展名却没被上面的静态命中 = 文件确实不存在，给真 404，不能伪装成首页
+    if (/\.[a-zA-Z0-9]{1,8}$/.test(req.path)) return next();
     const indexPath = path.join(frontendDist, 'index.html');
     if (fs.existsSync(indexPath)) {
       res.sendFile(indexPath);

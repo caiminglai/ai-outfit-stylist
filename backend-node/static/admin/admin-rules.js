@@ -7,15 +7,49 @@
    ══════════════════════════════════════════════════════════════ */
 
 /* ── 筛选事件绑定 ── */
-['filter-mode', 'filter-gender', 'filter-category', 'filter-scenario', 'filter-enabled'].forEach(function(id) {
+['filter-mode', 'filter-gender', 'filter-category', 'filter-scenario', 'filter-enabled', 'filter-hit'].forEach(function(id) {
   document.getElementById(id).addEventListener('change', loadRules);
 });
 document.getElementById('rules-refresh').addEventListener('click', loadRules);
 document.getElementById('rules-create-btn').addEventListener('click', function() { openRuleModal(null); });
 document.getElementById('rules-preview-btn').addEventListener('click', openPreviewModal);
 
+/* ── 编辑器元数据:字段/动作/类别/场景都由后端给出,前端不写死 ── */
+var RULE_SCHEMA = null;
+var FIELD_LABEL_MAP = {};
+var ACTION_LABEL_MAP = {};
+/** 试算渲染时要跳过的非动作字段(引擎附带的分组元信息) */
+var PREVIEW_META_KEYS = { group_id: 1, group_name: 1, priority: 1, score: 1, explanation: 1 };
+
+function ensureSchema(done) {
+  if (RULE_SCHEMA) { done(); return; }
+  fetchJSON(RULES_API + '/schema').then(function(res) {
+    if (!res.success) throw new Error(res.message);
+    RULE_SCHEMA = res.data;
+    RULE_SCHEMA.fields.forEach(function(p) { FIELD_LABEL_MAP[p.value] = p.label; });
+    RULE_SCHEMA.actionTypes.forEach(function(p) { ACTION_LABEL_MAP[p.value] = p.label; });
+    fillOptions('filter-category', RULE_SCHEMA.categories, '全部类别');
+    fillOptions('filter-scenario', RULE_SCHEMA.scenarios, '全部场景');
+    done();
+  }).catch(function(e) {
+    showToast('规则元数据加载失败: ' + e.message, 'error');
+    done();
+  });
+}
+
+function fillOptions(id, values, allLabel) {
+  var sel = document.getElementById(id);
+  if (!sel || !values) return;
+  var current = sel.value;
+  sel.innerHTML = '<option value="">' + escapeHtml(allLabel) + '</option>' + values.map(function(v) {
+    return '<option value="' + escapeHtml(v) + '">' + escapeHtml(v) + '</option>';
+  }).join('');
+  sel.value = current;
+}
+
 /* ── 加载规则列表 ── */
 function loadRules() {
+  if (!RULE_SCHEMA) { ensureSchema(loadRules); return; }
   var container = document.getElementById('rules-container');
   container.className = 'loading';
   container.textContent = '加载中...';
@@ -26,12 +60,14 @@ function loadRules() {
   var category = document.getElementById('filter-category').value;
   var scenario = document.getElementById('filter-scenario').value;
   var enabled = document.getElementById('filter-enabled').value;
+  var hit = document.getElementById('filter-hit').value;
 
   if (mode) params.push('mode=' + mode);
   if (gender) params.push('gender=' + encodeURIComponent(gender));
   if (category) params.push('category=' + encodeURIComponent(category));
   if (scenario) params.push('scenario=' + encodeURIComponent(scenario));
   if (enabled) params.push('enabled=' + enabled);
+  if (hit) params.push('hit=' + encodeURIComponent(hit));
 
   var url = RULES_API + '/groups' + (params.length ? '?' + params.join('&') : '');
 
@@ -62,12 +98,12 @@ function renderRules(groups) {
     card.className = 'rule-card' + (g.enabled ? '' : ' disabled');
 
     var condSummary = (g.conditions || []).map(function(c) {
-      var val = c.value;
-      if (typeof val === 'object' && val !== null) val = val[c.field] || JSON.stringify(val);
-      return escapeHtml(c.field) + '=' + escapeHtml(val);
+      return escapeHtml(FIELD_LABEL_MAP[c.field] || c.field) + '=' + escapeHtml(condValueOf(c));
     }).join('，');
 
-    var actionSummary = (g.actions || []).map(function(a) { return escapeHtml(a.action_type); }).join(' / ');
+    var actionSummary = (g.actions || []).map(function(a) {
+      return escapeHtml(ACTION_LABEL_MAP[a.action_type] || a.action_type);
+    }).join(' / ');
 
     var header = document.createElement('div');
     header.className = 'rule-header';
@@ -79,7 +115,7 @@ function renderRules(groups) {
         (g.scenario ? '<span class="badge badge-green">' + escapeHtml(g.scenario) + '</span>' : '') +
         '<span class="badge ' + (g.enabled ? 'badge-green' : 'badge-red') + '">' + (g.enabled ? '启用' : '停用') + '</span>' +
         (g.priority ? '<span class="badge badge-orange">P' + g.priority + '</span>' : '') +
-        '<span class="badge" style="background:var(--bg);color:var(--muted);" title="命中次数">🎯 命中 ' + (g.hit_count || 0) + '</span>' +
+        '<span class="badge" style="background:var(--bg);color:var(--muted);" title="命中次数/最近命中时间">🎯 命中 ' + (g.hit_count || 0) + (g.last_hit_at ? ' · 最近 ' + g.last_hit_at.slice(0, 10) : ' · 从未命中') + '</span>' +
       '</span>';
 
     var body = document.createElement('div');
@@ -110,6 +146,7 @@ function renderRules(groups) {
 
 /* ── 规则编辑模态框 ── */
 function openRuleModal(ruleId) {
+  if (!RULE_SCHEMA) { ensureSchema(function() { openRuleModal(ruleId); }); return; }
   State.editingRuleId = ruleId;
   var title = document.getElementById('rule-modal-title');
   var body = document.getElementById('rule-modal-body');
@@ -152,8 +189,8 @@ function buildRuleForm(rule) {
   html += '<div class="form-row">';
   html += '<div class="form-group"><label>推荐模式</label><select id="rf-mode"><option value="store"' + (g.mode === 'store' ? ' selected' : '') + '>门店模式</option><option value="personal"' + (g.mode === 'personal' ? ' selected' : '') + '>个人衣橱</option></select></div>';
   html += '<div class="form-group"><label>性别</label><select id="rf-gender"><option value="">不限</option><option value="女"' + (g.gender === '女' ? ' selected' : '') + '>女</option><option value="男"' + (g.gender === '男' ? ' selected' : '') + '>男</option></select></div>';
-  html += '<div class="form-group"><label>推荐类别 <span class="req">*</span></label><select id="rf-category"><option value="穿搭"' + (g.category === '穿搭' ? ' selected' : '') + '>穿搭</option><option value="妆容"' + (g.category === '妆容' ? ' selected' : '') + '>美妆</option><option value="发型"' + (g.category === '发型' ? ' selected' : '') + '>发型</option><option value="配饰"' + (g.category === '配饰' ? ' selected' : '') + '>配饰</option></select></div>';
-  html += '<div class="form-group"><label>场景</label><select id="rf-scenario"><option value="">不限</option><option value="通勤"' + (g.scenario === '通勤' ? ' selected' : '') + '>通勤</option><option value="约会"' + (g.scenario === '约会' ? ' selected' : '') + '>约会</option><option value="面试"' + (g.scenario === '面试' ? ' selected' : '') + '>面试</option><option value="休闲"' + (g.scenario === '休闲' ? ' selected' : '') + '>休闲</option><option value="聚会"' + (g.scenario === '聚会' ? ' selected' : '') + '>聚会</option></select></div>';
+  html += '<div class="form-group"><label>推荐类别 <span class="req">*</span></label><select id="rf-category">' + optionsHtml(RULE_SCHEMA.categories, g.category, '请选择') + '</select></div>';
+  html += '<div class="form-group"><label>场景</label><select id="rf-scenario">' + optionsHtml(RULE_SCHEMA.scenarios, g.scenario, '不限') + '</select></div>';
   html += '</div>';
 
   html += '<div class="form-group"><label>规则说明</label><textarea id="rf-description" placeholder="描述该规则的适用场景和推荐逻辑">' + escapeHtml(g.description || '') + '</textarea></div>';
@@ -178,13 +215,42 @@ function buildRuleForm(rule) {
   return html;
 }
 
+/* ── 下拉项生成:库里已有的值一定保留,否则编辑保存时会把它改成列表第一项 ── */
+function optionsHtml(values, current, allLabel) {
+  var list = (values || []).slice();
+  if (current && list.indexOf(current) < 0) list = [current].concat(list);
+  var html = allLabel ? '<option value="">' + escapeHtml(allLabel) + '</option>' : '';
+  return html + list.map(function(v) {
+    return '<option value="' + escapeHtml(v) + '"' + (v === current ? ' selected' : '') + '>' + escapeHtml(v) + '</option>';
+  }).join('');
+}
+
+function pairOptionsHtml(pairs, current) {
+  var list = (pairs || []).slice();
+  if (current && !list.some(function(p) { return p.value === current; })) {
+    list.unshift({ value: current, label: current + '（未收录）' });
+  }
+  return list.map(function(p) {
+    return '<option value="' + escapeHtml(p.value) + '"' + (p.value === current ? ' selected' : '') + '>' + escapeHtml(p.label) + '</option>';
+  }).join('');
+}
+
+/* 条件值在库里是 JSON 字符串({"skin_tone":"暖皮"}),编辑框和列表都要还原成人填的那个值 */
+function condValueOf(c) {
+  var v = c.value;
+  if (typeof v === 'string') {
+    try { v = JSON.parse(v); } catch (e) { return v; }
+  }
+  if (v && typeof v === 'object') v = (c.field in v) ? v[c.field] : Object.values(v)[0];
+  if (Array.isArray(v)) v = v.join(',');
+  return v === null || v === undefined ? '' : String(v);
+}
+
 function buildConditionRow(c, idx) {
-  var val = c.value;
-  if (typeof val === 'object' && val !== null) val = val[c.field] || '';
   return '<div class="condition-row" data-idx="' + idx + '">' +
-    '<select class="cond-field"><option value="skin_tone"' + (c.field === 'skin_tone' ? ' selected' : '') + '>肤色</option><option value="face_shape"' + (c.field === 'face_shape' ? ' selected' : '') + '>脸型</option><option value="body_type"' + (c.field === 'body_type' ? ' selected' : '') + '>体型</option><option value="scenario"' + (c.field === 'scenario' ? ' selected' : '') + '>场景</option><option value="gender"' + (c.field === 'gender' ? ' selected' : '') + '>性别</option></select>' +
-    '<select class="cond-op"><option value="eq"' + (c.operator === 'eq' ? ' selected' : '') + '>等于</option><option value="ne"' + (c.operator === 'ne' ? ' selected' : '') + '>不等于</option><option value="in"' + (c.operator === 'in' ? ' selected' : '') + '>包含于</option></select>' +
-    '<input type="text" class="cond-value" value="' + escapeHtml(String(val)) + '" placeholder="值（all=不限）">' +
+    '<select class="cond-field">' + pairOptionsHtml(RULE_SCHEMA.fields, c.field) + '</select>' +
+    '<select class="cond-op">' + pairOptionsHtml(RULE_SCHEMA.operators, c.operator) + '</select>' +
+    '<input type="text" class="cond-value" value="' + escapeHtml(condValueOf(c)) + '" placeholder="值（all=不限，属于用逗号分隔）">' +
     '<input type="number" class="cond-weight" value="' + (c.weight || 1) + '" style="flex:0 0 60px;" title="权重">' +
     '<button class="remove-row-btn" onclick="this.parentElement.remove()">×</button>' +
     '</div>';
@@ -192,32 +258,7 @@ function buildConditionRow(c, idx) {
 
 function buildActionRow(a, idx) {
   return '<div class="action-row" data-idx="' + idx + '">' +
-    '<select class="action-type">' +
-    '<option value="top_style"' + (a.action_type === 'top_style' ? ' selected' : '') + '>上装风格</option>' +
-    '<option value="bottom_style"' + (a.action_type === 'bottom_style' ? ' selected' : '') + '>下装风格</option>' +
-    '<option value="shoe_style"' + (a.action_type === 'shoe_style' ? ' selected' : '') + '>鞋履风格</option>' +
-    '<option value="color_combo"' + (a.action_type === 'color_combo' ? ' selected' : '') + '>配色方案</option>' +
-    '<option value="妆容风格"' + (a.action_type === '妆容风格' ? ' selected' : '') + '>妆容风格</option>' +
-    '<option value="lip_color"' + (a.action_type === 'lip_color' ? ' selected' : '') + '>唇色</option>' +
-    '<option value="foundation"' + (a.action_type === 'foundation' ? ' selected' : '') + '>粉底</option>' +
-    '<option value="eye_shadow"' + (a.action_type === 'eye_shadow' ? ' selected' : '') + '>眼影</option>' +
-    '<option value="blush"' + (a.action_type === 'blush' ? ' selected' : '') + '>腮红</option>' +
-    '<option value="eyebrow"' + (a.action_type === 'eyebrow' ? ' selected' : '') + '>眉型</option>' +
-    '<option value="skincare"' + (a.action_type === 'skincare' ? ' selected' : '') + '>护肤</option>' +
-    '<option value="technique"' + (a.action_type === 'technique' ? ' selected' : '') + '>技巧</option>' +
-    '<option value="发型"' + (a.action_type === '发型' ? ' selected' : '') + '>发型</option>' +
-    '<option value="hair_color"' + (a.action_type === 'hair_color' ? ' selected' : '') + '>发色</option>' +
-    '<option value="bang_type"' + (a.action_type === 'bang_type' ? ' selected' : '') + '>刘海</option>' +
-    '<option value="hair_length"' + (a.action_type === 'hair_length' ? ' selected' : '') + '>发长</option>' +
-    '<option value="avoid"' + (a.action_type === 'avoid' ? ' selected' : '') + '>避免</option>' +
-    '<option value="earring_type"' + (a.action_type === 'earring_type' ? ' selected' : '') + '>耳饰</option>' +
-    '<option value="necklace_type"' + (a.action_type === 'necklace_type' ? ' selected' : '') + '>项链</option>' +
-    '<option value="glasses_type"' + (a.action_type === 'glasses_type' ? ' selected' : '') + '>眼镜</option>' +
-    '<option value="bag_style"' + (a.action_type === 'bag_style' ? ' selected' : '') + '>包包</option>' +
-    '<option value="metal_color"' + (a.action_type === 'metal_color' ? ' selected' : '') + '>金属色</option>' +
-    '<option value="reason"' + (a.action_type === 'reason' ? ' selected' : '') + '>推荐理由</option>' +
-    '<option value="custom"' + (a.action_type === 'custom' ? ' selected' : '') + '>自定义</option>' +
-    '</select>' +
+    '<select class="action-type">' + pairOptionsHtml(RULE_SCHEMA.actionTypes, a.action_type) + '</select>' +
     '<input type="text" class="action-content" value="' + escapeHtml(String(a.content || '')) + '" placeholder="输出内容">' +
     '<button class="remove-row-btn" onclick="this.parentElement.remove()">×</button>' +
     '</div>';
@@ -307,6 +348,10 @@ function deleteRule(ruleId) {
 
 /* ── 规则试算 ── */
 function openPreviewModal() {
+  if (!RULE_SCHEMA) { ensureSchema(openPreviewModal); return; }
+  var scenarioOpts = RULE_SCHEMA.scenarios.map(function(s) {
+    return '<option value="' + escapeHtml(s) + '">' + escapeHtml(s) + '</option>';
+  }).join('');
   document.getElementById('preview-modal-body').innerHTML =
     '<div style="display:flex;gap:8px;margin-bottom:12px;">' +
       '<button class="btn btn-sm btn-primary" id="pv-tab-form" onclick="switchPreviewInput(\'form\')">📋 表单输入</button>' +
@@ -319,6 +364,7 @@ function openPreviewModal() {
         '<div class="form-group"><label>脸型</label><select id="pv-face"><option value="圆脸">圆脸</option><option value="方脸">方脸</option><option value="心形脸">心形脸</option><option value="鹅蛋脸">鹅蛋脸</option><option value="长脸">长脸</option></select></div>' +
         '<div class="form-group"><label>场景</label><select id="pv-scenario"><option value="通勤">通勤</option><option value="约会">约会</option><option value="面试">面试</option><option value="休闲">休闲</option><option value="聚会">聚会</option></select></div>' +
       '</div>' +
+      '<div class="form-group"><label>拍照场景（只影响"姿势"类推荐）</label><select id="pv-photo_scene"><option value="">不指定</option>' + scenarioOpts + '</select></div>' +
       '<div class="form-group"><label>推荐模式</label><select id="pv-mode"><option value="store">门店模式</option><option value="personal">个人衣橱</option></select></div>' +
     '</div>' +
     '<div id="pv-json-area" style="display:none;">' +
@@ -366,6 +412,7 @@ function runPreview() {
       skin_tone: document.getElementById('pv-skin').value,
       face_shape: document.getElementById('pv-face').value,
       scenario: document.getElementById('pv-scenario').value,
+      photo_scene: document.getElementById('pv-photo_scene').value,
     };
     mode = document.getElementById('pv-mode').value;
   }
@@ -377,15 +424,22 @@ function runPreview() {
     if (res.success) {
       var rec = res.data.recommendation;
       var html = '<div class="rule-section-label">试算结果</div>';
-      ['穿搭', '妆容', '发型', '配饰'].forEach(function(cat) {
+      ['穿搭', '妆容', '发型', '配饰', '姿势'].forEach(function(cat) {
         if (rec[cat] && rec[cat].length > 0) {
           html += '<div class="card" style="padding:12px;margin-bottom:8px;">';
           html += '<div style="font-weight:600;color:var(--accent);margin-bottom:6px;">' + (CATEGORY_LABELS[cat] || cat) + ' (' + rec[cat].length + '条)</div>';
           rec[cat].forEach(function(item) {
             html += '<div style="font-size:12px;margin-bottom:4px;padding:4px 8px;background:var(--bg);border-radius:4px;">';
-            html += '<span style="color:var(--muted);">[' + (item.group_name || '') + ']</span> ';
-            var firstKey = Object.keys(item).find(function(k) { return k !== 'group_id' && k !== 'group_name' && k !== 'priority' && k !== 'score'; });
-            if (firstKey) html += '<span style="color:var(--green);">' + escapeHtml(item[firstKey]) + '</span>';
+            html += '<div style="color:var(--muted);margin-bottom:2px;">[' + escapeHtml(item.group_name || '') + ' · ' + (item.score || 0) + '分]</div>';
+            // 引擎把动作平铺在条目上(item.top_style),没有 item.actions 这个键
+            Object.keys(item).forEach(function(k) {
+              if (PREVIEW_META_KEYS[k]) return;
+              var v = item[k];
+              if (v === null || v === undefined || v === '') return;
+              if (typeof v === 'object') v = JSON.stringify(v);
+              html += '<span style="color:var(--orange);">' + escapeHtml(ACTION_LABEL_MAP[k] || k) + '：</span>' +
+                '<span style="color:var(--green);">' + escapeHtml(String(v)) + '</span><br>';
+            });
             html += '</div>';
           });
           html += '</div>';
@@ -395,7 +449,7 @@ function runPreview() {
         html += '<div class="card" style="padding:12px;"><div style="font-weight:600;color:var(--orange);">📦 库存匹配</div>';
         html += '<pre style="font-size:11px;overflow:auto;">' + escapeHtml(JSON.stringify(rec.inventory, null, 2)) + '</pre></div>';
       }
-      if (!rec['穿搭']?.length && !rec['妆容']?.length && !rec['发型']?.length && !rec['配饰']?.length) {
+      if (!['穿搭', '妆容', '发型', '配饰', '姿势'].some(function(c) { return (rec[c] || []).length > 0; })) {
         html += '<div style="color:var(--muted);text-align:center;padding:20px;">未匹配到任何规则</div>';
       }
       resultDiv.innerHTML = html;

@@ -180,6 +180,21 @@ function computeShoulderRatio(shoulder, height) {
 // ============================================================
 
 const SKIN_TONE_COLOR_MAP = {
+  暖皮: {
+    colors: '焦糖、砖红、橄榄绿、姜黄、珊瑚粉、奶油白、咖啡棕',
+    avoid: '避免纯白、宝蓝、玫红等冷调高饱和色，容易显脸色发灰',
+    reason: '暖调中饱和色与黄调皮肤呼应，能提气色而不打架',
+  },
+  冷皮: {
+    colors: '宝蓝、纯白、玫红、薰衣草紫、冷灰、薄荷绿、正红',
+    avoid: '避免橘色、土黄、驼色等暖调大地色，会让粉调皮肤发暗',
+    reason: '冷调清晰色能衬托粉调肤色，对比越干净越显白',
+  },
+  自然: {
+    colors: '豆沙粉、雾霾蓝、墨绿、米色、灰蓝等中等饱和度正色',
+    avoid: '避免荧光色和整套暗沉黑灰',
+    reason: '中性肤色容错高，避开冷暖两端的强对比即可',
+  },
   白皙: {
     colors: '宝蓝、酒红、墨绿、樱花粉、薰衣草紫',
     avoid: '避免过于暗沉的灰褐色',
@@ -295,6 +310,21 @@ const FACE_SHAPE_GUIDE = {
     contour: '全脸大面积修容柔化轮廓，重点在下颌',
     accessory: '圆润大圈耳环柔化硬朗感，波浪形项链',
   },
+  长脸: {
+    analysis: '脸型偏长、中庭留白多，核心是缩短脸长并增加两侧宽度。',
+    hair: '空气刘海/齐刘海直接缩短上庭，两侧蓬松卷发或波浪增加横向宽度；避免中分贴头皮直发、高颅顶和超长直发',
+    makeup: '腮红横向打在苹果肌并向两侧晕染拉宽视觉，眉形宜平直，避免高挑眉和中轴线纵向修容',
+    contour: '发际线下缘与下巴下缘扫阴影各缩短一截，额头和下巴中央提亮改为横向晕染',
+    accessory: '圆形大耳环、宽檐帽、choker 或短项链增加横向阻断；避免长款流苏耳坠和 V 领继续拉长',
+  },
+}
+
+/**
+ * 脸型同义词:表单/规则词表 与 建议表词表 用词不同
+ * 不加这层会静默落到兜底的鹅蛋脸文案,查不到也不报错
+ */
+const FACE_SHAPE_ALIASES = {
+  椭圆脸: '鹅蛋脸',
 }
 
 /**
@@ -303,7 +333,8 @@ const FACE_SHAPE_GUIDE = {
  * @returns {{face_analysis: string, hair_advice: string, makeup_advice: string, contour_advice: string, accessory_advice: string}}
  */
 function getFaceShapeGuide(faceShape) {
-  const guide = FACE_SHAPE_GUIDE[faceShape] || FACE_SHAPE_GUIDE['鹅蛋脸']
+  const key = FACE_SHAPE_ALIASES[faceShape] || faceShape
+  const guide = FACE_SHAPE_GUIDE[key] || FACE_SHAPE_GUIDE['鹅蛋脸']
   return {
     face_analysis: guide.analysis,
     hair_advice: guide.hair,
@@ -378,6 +409,13 @@ function enrichProfile(profile) {
   if (!p.nose_bridge && p.nose_height) {
     p.nose_bridge = p.nose_height
   }
+  // 只填了具体身高没选区间时换算一次,否则按区间分档的规则(3 组)对这类人永远轮不到
+  if (!p.height_range && p.height) {
+    const h = _safeFloat(p.height)
+    if (h > 0) {
+      p.height_range = h < 160 ? '150-160' : h < 170 ? '160-170' : h < 180 ? '170-180' : '180+'
+    }
+  }
 
   const { height, weight, bust, waist, hip, shoulder, leg_length, skin_tone, face_shape, posture } =
     p
@@ -413,12 +451,7 @@ function enrichProfile(profile) {
 
   // 6. 肤色-色系
   if (skin_tone) {
-    // 兼容旧版暖皮/冷皮 -> 映射到新版
-    if (['暖皮', '冷皮', '中性'].includes(skin_tone)) {
-      Object.assign(p, computeColorMatch('自然白'))
-    } else {
-      Object.assign(p, computeColorMatch(skin_tone))
-    }
+    Object.assign(p, computeColorMatch(skin_tone))
   }
 
   // 7. 脸型-全维度建议

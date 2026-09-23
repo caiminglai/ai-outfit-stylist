@@ -27,6 +27,7 @@ const FIELD_LABELS = {
   face_shape: '脸型',
   region: '地区',
   body_type: '体型',
+  body_type_detail: '体型细分',
   bmi_level: 'BMI等级',
   preferred_style: '风格偏好',
   main_goal: '主要目标',
@@ -57,6 +58,7 @@ const CATEGORY_VALUE_LABELS = {
   hairstyle: '发型',
   accessory: '配饰',
   posture: '姿势',
+  pose: '姿势', // 种子数据中 personal 模式的写法
 };
 
 /**
@@ -71,6 +73,35 @@ const CATEGORY_CN_TO_EN = {
   发型: 'hairstyle',
   配饰: 'accessory',
   姿势: 'posture',
+};
+
+/**
+ * action_type(规则动作) → 中文标签
+ * 覆盖库里现有 46 种 action_type,供文案生成与后台展示复用
+ */
+const ACTION_LABELS = {
+  // 穿搭
+  top_style: '上装', bottom_style: '下装', outerwear: '外套', shoe_style: '鞋履',
+  color_combo: '配色方案', reason: '推荐理由', avoid: '避免',
+  穿搭要点: '穿搭要点', capsule_wardrobe: '胶囊衣橱', shopping_tip: '购物建议',
+  declutter_tip: '断舍离',
+  // 妆容
+  妆容风格: '妆容风格', 妆容底妆: '底妆风格', 妆容要点: '妆容要点',
+  foundation: '底妆', lip_color: '唇色', eye_shadow: '眼影', eyeliner: '眼线',
+  blush: '腮红', eyebrow: '眉型', technique: '化妆技巧', skincare: '护肤',
+  lip_care: '唇部护理', face_care: '面部护理', beard: '胡须',
+  // 发型
+  发型: '发型', hair_color: '发色', hair_length: '发长', bang_type: '刘海',
+  // 配饰
+  earring_type: '耳饰', earring_avoid: '耳饰避免', necklace_type: '项链',
+  necklace_avoid: '项链避免', glasses_type: '眼镜', bag_style: '包袋',
+  metal_color: '金属色', watch: '手表', belt: '腰带', ring: '戒指',
+  bracelet: '手链', tie: '领带', cufflink: '袖扣', 配饰要点: '配饰要点',
+  cross_tip: '协调建议',
+  // 姿势
+  pose_key: '姿势要点', head_pose: '头部', hand_pose: '手部',
+  upper_body: '上半身', lower_body: '下半身', expression: '表情',
+  camera_hint: '拍摄建议',
 };
 
 /**
@@ -281,6 +312,7 @@ function explainMatchedRecommendation(matched, allConditions) {
 
 module.exports = {
   FIELD_LABELS,
+  ACTION_LABELS,
   CATEGORY_VALUE_LABELS,
   CATEGORY_CN_TO_EN,
   OPERATOR_LABELS,

@@ -62,9 +62,12 @@ const TABLE_NAMES = {
   wardrobe_outfits: '搭配组合表',
   shopping_wishlist: '购物心愿单',
   admin_users: '管理员表',
+  user_accounts: '正式账号表',
   user_cosmetics: '化妆品柜表',
   user_accessories: '配饰柜表',
   model_configs: '3D模型配置表',
+  deposits: '收款凭证表',
+  creator_works: '创作者作品表',
 }
 
 // 从 schema.sql 解析表结构（运行时读取）
@@ -369,6 +372,31 @@ router.get(['/api/source', '/api/source/*'], adminLoginRequired, (req, res) => {
 // ============================================================
 // 6. 后端模块结构（函数逻辑）
 // ============================================================
+
+/* 路由模块中文名；侧栏取空格前那段，英文名与文件路径仍照常显示 */
+const MODULE_LABELS = {
+  accessory: '配饰柜',
+  admin: '后台管理',
+  analysis: '形象分析',
+  auth: '登录鉴权',
+  clothing: '衣服照片',
+  cosmetic: '化妆柜',
+  creator: '创作者作品',
+  crossCabinet: '跨柜搭配',
+  customer: '顾客会话',
+  history: '历史记录',
+  horoscope: '星座建议',
+  inventory: '库存管理',
+  models: '3D模型',
+  payment: '收款凭证',
+  photos: '照片上传',
+  recommend: '搭配推荐',
+  rules: '规则引擎',
+  tryon: '虚拟试穿',
+  wardrobe: '衣橱管理',
+  weather: '天气建议',
+}
+
 router.get('/api/functions', adminLoginRequired, (req, res) => {
   try {
     const routesDir = path.join(__dirname)
@@ -391,8 +419,9 @@ router.get('/api/functions', adminLoginRequired, (req, res) => {
         functions.push({ name, signature: name, docstring: '' })
       }
 
-      // 用文件名作为标签（简洁明了）
-      const label = file.replace('.js', '')
+      // 标签 = 中文名 + 英文名；没有中文映射的模块退回英文文件名
+      const modName = file.replace('.js', '')
+      const label = MODULE_LABELS[modName] ? MODULE_LABELS[modName] + ' ' + modName : modName
 
       return { label, file: filePath, functions, classes: [] }
     })

@@ -57,6 +57,10 @@ export function setGlobalErrorHandler(handler: GlobalErrorHandler | null): void 
  * 每次 API 请求和页面初始化时调用,过期自动清除并重新生成
  */
 export function getSessionId(): string {
+  // 已登录：身份跟着账号走，不参与游客 2 小时轮换
+  const account = getAccount();
+  if (account) return account.sessionId;
+
   let sid = localStorage.getItem('style_ai_session');
   const ts = localStorage.getItem(SESSION_TS_KEY);
 
@@ -92,6 +96,62 @@ export function clearExpiredSession(): void {
     localStorage.removeItem('style_ai_session');
     localStorage.removeItem(SESSION_TS_KEY);
   }
+}
+
+/** 正式账号(手机号 + 密码)登录态 */
+export interface AccountInfo {
+  phone: string;
+  sessionId: string;
+  nickname?: string | null;
+}
+
+const ACCOUNT_KEY = 'style_ai_account';
+
+export function getAccount(): AccountInfo | null {
+  try {
+    const raw = localStorage.getItem(ACCOUNT_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as AccountInfo;
+    return parsed && parsed.sessionId ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+export function setAccount(account: AccountInfo | null): void {
+  if (account) localStorage.setItem(ACCOUNT_KEY, JSON.stringify(account));
+  else localStorage.removeItem(ACCOUNT_KEY);
+}
+
+async function authRequest(path: string, body: Record<string, string>): Promise<AccountInfo> {
+  const res = await fetchWithTimeout(
+    `${BASE}${path}`,
+    { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) },
+    15000
+  );
+  const data = await res.json();
+  if (!data.success) {
+    throw new Error((data.error && data.error.message) || data.message || '请求失败');
+  }
+  const account: AccountInfo = {
+    phone: data.data.phone,
+    sessionId: data.data.session_id,
+    nickname: data.data.nickname ?? null,
+  };
+  setAccount(account);
+  return account;
+}
+
+export function registerAccount(phone: string, password: string, nickname?: string): Promise<AccountInfo> {
+  return authRequest('/auth/register', nickname ? { phone, password, nickname } : { phone, password });
+}
+
+export function loginAccount(phone: string, password: string): Promise<AccountInfo> {
+  return authRequest('/auth/login', { phone, password });
+}
+
+export function logoutAccount(): void {
+  setAccount(null);
 }
 
 function headers(): Record<string, string> {
@@ -470,12 +530,16 @@ export async function suggestAccessories(profile?: CustomerProfile): Promise<Sho
 export async function getCrossCabinetRecommend(occasion?: string, profile?: CustomerProfile): Promise<CrossCabinetRecommendation> {
   const params = new URLSearchParams();
   if (occasion) params.set('occasion', occasion);
+  for (const key of ['skin_tone', 'face_shape', 'body_type', 'preferred_style', 'skin_type', 'neck_length'] as const) {
+    const value = profile?.[key];
+    if (typeof value === 'string' && value) params.set(key, value);
+  }
   const url = `${BASE}/cross-cabinet/recommend${params.toString() ? '?' + params.toString() : ''}`;
   const res = await fetchWithTimeout(url, { headers: headers() });
   return unwrap(res);
 }
 
-export async function getSeasonalReminder(profile?: CustomerProfile): Promise<SeasonalReminder> {
+export async function getSeasonalReminder(): Promise<SeasonalReminder> {
   const res = await fetchWithTimeout(`${BASE}/cross-cabinet/seasonal`, { headers: headers() });
   return unwrap(res);
 }

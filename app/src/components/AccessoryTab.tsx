@@ -10,6 +10,8 @@ import type {
   CustomerProfile,
   AccessoryItem,
   AccessoryGapResult,
+  AccessoryGap,
+  AccessoryStats,
   ShoppingWishlistItem,
 } from '../types';
 import {

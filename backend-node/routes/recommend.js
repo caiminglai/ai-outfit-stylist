@@ -13,6 +13,7 @@ const { sendSuccess, sendError } = require('../utils/response')
 const { loginRequired } = require('../middleware/auth')
 const { rateLimit } = require('../middleware/rateLimit')
 const { getRecommendations, buildRecommendation } = require('../services/recommendEngine')
+const { ACTION_LABELS } = require('../services/ruleExplainer')
 
 // 推荐引擎限流：每分钟最多 20 次
 const recommendLimiter = rateLimit({ windowMs: 60000, max: 20 })
@@ -148,82 +149,33 @@ function generateStructuredText(recommendation, weather, mode) {
     lines.push(`气温 ${weather.temp}°C，${weather.description || '天气良好'}。\n`)
   }
 
-  // 穿搭建议
-  const outfit = recommendation.outfit || []
-  if (outfit.length > 0) {
-    lines.push('## 穿搭建议\n')
-    for (const item of outfit.slice(0, 3)) {
+  // 各类别建议(引擎返回的顶层键是中文类别名,动作键是 action_type)
+  const META_KEYS = ['group_id', 'group_name', 'priority', 'score', 'explanation']
+  const categoryTitles = ['穿搭', '妆容', '发型', '配饰', '姿势']
+  for (const cat of categoryTitles) {
+    const items = recommendation[cat] || []
+    if (items.length === 0) continue
+    lines.push(`## ${cat}建议\n`)
+    for (const item of items.slice(0, 3)) {
       lines.push(`### ${item.group_name || '推荐方案'}\n`)
-      if (item.outfit_top) lines.push(`- **上衣**: ${item.outfit_top}`)
-      if (item.outfit_bottom) lines.push(`- **下装**: ${item.outfit_bottom}`)
-      if (item.outfit_color) lines.push(`- **配色**: ${item.outfit_color}`)
-      if (item.outfit_reason) lines.push(`- **理由**: ${item.outfit_reason}`)
-      lines.push('')
-    }
-  }
-
-  // 妆容建议
-  const makeup = recommendation.makeup || []
-  if (makeup.length > 0) {
-    lines.push('## 妆容建议\n')
-    for (const item of makeup.slice(0, 2)) {
-      lines.push(`### ${item.group_name || '妆容方案'}\n`)
-      if (item.makeup_foundation) lines.push(`- **底妆**: ${item.makeup_foundation}`)
-      if (item.makeup_eye) lines.push(`- **眼妆**: ${item.makeup_eye}`)
-      if (item.makeup_lip) lines.push(`- **唇妆**: ${item.makeup_lip}`)
-      if (item.makeup_reason) lines.push(`- **理由**: ${item.makeup_reason}`)
-      lines.push('')
-    }
-  }
-
-  // 发型建议
-  const hairstyle = recommendation.hairstyle || []
-  if (hairstyle.length > 0) {
-    lines.push('## 发型建议\n')
-    for (const item of hairstyle.slice(0, 2)) {
-      lines.push(`### ${item.group_name || '发型方案'}\n`)
-      if (item.hairstyle_style) lines.push(`- **发型**: ${item.hairstyle_style}`)
-      if (item.hairstyle_reason) lines.push(`- **理由**: ${item.hairstyle_reason}`)
-      lines.push('')
-    }
-  }
-
-  // 配饰建议
-  const accessory = recommendation.accessory || []
-  if (accessory.length > 0) {
-    lines.push('## 配饰建议\n')
-    for (const item of accessory.slice(0, 2)) {
-      lines.push(`### ${item.group_name || '配饰方案'}\n`)
-      if (item.accessory_style) lines.push(`- **配饰**: ${item.accessory_style}`)
-      if (item.accessory_reason) lines.push(`- **理由**: ${item.accessory_reason}`)
+      for (const [key, val] of Object.entries(item)) {
+        if (META_KEYS.includes(key) || !val) continue
+        lines.push(`- **${ACTION_LABELS[key] || key}**: ${val}`)
+      }
       lines.push('')
     }
   }
 
   // 算法分析（个人模式）
   const analysis = recommendation.algorithm_analysis
-  if (analysis) {
+  if (analysis?.sections?.length) {
     lines.push('## 深度分析报告\n')
-
-    if (analysis.body_analysis && analysis.body_analysis.advices) {
-      lines.push(`### ${analysis.body_analysis.title || '体型分析'}\n`)
-      for (const advice of analysis.body_analysis.advices) {
-        lines.push(`- ${advice}`)
-      }
-      lines.push('')
+    if (analysis.metrics?.length) {
+      lines.push(`${analysis.metrics.join(' / ')}\n`)
     }
-
-    if (analysis.face_analysis && analysis.face_analysis.advices) {
-      lines.push(`### ${analysis.face_analysis.title || '脸型分析'}\n`)
-      for (const advice of analysis.face_analysis.advices) {
-        lines.push(`- ${advice}`)
-      }
-      lines.push('')
-    }
-
-    if (analysis.optimization && analysis.optimization.advices) {
-      lines.push(`### ${analysis.optimization.title || '视觉优化'}\n`)
-      for (const advice of analysis.optimization.advices) {
+    for (const section of analysis.sections) {
+      lines.push(`### ${section.title}\n`)
+      for (const advice of section.advices) {
         lines.push(`- ${advice}`)
       }
       lines.push('')

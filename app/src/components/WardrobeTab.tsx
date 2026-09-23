@@ -10,6 +10,8 @@ import type {
   CustomerProfile,
   WardrobeItem,
   WardrobeGapResult,
+  WardrobeGap,
+  WardrobeStats,
   ShoppingWishlistItem,
   ClothingItem,
 } from '../types';

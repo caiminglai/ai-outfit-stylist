@@ -13,15 +13,13 @@ const router = express.Router()
 // AI 分析类端点限流：每分钟最多 5 次（消耗 DashScope 额度）
 const aiLimiter = rateLimit({ windowMs: 60000, max: 5, message: '分析请求过于频繁，请稍后再试' })
 
-/** 提交面部分析 */
-router.post('/face', loginRequired, aiLimiter, (req, res) => {
-  try {
-    // TODO: 调用 DashScope API 进行面部分析
-    return sendSuccess(res, { status: 'pending' })
-  } catch (err) {
-    console.error('[分析] 面部分析提交失败:', err)
-    return sendError(res, '分析提交失败', 500)
-  }
+/** 提交面部分析（能力未开放） */
+router.post('/face', loginRequired, aiLimiter, (_req, res) => {
+  return sendError(
+    res,
+    '照片自动识别肤色/脸型尚未开放，请在表单中选择肤色与脸型',
+    501,
+  )
 })
 
 /** 获取面部分析结果 */

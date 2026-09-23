@@ -23,15 +23,16 @@ function getSeasonIcon(season: string): string {
  * 将旧版 API 返回格式（reminders + summary）规范化为新格式
  * 兼容后端未重启时返回旧格式数据的情况
  */
-function normalizeData(raw: Record<string, unknown>): SeasonalReminder {
+function normalizeData(raw: SeasonalReminder | Record<string, unknown>): SeasonalReminder {
+  const src = raw as Record<string, unknown>;
   // 如果已经是新格式（有 wardrobe 字段），直接用
-  if (raw.wardrobe && raw.tips) {
-    return raw as unknown as SeasonalReminder;
+  if (src.wardrobe && src.tips) {
+    return raw as SeasonalReminder;
   }
 
   // 旧格式兼容：从 reminders 数组中提取信息
-  const reminders = (raw.reminders as Record<string, unknown>[]) || [];
-  const summary = (raw.summary as Record<string, number>) || {};
+  const reminders = (src.reminders as Record<string, unknown>[]) || [];
+  const summary = (src.summary as Record<string, number>) || {};
 
   const findReminder = (cabinet: string) =>
     reminders.find((r) => r.cabinet === cabinet);
@@ -58,7 +59,7 @@ function normalizeData(raw: Record<string, unknown>): SeasonalReminder {
     },
     cosmetic: {
       total: cosmeticTotal,
-      tip: cosmeticReminder?.message || '化妆品状态良好',
+      tip: (cosmeticReminder?.message as string) || '化妆品状态良好',
     },
     accessory: {
       total: accessoryTotal,

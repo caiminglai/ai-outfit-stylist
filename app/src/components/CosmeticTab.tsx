@@ -10,6 +10,8 @@ import type {
   CustomerProfile,
   CosmeticItem,
   CosmeticGapResult,
+  CosmeticGap,
+  CosmeticStats,
   ShoppingWishlistItem,
 } from '../types';
 import {

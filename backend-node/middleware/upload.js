@@ -40,9 +40,10 @@ function validateImage(file) {
   }
 
   let isValid = false
-  for (const { magic, ext: magicExt, extra } of IMAGE_MAGIC) {
-    if (header.startsWith(magic)) {
-      if (extra && !header.includes(extra)) continue
+  for (const { magic, extra } of IMAGE_MAGIC) {
+    // Node 24 移除了 Buffer.prototype.startsWith，这里用 equals 比对前缀
+    if (magic.equals(header.subarray(0, magic.length))) {
+      if (extra && header.indexOf(extra) === -1) continue
       isValid = true
       break
     }

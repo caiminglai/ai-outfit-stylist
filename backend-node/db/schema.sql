@@ -1,6 +1,6 @@
 -- ============================================================
 -- Style AI 数据库 Schema（从 Python SQLAlchemy models.py 翻译）
--- 共 20 张表，与 Python 版完全兼容
+-- 表数量以本文件为准（新增表请同步 routes/admin.js 的 TABLE_NAMES 中文名映射）
 -- ============================================================
 
 -- 开启 WAL 模式提升并发读写性能
@@ -130,6 +130,7 @@ CREATE TABLE IF NOT EXISTS rule_groups (
   priority INTEGER DEFAULT 0,
   enabled INTEGER DEFAULT 1,
   hit_count INTEGER DEFAULT 0,
+  last_hit_at TEXT,
   created_at TEXT DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS ix_rule_groups_mode_enabled_category
@@ -398,3 +399,58 @@ CREATE INDEX IF NOT EXISTS ix_face_features_user_id ON face_features(user_id);
 CREATE INDEX IF NOT EXISTS ix_face_features_photo_id ON face_features(photo_id);
 CREATE INDEX IF NOT EXISTS ix_recommendations_user_id ON recommendations(user_id);
 CREATE INDEX IF NOT EXISTS ix_tryon_results_user_id ON tryon_results(user_id);
+
+-- ============================================================
+-- 收款凭证（用户上传付款截图 -> 后台人工审核放行）
+-- ============================================================
+CREATE TABLE IF NOT EXISTS deposits (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL REFERENCES users(id),
+  channel TEXT NOT NULL DEFAULT 'wechat',
+  amount REAL NOT NULL DEFAULT 0,
+  proof_url TEXT DEFAULT '',
+  status TEXT NOT NULL DEFAULT 'pending',
+  admin_note TEXT DEFAULT '',
+  created_at TEXT DEFAULT (datetime('now')),
+  approved_at TEXT
+);
+CREATE INDEX IF NOT EXISTS ix_deposits_status_created ON deposits(status, created_at);
+CREATE INDEX IF NOT EXISTS ix_deposits_user_id ON deposits(user_id);
+
+-- ============================================================
+-- 创作者作品（提交 -> 审核 -> 广场曝光 -> 分享链接带流量）
+-- ============================================================
+CREATE TABLE IF NOT EXISTS creator_works (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL REFERENCES users(id),
+  share_code TEXT NOT NULL UNIQUE,
+  type TEXT NOT NULL,
+  title TEXT NOT NULL,
+  summary TEXT DEFAULT '',
+  cover_url TEXT DEFAULT '',
+  payload TEXT DEFAULT '{}',
+  status TEXT NOT NULL DEFAULT 'pending',
+  admin_note TEXT DEFAULT '',
+  featured INTEGER DEFAULT 0,
+  heat INTEGER DEFAULT 0,
+  share_views INTEGER DEFAULT 0,
+  created_at TEXT DEFAULT (datetime('now')),
+  reviewed_at TEXT
+);
+CREATE INDEX IF NOT EXISTS ix_creator_works_status_featured_heat ON creator_works(status, featured, heat);
+CREATE INDEX IF NOT EXISTS ix_creator_works_user_id ON creator_works(user_id);
+CREATE INDEX IF NOT EXISTS ix_creator_works_share_code ON creator_works(share_code);
+
+-- ============================================================
+-- 正式账号（手机号 + 密码）
+-- 身份仍然是 users.session_id，这张表只负责"把这个手机号和那条身份对上"，
+-- 因此不动 users 老表、也不用给老表补列。
+-- ============================================================
+CREATE TABLE IF NOT EXISTS user_accounts (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  phone TEXT NOT NULL UNIQUE,
+  password_hash TEXT NOT NULL,
+  user_id INTEGER NOT NULL UNIQUE REFERENCES users(id),
+  created_at TEXT DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS ix_user_accounts_phone ON user_accounts(phone);

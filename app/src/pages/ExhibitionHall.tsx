@@ -4,12 +4,17 @@ import {
   clearExpiredSession,
   createCustomerSession,
   deleteCustomerSession,
+  getAccount,
   getCustomerRecommendation,
   getEngineRecommendation,
   getSessionId,
+  loginAccount,
+  logoutAccount,
+  registerAccount,
   setGlobalErrorHandler,
   syncCustomerToCloud,
 } from '../api';
+import type { AccountInfo } from '../api';
 import { useResponsive } from '../hooks/useResponsive';
 import type { CustomerProfile, EngineRecommendation } from '../types';
 
@@ -252,6 +257,232 @@ function ModelViewer({ iframeRef, onLoad }: { iframeRef: React.RefObject<HTMLIFr
   );
 }
 
+// ============ 付款 / 创作者入驻卡片(仅模式选择页,不浮在3D展示层上)============
+function ServiceLinkCards() {
+  const cards = [
+    {
+      href: '/pay.html', icon: '💳', title: '付款通道', sub: '收款码 · 凭证提交',
+      desc: '已选好服务?在这里付款并把付款凭证提交给我们核对.',
+    },
+    {
+      href: '/creator.html', icon: '🎨', title: '创作者分成及推广模式', sub: '提交方案 · 平台曝光 · 成交分成',
+      desc: '上传你的搭配、化妆或推荐规则方案,审核通过后按市场推广度获得曝光,成交后参与分成.',
+    },
+  ];
+  return (
+    <div className="mt-4 space-y-3">
+      {cards.map(c => (
+        <a
+          key={c.href} href={c.href}
+          className="block p-4"
+          style={{
+            background: 'rgba(255,255,255,0.03)',
+            border: '1px solid var(--line)',
+            borderRadius: '12px',
+          }}
+        >
+          <div className="flex items-center gap-3 mb-2">
+            <span className="text-2xl">{c.icon}</span>
+            <div>
+              <h3 className="text-sm font-semibold" style={{ color: 'var(--text)' }}>{c.title}</h3>
+              <p className="text-xs" style={{ color: '#b8c7d4' }}>{c.sub}</p>
+            </div>
+          </div>
+          <p className="text-xs" style={{ color: '#a8b8c4', lineHeight: '1.6' }}>{c.desc}</p>
+        </a>
+      ))}
+
+      <AccountEntry />
+    </div>
+  );
+}
+
+function maskPhone(phone: string): string {
+  return phone.length === 11 ? `${phone.slice(0, 3)}****${phone.slice(7)}` : phone;
+}
+
+// ============ 我的账号:登录 / 注册(覆盖在 3D 展示上,不跳页)============
+function AccountEntry() {
+  const [open, setOpen] = useState(false);
+  const [tab, setTab] = useState<'login' | 'register'>('login');
+  const [phone, setPhone] = useState('');
+  const [password, setPassword] = useState('');
+  const [nickname, setNickname] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const [account, setAccount] = useState<AccountInfo | null>(() => getAccount());
+
+  const panelStyle: React.CSSProperties = {
+    background: 'rgba(255,255,255,0.03)',
+    border: '1px solid var(--line)',
+    borderRadius: '12px',
+  };
+
+  const submit = async () => {
+    if (busy) return;
+    setBusy(true);
+    setError('');
+    try {
+      const next =
+        tab === 'login'
+          ? await loginAccount(phone.trim(), password)
+          : await registerAccount(phone.trim(), password, nickname.trim() || undefined);
+      setAccount(next);
+      setOpen(false);
+      setPassword('');
+      toast.success(tab === 'login' ? '已登录' : '注册成功,已为你保留这份身份');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '操作失败,请重试');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <>
+      <button
+        onClick={() => { setError(''); setOpen(true); }}
+        className="block p-4 w-full text-left"
+        style={panelStyle}
+      >
+        <div className="flex items-center gap-3 mb-2">
+          <span className="text-2xl">👤</span>
+          <div>
+            <h3 className="text-sm font-semibold" style={{ color: 'var(--text)' }}>
+              {account ? `已登录:${maskPhone(account.phone)}` : '我的账号'}
+            </h3>
+            <p className="text-xs" style={{ color: '#b8c7d4' }}>
+              {account ? '换浏览器或换设备后,登录同一个手机号就能找回' : '登录 · 注册'}
+            </p>
+          </div>
+        </div>
+        <p className="text-xs" style={{ color: '#a8b8c4', lineHeight: '1.6' }}>
+          {account
+            ? '你提交的作品、衣橱和推荐记录都挂在这个手机号上,不会再随浏览器变化.'
+            : '不登录也能逛和试用;注册后方案与作品会一直跟着这个手机号,创作者分成也发到这儿.'}
+        </p>
+      </button>
+
+      {open && (
+        <div
+          onClick={() => setOpen(false)}
+          className="fixed inset-0 flex items-end sm:items-center sm:justify-center"
+          style={{ zIndex: 100, background: 'rgba(0,0,0,0.65)' }}
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            className="w-full sm:max-w-sm p-5"
+            style={{
+              background: '#141b26',
+              border: '1px solid var(--line)',
+              borderRadius: '14px 14px 0 0',
+            }}
+          >
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-base font-semibold" style={{ color: 'var(--text)' }}>我的账号</h3>
+              <button
+                onClick={() => setOpen(false)}
+                className="text-xs px-2 py-1"
+                style={{ color: 'var(--muted)', background: 'transparent', border: 'none', cursor: 'pointer' }}
+              >
+                关闭
+              </button>
+            </div>
+
+            {account ? (
+              <div className="space-y-3">
+                <p className="text-sm" style={{ color: 'var(--text)' }}>
+                  当前:{maskPhone(account.phone)}
+                  {account.nickname ? ` · ${account.nickname}` : ''}
+                </p>
+                <p className="text-xs" style={{ color: '#a8b8c4', lineHeight: '1.6' }}>
+                  退出后这台设备回到游客身份,之前的方案与作品仍在账号里,重新登录即可继续.
+                </p>
+                <button
+                  onClick={() => { logoutAccount(); setAccount(null); setOpen(false); toast('已退出登录'); }}
+                  className="w-full py-2 text-sm"
+                  style={{ ...panelStyle, color: 'var(--text)', cursor: 'pointer' }}
+                >
+                  退出登录
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <div className="flex" style={panelStyle}>
+                  {(['login', 'register'] as const).map(key => (
+                    <button
+                      key={key}
+                      onClick={() => { setTab(key); setError(''); }}
+                      className="flex-1 py-2 text-sm"
+                      style={{
+                        background: tab === key ? 'rgba(255,255,255,0.06)' : 'transparent',
+                        border: 'none',
+                        borderRadius: '12px',
+                        color: tab === key ? 'var(--text)' : 'var(--muted)',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      {key === 'login' ? '登录' : '注册'}
+                    </button>
+                  ))}
+                </div>
+
+                <input
+                  className="form-input w-full"
+                  type="tel"
+                  inputMode="numeric"
+                  maxLength={11}
+                  placeholder="手机号"
+                  value={phone}
+                  onChange={e => setPhone(e.target.value.replace(/\D/g, '').slice(0, 11))}
+                />
+                <input
+                  className="form-input w-full"
+                  type="password"
+                  maxLength={64}
+                  placeholder={tab === 'login' ? '密码' : '设一个密码,至少 6 位'}
+                  value={password}
+                  onChange={e => setPassword(e.target.value)}
+                />
+                {tab === 'register' && (
+                  <input
+                    className="form-input w-full"
+                    maxLength={40}
+                    placeholder="昵称(可选,展示在创作者广场)"
+                    value={nickname}
+                    onChange={e => setNickname(e.target.value)}
+                  />
+                )}
+
+                <button
+                  onClick={submit}
+                  disabled={busy || !phone || !password}
+                  className="w-full py-2.5 text-sm font-semibold"
+                  style={{
+                    background: 'var(--accent)',
+                    border: 'none',
+                    borderRadius: '12px',
+                    color: '#0d1117',
+                    cursor: busy || !phone || !password ? 'not-allowed' : 'pointer',
+                    opacity: busy || !phone || !password ? 0.5 : 1,
+                  }}
+                >
+                  {busy ? '处理中…' : tab === 'login' ? '登录' : '注册并登录'}
+                </button>
+
+                {error && <p className="text-xs" style={{ color: '#f87171' }}>{error}</p>}
+                <p className="text-xs" style={{ color: 'var(--muted)', lineHeight: '1.6' }}>
+                  手机号只用来找回你自己的数据和联系你付款,不会展示给别人.
+                </p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
 // ============ 服务面板 ============
 interface ServicePanelProps {
   stage: Stage;
@@ -371,6 +602,8 @@ function ServicePanel(props: ServicePanelProps) {
             </p>
           </button>
         </div>
+
+        <ServiceLinkCards />
 
         {/* 规则说明入口:让用户在填表前先了解规则引擎,理解"填什么能匹配到什么" */}
         <div className="mt-4 pt-3 text-center" style={{ borderTop: '1px dashed var(--line)' }}>

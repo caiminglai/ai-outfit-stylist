@@ -24,12 +24,17 @@ export interface CustomerProfile {
   height?: number;
   height_range?: '150-160' | '160-170' | '170-180' | '180+';
   weight?: number;
+  bust?: number;
+  waist?: number;
+  hip?: number;
 
   // 门店模式字段
   skin_tone?: '暖皮' | '冷皮' | '自然';
   face_shape?: '圆脸' | '方脸' | '心形脸' | '椭圆脸' | '长脸';
   body_type?: '标准' | '偏瘦' | '偏胖' | '梨形' | '苹果形';
   scenario?: '通勤' | '约会' | '面试' | '休闲' | '聚会';
+  /** 拍照场景(选填):只影响"姿势"类推荐,不选则沿用主要场合 */
+  photo_scene?: '日常街拍' | '职业照' | '旅行打卡' | '探店' | '户外写真' | '闺蜜合照' | '自拍';
   region?: '北方' | '南方';
 
   // 个人模式扩展字段(50+)
@@ -132,11 +137,13 @@ export interface EngineRecommendation {
   '妆容': RuleRecommendationItem[];
   '发型': RuleRecommendationItem[];
   '配饰': RuleRecommendationItem[];
+  '姿势': RuleRecommendationItem[];
   inventory?: {
     '穿搭'?: InventoryProduct[];
     '妆容'?: InventoryProduct[];
     '发型'?: InventoryProduct[];
     '配饰'?: InventoryProduct[];
+    '姿势'?: InventoryProduct[];
   };
   // 个人模式扩展
   algorithm_analysis?: AlgorithmAnalysis;
@@ -146,11 +153,10 @@ export interface EngineRecommendation {
 
 /** 算法分析结果 */
 export interface AlgorithmAnalysis {
-  bmi?: { value: number; level: string; advice: string; };
-  body_shape?: { type: string; wh_ratio: number; description: string; };
-  color_match?: { skin_tone: string; suitable_colors: string[]; avoid_colors: string[]; };
-  face_shape_guide?: { shape: string; suitable_hairstyles: string[]; avoid_hairstyles: string[]; };
-  posture_advice?: { issues: string[]; outfit_advice: string[]; };
+  /** 分析板块:体型/脸型/肤色/体态,每个板块是一句话建议列表 */
+  sections: { title: string; advices: string[] }[];
+  /** 数字摘要,如 "BMI 21.5(正常)"、"体型 沙漏型" */
+  metrics: string[];
 }
 
 /** 库存商品 */
@@ -409,6 +415,8 @@ export interface CrossCabinetRecommendation {
 export interface CabinetMatchedItem {
   name: string;
   score?: number;
+  /** 得分依据,如 ['当季','场合匹配'] */
+  reasons?: string[];
 }
 
 export interface CabinetMatchResult {
