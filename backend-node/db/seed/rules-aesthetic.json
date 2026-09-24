@@ -1,0 +1,689 @@
+{
+  "_说明": "第二批美学规则(环5)。这个文件不会被 seed.js 全删重建,而是由 db/applyRuleSeeds.js 在每次启动时按 key 只补库里没有的规则,已存在的一律不动。key 一旦上线就不要改,改了会变成重复规则。",
+  "rules": [
+    {
+      "key": "color-spring-outfit-f",
+      "name": "色彩-春型-穿搭-女",
+      "mode": "all",
+      "category": "穿搭",
+      "gender": "女",
+      "scenario": null,
+      "priority": 22,
+      "enabled": 1,
+      "description": "四季色彩:春型=暖调+浅亮。档位由肤色冷暖×深浅两轴算出,表单未收艳浊轴,所以只做到四季、不做十二型。",
+      "conditions": [{ "field": "color_season", "operator": "eq", "value": "春型", "weight": 3 }],
+      "actions": [
+        { "type": "top_style", "content": "珊瑚粉、蜜桃色、鹅黄色针织衫或衬衫" },
+        { "type": "bottom_style", "content": "奶油白直筒裤、奶杏色半裙" },
+        { "type": "color_combo", "content": "主色奶油白 + 辅色暖杏 + 珊瑚点缀,按 60-30-10 分配" },
+        { "type": "avoid", "content": "整套冷黑、灰紫、玫红等冷调高饱和" },
+        { "type": "reason", "content": "春型是暖调浅亮型,明亮暖色与肤色的黄调同向,越清透越提气色" }
+      ]
+    },
+    {
+      "key": "color-spring-outfit-m",
+      "name": "色彩-春型-穿搭-男",
+      "mode": "all",
+      "category": "穿搭",
+      "gender": "男",
+      "scenario": null,
+      "priority": 22,
+      "enabled": 1,
+      "description": "四季色彩:春型=暖调+浅亮。男士用暖调浅色替换冷灰黑,脸色立刻亮一档。",
+      "conditions": [{ "field": "color_season", "operator": "eq", "value": "春型", "weight": 3 }],
+      "actions": [
+        { "type": "top_style", "content": "米白、浅驼、暖蓝绿的polo或牛津衬衫" },
+        { "type": "bottom_style", "content": "卡其裤、浅灰西裤" },
+        { "type": "outerwear", "content": "驼色或暖灰色休闲西装" },
+        { "type": "avoid", "content": "大面积纯黑、冷炭灰贴身打底" },
+        { "type": "reason", "content": "春型穿冷调深色会把脸压暗,暖调浅色最省力" }
+      ]
+    },
+    {
+      "key": "color-summer-outfit-f",
+      "name": "色彩-夏型-穿搭-女",
+      "mode": "all",
+      "category": "穿搭",
+      "gender": "女",
+      "scenario": null,
+      "priority": 22,
+      "enabled": 1,
+      "description": "四季色彩:夏型=冷调+浅柔。中间饱和的冷色最衬粉调皮肤。",
+      "conditions": [{ "field": "color_season", "operator": "eq", "value": "夏型", "weight": 3 }],
+      "actions": [
+        { "type": "top_style", "content": "雾霾蓝、灰粉、薰衣草紫衬衫或针织" },
+        { "type": "bottom_style", "content": "浅灰、雾蓝直筒裤或A字裙" },
+        { "type": "color_combo", "content": "主色柔白 + 辅色冷灰蓝 + 豆沙点缀,按 60-30-10 分配" },
+        { "type": "avoid", "content": "橘色、土黄、亮金等高饱和暖色" },
+        { "type": "reason", "content": "夏型戴暖橘容易显脏发闷,冷调柔色才衬得住粉调肤色" }
+      ]
+    },
+    {
+      "key": "color-summer-outfit-m",
+      "name": "色彩-夏型-穿搭-男",
+      "mode": "all",
+      "category": "穿搭",
+      "gender": "男",
+      "scenario": null,
+      "priority": 22,
+      "enabled": 1,
+      "description": "四季色彩:夏型=冷调+浅柔。冷调浅衫配灰蓝裤最干净。",
+      "conditions": [{ "field": "color_season", "operator": "eq", "value": "夏型", "weight": 3 }],
+      "actions": [
+        { "type": "top_style", "content": "白色、浅蓝衬衫,冷灰针织" },
+        { "type": "bottom_style", "content": "中灰、雾蓝西裤" },
+        { "type": "outerwear", "content": "冷灰蓝或炭黑大衣,避免驼色" },
+        { "type": "avoid", "content": "卡其、橘、姜黄等暖大地色整套" },
+        { "type": "reason", "content": "夏型的肤色调子偏冷,冷色对比越干净越显白" }
+      ]
+    },
+    {
+      "key": "color-autumn-outfit-f",
+      "name": "色彩-秋型-穿搭-女",
+      "mode": "all",
+      "category": "穿搭",
+      "gender": "女",
+      "scenario": null,
+      "priority": 22,
+      "enabled": 1,
+      "description": "四季色彩:秋型=暖调+深浓。大地色系是秋型的主场。",
+      "conditions": [{ "field": "color_season", "operator": "eq", "value": "秋型", "weight": 3 }],
+      "actions": [
+        { "type": "top_style", "content": "砖红、焦糖、姜黄色针织衫或衬衫" },
+        { "type": "bottom_style", "content": "咖啡棕直筒裤、墨绿长裙" },
+        { "type": "color_combo", "content": "主色驼 + 辅色墨绿 + 砖红点缀,按 60-30-10 分配" },
+        { "type": "avoid", "content": "纯白、宝蓝、玫红等冷调高饱和" },
+        { "type": "reason", "content": "秋型是暖调深浓型,浓郁暖色与肤色呼应,冷亮色反而显脸色发灰" }
+      ]
+    },
+    {
+      "key": "color-autumn-outfit-m",
+      "name": "色彩-秋型-穿搭-男",
+      "mode": "all",
+      "category": "穿搭",
+      "gender": "男",
+      "scenario": null,
+      "priority": 22,
+      "enabled": 1,
+      "description": "四季色彩:秋型=暖调+深浓。深暖色让秋型男士显得稳而有气色。",
+      "conditions": [{ "field": "color_season", "operator": "eq", "value": "秋型", "weight": 3 }],
+      "actions": [
+        { "type": "top_style", "content": "橄榄绿、酒红、咖啡棕的针织与衬衫" },
+        { "type": "bottom_style", "content": "深卡其、棕色法兰绒裤" },
+        { "type": "outerwear", "content": "驼色、军绿外套" },
+        { "type": "avoid", "content": "冷白衬衫配炭黑西装的强冷对比" },
+        { "type": "reason", "content": "秋型戴暖深色的层次感最好,冷调亮色会显皮肤发黄" }
+      ]
+    },
+    {
+      "key": "color-winter-outfit-f",
+      "name": "色彩-冬型-穿搭-女",
+      "mode": "all",
+      "category": "穿搭",
+      "gender": "女",
+      "scenario": null,
+      "priority": 22,
+      "enabled": 1,
+      "description": "四季色彩:冬型=冷调+深艳。冬型靠对比度出彩,浊色会显灰。",
+      "conditions": [{ "field": "color_season", "operator": "eq", "value": "冬型", "weight": 3 }],
+      "actions": [
+        { "type": "top_style", "content": "纯白衬衫、正红针织" },
+        { "type": "bottom_style", "content": "黑色高腰直筒裤或铅笔裙" },
+        { "type": "color_combo", "content": "主色黑或白 + 一个高饱和冷色 + 小面积亮色点缀,按 60-30-10 分配" },
+        { "type": "avoid", "content": "莫兰迪浊色、奶橘、整套大地色" },
+        { "type": "reason", "content": "冬型的优势是黑白分明,柔和浊色会把这份对比磨掉、显得没精神" }
+      ]
+    },
+    {
+      "key": "color-winter-outfit-m",
+      "name": "色彩-冬型-穿搭-男",
+      "mode": "all",
+      "category": "穿搭",
+      "gender": "男",
+      "scenario": null,
+      "priority": 22,
+      "enabled": 1,
+      "description": "四季色彩:冬型=冷调+深艳。冷调深色对比越利落越出彩。",
+      "conditions": [{ "field": "color_season", "operator": "eq", "value": "冬型", "weight": 3 }],
+      "actions": [
+        { "type": "top_style", "content": "本白衬衫、纯黑或深藏青针织" },
+        { "type": "bottom_style", "content": "炭黑、藏青西裤" },
+        { "type": "outerwear", "content": "纯黑或炭灰大衣,配冷调围巾提亮" },
+        { "type": "avoid", "content": "驼色、棕橙等暖浊色外套" },
+        { "type": "reason", "content": "冬型压得住强对比,冷调正色最能突出这份清晰感" }
+      ]
+    },
+    {
+      "key": "color-spring-makeup-f",
+      "name": "色彩-春型-妆容-女",
+      "mode": "all",
+      "category": "妆容",
+      "gender": "女",
+      "scenario": null,
+      "priority": 22,
+      "enabled": 1,
+      "description": "四季色彩:春型要光泽感,怕哑光发闷。",
+      "conditions": [{ "field": "color_season", "operator": "eq", "value": "春型", "weight": 3 }],
+      "actions": [
+        { "type": "妆容风格", "content": "清透有光泽的淡妆,腮红打在苹果肌偏上位置" },
+        { "type": "lip_color", "content": "珊瑚粉橘、蜜桃色" },
+        { "type": "eye_shadow", "content": "米金打底 + 金棕加深眼尾" },
+        { "type": "blush", "content": "杏色、蜜桃色" },
+        { "type": "reason", "content": "春型肤色偏暖偏亮,暖调亮泽的妆色与肤色同向,哑光厚底会显得发闷" }
+      ]
+    },
+    {
+      "key": "color-summer-makeup-f",
+      "name": "色彩-夏型-妆容-女",
+      "mode": "all",
+      "category": "妆容",
+      "gender": "女",
+      "scenario": null,
+      "priority": 22,
+      "enabled": 1,
+      "description": "四季色彩:夏型适合柔雾冷调,怕暖橘。",
+      "conditions": [{ "field": "color_season", "operator": "eq", "value": "夏型", "weight": 3 }],
+      "actions": [
+        { "type": "妆容风格", "content": "柔雾哑光妆面,颜色轻、边界软" },
+        { "type": "lip_color", "content": "玫瑰粉、豆沙、浅梅子" },
+        { "type": "eye_shadow", "content": "冷灰棕、藕荷紫" },
+        { "type": "blush", "content": "冷粉色,少量多次" },
+        { "type": "reason", "content": "夏型是冷调浅柔型,暖橘和亮金上脸容易脏,冷粉调最稳" }
+      ]
+    },
+    {
+      "key": "color-autumn-makeup-f",
+      "name": "色彩-秋型-妆容-女",
+      "mode": "all",
+      "category": "妆容",
+      "gender": "女",
+      "scenario": null,
+      "priority": 22,
+      "enabled": 1,
+      "description": "四季色彩:秋型撑得住浓郁暖调,浅色反而没精神。",
+      "conditions": [{ "field": "color_season", "operator": "eq", "value": "秋型", "weight": 3 }],
+      "actions": [
+        { "type": "妆容风格", "content": "暖调浓郁妆面,唇色可以画实一点" },
+        { "type": "lip_color", "content": "砖红、肉桂、番茄红" },
+        { "type": "eye_shadow", "content": "金铜、橄榄绿" },
+        { "type": "blush", "content": "橘棕、砖红,少量晕开" },
+        { "type": "reason", "content": "秋型是暖调深浓型,中深暖色才拉得出层次,浅粉浅橘会显淡" }
+      ]
+    },
+    {
+      "key": "color-winter-makeup-f",
+      "name": "色彩-冬型-妆容-女",
+      "mode": "all",
+      "category": "妆容",
+      "gender": "女",
+      "scenario": null,
+      "priority": 22,
+      "enabled": 1,
+      "description": "四季色彩:冬型要对比,一个重点就够。",
+      "conditions": [{ "field": "color_season", "operator": "eq", "value": "冬型", "weight": 3 }],
+      "actions": [
+        { "type": "妆容风格", "content": "干净底妆 + 唇或眼二选一做重点,不要两边同时重" },
+        { "type": "lip_color", "content": "正红、酒红、梅子" },
+        { "type": "eye_shadow", "content": "深棕、冷灰黑,可做小烟熏" },
+        { "type": "blush", "content": "玫红少量,重在修容立体" },
+        { "type": "reason", "content": "冬型压得住高饱和冷色,弱对比妆面反而显疲倦发灰" }
+      ]
+    },
+    {
+      "key": "color-spring-hair",
+      "name": "色彩-春型-发型发色",
+      "mode": "all",
+      "category": "发型",
+      "gender": null,
+      "scenario": null,
+      "priority": 22,
+      "enabled": 1,
+      "description": "四季色彩:春型的发色要带暖金调,不能压太深。女:轻锁骨发或微卷保持蓬松;男:短发留一点暖棕层次。",
+      "conditions": [{ "field": "color_season", "operator": "eq", "value": "春型", "weight": 3 }],
+      "actions": [
+        { "type": "hair_color", "content": "暖金棕、焦糖棕、蜂蜜色" },
+        { "type": "发型", "content": "女:带空气感的锁骨发或微卷;男:清爽短发,顶部留一点长度做层次" },
+        { "type": "reason", "content": "浅亮暖调发色延续春型面部的明亮感,染太深会把整个人压沉" }
+      ]
+    },
+    {
+      "key": "color-summer-hair",
+      "name": "色彩-夏型-发型发色",
+      "mode": "all",
+      "category": "发型",
+      "gender": null,
+      "scenario": null,
+      "priority": 22,
+      "enabled": 1,
+      "description": "四季色彩:夏型要带灰调的冷色,避免橙红。女:直发或软卷都行;男:冷棕或自然黑短碎发。",
+      "conditions": [{ "field": "color_season", "operator": "eq", "value": "夏型", "weight": 3 }],
+      "actions": [
+        { "type": "hair_color", "content": "冷棕、亚麻灰棕、自然黑" },
+        { "type": "发型", "content": "女:自然直发或软卷,中分偏柔;男:利落短碎,避免明显橙棕" },
+        { "type": "reason", "content": "带灰的冷发色才压得住夏型的粉调皮肤,橙棕调会让脸色泛红" }
+      ]
+    },
+    {
+      "key": "color-autumn-hair",
+      "name": "色彩-秋型-发型发色",
+      "mode": "all",
+      "category": "发型",
+      "gender": null,
+      "scenario": null,
+      "priority": 22,
+      "enabled": 1,
+      "description": "四季色彩:秋型要红棕调,避免漂浅。女:低层次直发或大卷;男:暖黑茶或深栗棕。",
+      "conditions": [{ "field": "color_season", "operator": "eq", "value": "秋型", "weight": 3 }],
+      "actions": [
+        { "type": "hair_color", "content": "铜棕、栗棕、暖黑茶" },
+        { "type": "发型", "content": "女:低层次直发或大卷,保持厚重量感;男:短寸或侧分,发色偏深暖" },
+        { "type": "reason", "content": "秋型是暖调深浓型,红棕发色与肤色的浓暖一致,漂太浅会显气色差" }
+      ]
+    },
+    {
+      "key": "color-winter-hair",
+      "name": "色彩-冬型-发型发色",
+      "mode": "all",
+      "category": "发型",
+      "gender": null,
+      "scenario": null,
+      "priority": 22,
+      "enabled": 1,
+      "description": "四季色彩:冬型吃得住乌黑冷色,怕发黄。女:利落直发或整齐低马尾;男:自然黑短发。",
+      "conditions": [{ "field": "color_season", "operator": "eq", "value": "冬型", "weight": 3 }],
+      "actions": [
+        { "type": "hair_color", "content": "自然黑、冷黑、深紫黑" },
+        { "type": "发型", "content": "女:顺直长发或整齐低马尾,齐刘海也能撑住;男:乌黑短发,边缘修干净" },
+        { "type": "reason", "content": "冬型的优势是冷调高对比,发色发黄变浅会把这份对比削弱" }
+      ]
+    },
+    {
+      "key": "color-spring-accessory",
+      "name": "色彩-春型-配饰",
+      "mode": "all",
+      "category": "配饰",
+      "gender": null,
+      "scenario": null,
+      "priority": 22,
+      "enabled": 1,
+      "description": "四季色彩:春型戴暖亮金属,冷银会显脸黄。",
+      "conditions": [{ "field": "color_season", "operator": "eq", "value": "春型", "weight": 3 }],
+      "actions": [
+        { "type": "metal_color", "content": "金色、玫瑰金" },
+        { "type": "earring_type", "content": "女:圆润小巧的金色耳饰;男:金色系表壳或袖扣" },
+        { "type": "necklace_type", "content": "细金链、奶油调珍珠" },
+        { "type": "reason", "content": "暖调金属与春型的浅暖肤色同向,冷银会让脸色发青" }
+      ]
+    },
+    {
+      "key": "color-summer-accessory",
+      "name": "色彩-夏型-配饰",
+      "mode": "all",
+      "category": "配饰",
+      "gender": null,
+      "scenario": null,
+      "priority": 22,
+      "enabled": 1,
+      "description": "四季色彩:夏型戴冷白金属,亮金显土。",
+      "conditions": [{ "field": "color_season", "operator": "eq", "value": "夏型", "weight": 3 }],
+      "actions": [
+        { "type": "metal_color", "content": "银色、白金、钢色" },
+        { "type": "earring_type", "content": "女:小巧银饰或冷白珍珠;男:钢带手表" },
+        { "type": "necklace_type", "content": "银链,可做细链叠戴" },
+        { "type": "reason", "content": "冷调金属衬夏型的粉调肤色,金色容易显皮肤泛黄" }
+      ]
+    },
+    {
+      "key": "color-autumn-accessory",
+      "name": "色彩-秋型-配饰",
+      "mode": "all",
+      "category": "配饰",
+      "gender": null,
+      "scenario": null,
+      "priority": 22,
+      "enabled": 1,
+      "description": "四季色彩:秋型戴哑光暖金属与天然材质。",
+      "conditions": [{ "field": "color_season", "operator": "eq", "value": "秋型", "weight": 3 }],
+      "actions": [
+        { "type": "metal_color", "content": "金色、古铜、哑光黄铜" },
+        { "type": "earring_type", "content": "女:琥珀、木质、哑光金耳饰;男:古铜色表壳或皮带扣" },
+        { "type": "necklace_type", "content": "粗金链、层叠串珠" },
+        { "type": "reason", "content": "秋型的暖是浓暖,亮银太冷、亮金太薄,哑光暖金属最贴" }
+      ]
+    },
+    {
+      "key": "color-winter-accessory",
+      "name": "色彩-冬型-配饰",
+      "mode": "all",
+      "category": "配饰",
+      "gender": null,
+      "scenario": null,
+      "priority": 22,
+      "enabled": 1,
+      "description": "四季色彩:冬型要冷亮,靠对比加分。",
+      "conditions": [{ "field": "color_season", "operator": "eq", "value": "冬型", "weight": 3 }],
+      "actions": [
+        { "type": "metal_color", "content": "银色、铂金" },
+        { "type": "earring_type", "content": "女:几何感亮银或水钻;男:银白金属表壳、简约袖扣" },
+        { "type": "necklace_type", "content": "银链、黑白对比材质" },
+        { "type": "reason", "content": "冬型本身对比强,冷亮金属会放大这份利落,暖铜反而拖脏" }
+      ]
+    },
+    {
+      "key": "metal-warm-skin",
+      "name": "金属色-暖皮",
+      "mode": "all",
+      "category": "配饰",
+      "gender": null,
+      "scenario": null,
+      "priority": 20,
+      "enabled": 1,
+      "description": "冷暖皮×金属色:只选了冷暖没选深浅时,这条仍然生效,是四季规则的兜底。",
+      "conditions": [{ "field": "skin_tone", "operator": "eq", "value": "暖皮", "weight": 3 }],
+      "actions": [
+        { "type": "metal_color", "content": "金色、玫瑰金、铜色" },
+        { "type": "reason", "content": "暖调金属与黄调皮肤同向,冷银会把脸显青" }
+      ]
+    },
+    {
+      "key": "metal-cool-skin",
+      "name": "金属色-冷皮",
+      "mode": "all",
+      "category": "配饰",
+      "gender": null,
+      "scenario": null,
+      "priority": 20,
+      "enabled": 1,
+      "description": "冷暖皮×金属色:只选了冷暖没选深浅时的兜底。",
+      "conditions": [{ "field": "skin_tone", "operator": "eq", "value": "冷皮", "weight": 3 }],
+      "actions": [
+        { "type": "metal_color", "content": "银色、白金、钢色" },
+        { "type": "reason", "content": "冷调金属衬粉白皮,金色容易显土黄" }
+      ]
+    },
+    {
+      "key": "metal-neutral-skin",
+      "name": "金属色-中性皮",
+      "mode": "all",
+      "category": "配饰",
+      "gender": null,
+      "scenario": null,
+      "priority": 20,
+      "enabled": 1,
+      "description": "冷暖皮×金属色:中性肤色两边都不冲突。",
+      "conditions": [{ "field": "skin_tone", "operator": "eq", "value": "自然", "weight": 3 }],
+      "actions": [
+        { "type": "metal_color", "content": "金银皆可,玫瑰金最稳;或直接跟衣服主色同调" },
+        { "type": "reason", "content": "中性肤色容错高,选金属只看整套衣服是冷是暖" }
+      ]
+    },
+    {
+      "key": "proportion-leg-short",
+      "name": "比例-腿身比偏短",
+      "mode": "all",
+      "category": "穿搭",
+      "gender": null,
+      "scenario": null,
+      "priority": 18,
+      "enabled": 1,
+      "description": "视觉比例:腿身比按腿长/身高算,低于 47% 判偏短。改比例靠高腰线与同色延伸,不需要减重。",
+      "conditions": [{ "field": "leg_proportion", "operator": "eq", "value": "偏短", "weight": 3 }],
+      "actions": [
+        { "type": "top_style", "content": "上衣束进腰头(至少塞前面一角),长度不过胯" },
+        { "type": "bottom_style", "content": "女:高腰直筒裤或高腰半裙;男:高腰带褶西裤,裤长盖到鞋面" },
+        { "type": "shoe_style", "content": "尖头鞋,或与裤子同色的鞋,把线条接下去" },
+        { "type": "avoid", "content": "低腰裤、盖过臀的中长上衣、在脚踝处截断的裤长" },
+        { "type": "reason", "content": "腿身比偏短要靠提高腰线加同色延伸找回比例,配色保持主辅点缀 60-30-10 不变" }
+      ]
+    },
+    {
+      "key": "proportion-leg-normal",
+      "name": "比例-腿身比标准",
+      "mode": "all",
+      "category": "穿搭",
+      "gender": null,
+      "scenario": null,
+      "priority": 18,
+      "enabled": 1,
+      "description": "视觉比例:腿长/身高在 47%~52% 判标准。",
+      "conditions": [{ "field": "leg_proportion", "operator": "eq", "value": "标准", "weight": 3 }],
+      "actions": [
+        { "type": "top_style", "content": "常规收腰即可,高腰中腰都不出错" },
+        { "type": "color_combo", "content": "主辅点缀按 60-30-10 正常分配即可" },
+        { "type": "reason", "content": "腿身比在标准区间,比例不是短板,预算放在颜色协调和版型合身上更划算" }
+      ]
+    },
+    {
+      "key": "proportion-leg-long",
+      "name": "比例-腿身比偏长",
+      "mode": "all",
+      "category": "穿搭",
+      "gender": null,
+      "scenario": null,
+      "priority": 18,
+      "enabled": 1,
+      "description": "视觉比例:腿长/身高高于 52% 判偏长,这时要把长度还给上身。",
+      "conditions": [{ "field": "leg_proportion", "operator": "eq", "value": "偏长", "weight": 3 }],
+      "actions": [
+        { "type": "top_style", "content": "中长上衣、落腰设计或腰线外移的款式" },
+        { "type": "bottom_style", "content": "中低腰直筒裤、长半裙" },
+        { "type": "avoid", "content": "极高腰配短上衣,会把上身截得太短" },
+        { "type": "reason", "content": "腿偏长的人再做高腰会显得上身过短,靠上衣长度平衡上下身" }
+      ]
+    },
+    {
+      "key": "proportion-shoulder-narrow",
+      "name": "比例-肩宽偏窄",
+      "mode": "all",
+      "category": "穿搭",
+      "gender": null,
+      "scenario": null,
+      "priority": 18,
+      "enabled": 1,
+      "description": "视觉比例:肩宽/身高低于 21% 判偏窄;没填肩宽时按表单选的窄肩算。",
+      "conditions": [{ "field": "shoulder_frame", "operator": "eq", "value": "偏窄", "weight": 3 }],
+      "actions": [
+        { "type": "top_style", "content": "女:泡泡袖、船领、一字领;男:有明确肩线的衬衫与外套" },
+        { "type": "outerwear", "content": "带薄垫肩或肩线挺括的外套" },
+        { "type": "avoid", "content": "细吊带、深V、无肩线抹胸款、明显落肩的软塌面料" },
+        { "type": "reason", "content": "肩窄要靠横向线条和肩部体积把上托起来,先补足上分量再谈下半身" }
+      ]
+    },
+    {
+      "key": "proportion-shoulder-normal",
+      "name": "比例-肩宽标准",
+      "mode": "all",
+      "category": "穿搭",
+      "gender": null,
+      "scenario": null,
+      "priority": 18,
+      "enabled": 1,
+      "description": "视觉比例:肩宽/身高在 21%~24% 判标准。",
+      "conditions": [{ "field": "shoulder_frame", "operator": "eq", "value": "标准", "weight": 3 }],
+      "actions": [
+        { "type": "top_style", "content": "领型自由,V领圆领方领都能穿" },
+        { "type": "reason", "content": "肩宽比标准,选领型只看脸型长短和想要的风格,不必为比例让路" }
+      ]
+    },
+    {
+      "key": "proportion-shoulder-wide",
+      "name": "比例-肩宽偏宽",
+      "mode": "all",
+      "category": "穿搭",
+      "gender": null,
+      "scenario": null,
+      "priority": 18,
+      "enabled": 1,
+      "description": "视觉比例:肩宽/身高高于 24% 判偏宽;没填肩宽时按表单选的宽肩算。",
+      "conditions": [{ "field": "shoulder_frame", "operator": "eq", "value": "偏宽", "weight": 3 }],
+      "actions": [
+        { "type": "top_style", "content": "V领、方领、斜肩,上衣用深一点的颜色" },
+        { "type": "bottom_style", "content": "女:A字裙、阔腿裤给下身加量;男:直筒偏宽的裤型平衡肩线" },
+        { "type": "avoid", "content": "垫肩、泡泡袖、横条纹、一字领、宽肩带无袖" },
+        { "type": "reason", "content": "肩宽靠收窄肩线加加大下身量感拉回平衡,而不是把上身遮起来" }
+      ]
+    },
+    {
+      "key": "proportion-waist-clear",
+      "name": "比例-腰线明显",
+      "mode": "all",
+      "category": "穿搭",
+      "gender": null,
+      "scenario": null,
+      "priority": 18,
+      "enabled": 1,
+      "description": "视觉比例:腰臀比达到明显档位(女 0.8 以下、男 0.9 以下)。",
+      "conditions": [{ "field": "waist_definition", "operator": "eq", "value": "明显", "weight": 3 }],
+      "actions": [
+        { "type": "top_style", "content": "女:收腰连衣裙、贴身针织;男:收腰剪裁的外套与合身衬衫" },
+        { "type": "belt", "content": "腰带系在最细处,宽度与身形相称" },
+        { "type": "reason", "content": "腰臀比明显是优势,直接用版型把它露出来,不需要用层叠去遮" }
+      ]
+    },
+    {
+      "key": "proportion-waist-medium",
+      "name": "比例-腰线中等",
+      "mode": "all",
+      "category": "穿搭",
+      "gender": null,
+      "scenario": null,
+      "priority": 18,
+      "enabled": 1,
+      "description": "视觉比例:腰臀比在中等区间。",
+      "conditions": [{ "field": "waist_definition", "operator": "eq", "value": "中等", "weight": 3 }],
+      "actions": [
+        { "type": "top_style", "content": "轻微收腰或直筒偏修身" },
+        { "type": "avoid", "content": "用宽腰带硬勒出一条假腰线" },
+        { "type": "reason", "content": "腰线中等时自然带过最耐看,强行收紧会在腰两侧挤出分段" }
+      ]
+    },
+    {
+      "key": "proportion-waist-soft",
+      "name": "比例-腰线模糊",
+      "mode": "all",
+      "category": "穿搭",
+      "gender": null,
+      "scenario": null,
+      "priority": 18,
+      "enabled": 1,
+      "description": "视觉比例:腰围与臀围接近,腰线不明显。",
+      "conditions": [{ "field": "waist_definition", "operator": "eq", "value": "模糊", "weight": 3 }],
+      "actions": [
+        { "type": "top_style", "content": "V领垂坠直筒上衣、层叠穿法把视线竖着走" },
+        { "type": "avoid", "content": "紧身收腰款、细腰带、腰部有口袋或褶皱的设计" },
+        { "type": "reason", "content": "腰臀接近时收腰只会显鼓,改用垂坠面料,或把腰线外移到胸下用拼色与系带制造层次" }
+      ]
+    },
+    {
+      "key": "dresscode-interview",
+      "name": "场合-面试",
+      "mode": "all",
+      "category": "穿搭",
+      "gender": null,
+      "scenario": "面试",
+      "priority": 20,
+      "enabled": 1,
+      "description": "着装场合规范(dress code):面试的评分项是可靠感,不是个性。",
+      "conditions": [{ "field": "scenario", "operator": "eq", "value": "面试", "weight": 3 }],
+      "actions": [
+        { "type": "top_style", "content": "女:素色衬衫或针织衫;男:浅色衬衫或polo" },
+        { "type": "bottom_style", "content": "女:及膝直筒裙或西裤;男:深色西裤" },
+        { "type": "shoe_style", "content": "包脚、干净、无磨损" },
+        { "type": "avoid", "content": "高饱和色、大面积logo、短裤凉拖、浓香水" },
+        { "type": "reason", "content": "中性色加合身剪裁最不容易出错,把风格留到入职以后" }
+      ]
+    },
+    {
+      "key": "dresscode-business-formal",
+      "name": "场合-商务正式",
+      "mode": "all",
+      "category": "穿搭",
+      "gender": null,
+      "scenario": "商务正式",
+      "priority": 20,
+      "enabled": 1,
+      "description": "着装场合规范:正式商务的规矩是全套同调,配饰只留两件。",
+      "conditions": [{ "field": "scenario", "operator": "eq", "value": "商务正式", "weight": 3 }],
+      "actions": [
+        { "type": "top_style", "content": "深色成套西装,内搭白色或浅蓝衬衫" },
+        { "type": "shoe_style", "content": "女:中跟包脚船鞋;男:黑色皮鞋" },
+        { "type": "metal_color", "content": "手表与皮带扣同金属色,鞋与皮带同色" },
+        { "type": "avoid", "content": "白运动鞋、亮色袜子、多件大首饰" },
+        { "type": "reason", "content": "正式场合看细节统一度,配饰保留计时与腰带两件就够" }
+      ]
+    },
+    {
+      "key": "dresscode-wedding-banquet",
+      "name": "场合-婚礼宴会",
+      "mode": "all",
+      "category": "穿搭",
+      "gender": null,
+      "scenario": "婚礼宴会",
+      "priority": 20,
+      "enabled": 1,
+      "description": "着装场合规范:宾客的边界是别抢新人,同时比日常重一档。",
+      "conditions": [{ "field": "scenario", "operator": "eq", "value": "婚礼宴会", "weight": 3 }],
+      "actions": [
+        { "type": "top_style", "content": "女:缎面或带亮片的长裙、中长礼服;男:深色西装或中山装" },
+        { "type": "妆容要点", "content": "妆面比日常加重一档,重点放在唇或眼其中一处" },
+        { "type": "avoid", "content": "女宾避开纯白与象牙白(新娘色),全黑按当地习惯判断" },
+        { "type": "reason", "content": "宴会有灯光与暗场,哑光浅色会被吃掉,亮面材质加一个重点色最稳" }
+      ]
+    },
+    {
+      "key": "dresscode-commute",
+      "name": "场合-通勤",
+      "mode": "all",
+      "category": "穿搭",
+      "gender": null,
+      "scenario": "通勤",
+      "priority": 20,
+      "enabled": 1,
+      "description": "着装场合规范 + 60-30-10 配色比例:通勤装要能互换重复穿。",
+      "conditions": [{ "field": "scenario", "operator": "eq", "value": "通勤", "weight": 3 }],
+      "actions": [
+        { "type": "color_combo", "content": "主色 60%(中性色外套与裤裙)+ 辅色 30%(衬衫针织)+ 点缀 10%(丝巾、包、耳饰)" },
+        { "type": "top_style", "content": "以中性色打底,一件有版型的外套承担整套质感" },
+        { "type": "shoe_style", "content": "一天走路也能撑住的鞋,颜色归到主色里" },
+        { "type": "avoid", "content": "同一天出现三种以上高饱和色" },
+        { "type": "reason", "content": "按 60-30-10 分配颜色,不同单品互相搭都会看起来成套,通勤装利用率最高" }
+      ]
+    },
+    {
+      "key": "dresscode-party",
+      "name": "场合-聚会",
+      "mode": "all",
+      "category": "穿搭",
+      "gender": null,
+      "scenario": "聚会",
+      "priority": 20,
+      "enabled": 1,
+      "description": "着装场合规范:聚会需要一个视觉记忆点。",
+      "conditions": [{ "field": "scenario", "operator": "eq", "value": "聚会", "weight": 3 }],
+      "actions": [
+        { "type": "top_style", "content": "一件亮点单品就够:亮面、镂空或一个饱和色" },
+        { "type": "lip_color", "content": "比日常加深一档" },
+        { "type": "earring_type", "content": "有存在感的耳饰,离脸最近的 20 公分最值得花钱" },
+        { "type": "reason", "content": "合影和暗光环境会吃掉细节,视觉记忆点放在脸部周围最有效" }
+      ]
+    },
+    {
+      "key": "dresscode-date",
+      "name": "场合-约会",
+      "mode": "all",
+      "category": "穿搭",
+      "gender": null,
+      "scenario": "约会",
+      "priority": 20,
+      "enabled": 1,
+      "description": "着装场合规范:约会靠柔和度与触感,比职场少一分硬挺。",
+      "conditions": [{ "field": "scenario", "operator": "eq", "value": "约会", "weight": 3 }],
+      "actions": [
+        { "type": "top_style", "content": "柔软面料(针织、雪纺、丝质),颜色用柔色调加一个暖点缀" },
+        { "type": "妆容风格", "content": "妆面清透,唇色比职场暖一点" },
+        { "type": "avoid", "content": "全套硬挺正装、束缚感强不方便活动的版型" },
+        { "type": "reason", "content": "近距离看的是面料质感和气色,不是轮廓的正式度" }
+      ]
+    }
+  ]
+}

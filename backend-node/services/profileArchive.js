@@ -1,0 +1,315 @@
+/**
+ * 长期档案读写层
+ *
+ * 解决的是"每次推荐都从零填表"这个问题：
+ *   - 计算前先把这个人身上已有的条件读出来（loadArchive）
+ *   - 当次表单只覆盖他这次真的填了的项（mergeWithArchive）
+ *   - 算完把这次新填的写回档案（saveArchive）
+ *   - 每次推荐落一条样本，能查到是谁（writeRecommendationLog）
+ *
+ * 词表约定：列名一律用规则引擎在用的条件字段名（如 nose_bridge），
+ * 入库即命中规则，不再维护第二套名字。
+ */
+
+const db = require('../db/init')
+const { FIELD_LABELS } = require('./ruleExplainer')
+
+/**
+ * 身体数字项的中文名（只用于给用户看）
+ * 这些不是规则条件字段，放进 FIELD_LABELS 会混进后台"新增规则条件"下拉，而引擎不支持数值条件
+ */
+const ARCHIVE_LABELS = {
+  height: '身高',
+  weight: '体重',
+  bust: '胸围',
+  waist: '腰围',
+  hip: '臀围',
+  shoulder: '肩宽',
+}
+
+/**
+ * 计算结果标签：key 与引擎返回的 _computed 键一字一样，换 key 等于换列名
+ * 这些是算出来的结论，不是用户填的条件，所以不进 FIELD_LABELS
+ */
+const TAG_DEFS = [
+  { key: 'bmi', label: 'BMI' },
+  { key: 'bmi_level', label: 'BMI 档位' },
+  { key: 'body_shape', label: '体型（算出）' },
+  { key: 'wh_ratio', label: '腰臀比' },
+  { key: 'leg_ratio', label: '腿身比' },
+  { key: 'shoulder_ratio', label: '肩宽比' },
+  { key: 'color_match', label: '适合色系' },
+  { key: 'color_avoid', label: '回避色系' },
+  { key: 'color_season', label: '色彩四季型（算出）' },
+  { key: 'color_season_12', label: '色彩十二型（算出）' },
+  { key: 'kibbe_type', label: '风格型（算出）' },
+]
+
+/** profile 字段 ⇄ 身体档案列；kind 决定校验方式 */
+const BODY_FIELDS = [
+  { key: 'height', column: 'height_cm', kind: 'num', min: 50, max: 250 },
+  { key: 'weight', column: 'weight_kg', kind: 'num', min: 20, max: 300 },
+  { key: 'bust', column: 'bust_cm', kind: 'num', min: 40, max: 200 },
+  { key: 'waist', column: 'waist_cm', kind: 'num', min: 30, max: 200 },
+  { key: 'hip', column: 'hip_cm', kind: 'num', min: 40, max: 220 },
+  { key: 'shoulder', column: 'shoulder_width_cm', kind: 'num', min: 20, max: 80 },
+  { key: 'leg_length', column: 'leg_length_cm', kind: 'num', min: 30, max: 160 },
+  { key: 'neck_length', column: 'neck_length', kind: 'text' },
+  { key: 'shoulder_type', column: 'shoulder_type', kind: 'text' },
+  { key: 'body_type', column: 'body_type', kind: 'text' },
+  { key: 'frame_size', column: 'frame_size', kind: 'text' },
+  { key: 'line_quality', column: 'line_quality', kind: 'text' },
+]
+
+/** profile 字段 ⇄ 面容档案列；source 是该字段在表单里的多个可能名字 */
+const FACE_FIELDS = [
+  { key: 'skin_tone', column: 'skin_tone', source: ['skin_tone', 'skin_tone_detail'] },
+  { key: 'skin_tone_detail', column: 'skin_tone_detail', source: ['skin_tone_detail'] },
+  { key: 'color_chroma', column: 'color_chroma', source: ['color_chroma'] },
+  { key: 'skin_type', column: 'skin_type', source: ['skin_type'] },
+  { key: 'face_shape', column: 'face_shape', source: ['face_shape'] },
+  { key: 'face_ratio', column: 'face_ratio', source: ['face_ratio'] },
+  { key: 'eye_spacing', column: 'eye_spacing', source: ['eye_spacing'] },
+  { key: 'eye_size', column: 'eye_size', source: ['eye_size'] },
+  { key: 'eye_shape', column: 'eye_shape', source: ['eye_shape'] },
+  { key: 'nose_bridge', column: 'nose_bridge', source: ['nose_bridge', 'nose_height'] },
+  { key: 'lip_thickness', column: 'lip_thickness', source: ['lip_thickness'] },
+]
+
+/** 判断"这次真的填了"：空串、null、undefined、NaN 都算没填 */
+function isFilled(val) {
+  if (val === null || val === undefined) return false
+  if (typeof val === 'string') return val.trim() !== ''
+  if (typeof val === 'number') return !isNaN(val)
+  return true
+}
+
+/** 数值列校验，越界或非法当没填 */
+function cleanNum(val, min, max) {
+  const n = Number(val)
+  if (isNaN(n)) return null
+  if (n < min || n > max) return null
+  return n
+}
+
+/** 文本列校验：只留短字符串，挡掉脚本塞进来的长垃圾 */
+function cleanText(val) {
+  if (typeof val !== 'string') return null
+  const s = val.trim()
+  if (!s || s.length > 40) return null
+  return s
+}
+
+/** 从 profile 里取该列对应的值（按 source 顺序取第一个填了的） */
+function pick(profile, field) {
+  const names = field.source || [field.key]
+  for (const name of names) {
+    if (isFilled(profile[name])) {
+      return field.kind === 'num'
+        ? cleanNum(profile[name], field.min, field.max)
+        : cleanText(profile[name])
+    }
+  }
+  return null
+}
+
+/**
+ * 读出这个人的长期档案，形状与 profile 一致，可直接喂给引擎
+ * @param {number} userId
+ * @returns {object} 只含档案里确实有值的字段
+ */
+function loadArchive(userId) {
+  const archive = {}
+  if (!userId) return archive
+
+  const body = db.prepare('SELECT * FROM body_metrics WHERE user_id = ?').get(userId)
+  if (body) {
+    for (const field of BODY_FIELDS) {
+      const val = body[field.column]
+      if (isFilled(val)) archive[field.key] = val
+    }
+  }
+
+  const face = db.prepare('SELECT * FROM face_profiles WHERE user_id = ?').get(userId)
+  if (face) {
+    for (const field of FACE_FIELDS) {
+      const val = face[field.column]
+      if (isFilled(val)) archive[field.key] = val
+    }
+  }
+
+  const user = db.prepare('SELECT gender FROM users WHERE id = ?').get(userId)
+  if (user && isFilled(user.gender)) archive.gender = user.gender
+
+  return archive
+}
+
+/**
+ * 档案打底，当次表单覆盖
+ * @param {object} profile 本次提交
+ * @param {object} archive loadArchive 的结果
+ * @returns {{profile: object, used: string[]}} used 是沿用了档案的字段中文名
+ */
+function mergeWithArchive(profile, archive) {
+  const merged = { ...profile }
+  const used = []
+  for (const [key, val] of Object.entries(archive || {})) {
+    if (!isFilled(merged[key])) {
+      merged[key] = val
+      used.push(ARCHIVE_LABELS[key] || FIELD_LABELS[key] || key)
+    }
+  }
+  return { profile: merged, used }
+}
+
+/**
+ * 把本次新填的条件写回档案（没填的不动，不会被清空）
+ * @param {number} userId
+ * @param {object} profile 本次提交（原始，未合并档案）
+ * @returns {{body: number, face: number}} 各表写入的字段数
+ */
+function saveArchive(userId, profile) {
+  const saved = { body: 0, face: 0 }
+  if (!userId) return saved
+
+  const bodyRow = {}
+  for (const field of BODY_FIELDS) {
+    const val = pick(profile, field)
+    if (val !== null) bodyRow[field.column] = val
+  }
+  // 体型允许只填细分（个人表单）：body_type 为空时拿 body_type_detail 补上
+  if (!bodyRow.body_type && isFilled(profile.body_type_detail)) {
+    bodyRow.body_type = cleanText(profile.body_type_detail)
+  }
+  if (Object.keys(bodyRow).length > 0) {
+    const existing = db.prepare('SELECT * FROM body_metrics WHERE user_id = ?').get(userId)
+    const columns = Object.keys(bodyRow)
+    if (existing) {
+      db.prepare(
+        `UPDATE body_metrics SET ${columns.map((c) => `${c} = ?`).join(', ')},
+         updated_at = datetime('now') WHERE user_id = ?`,
+      ).run(...columns.map((c) => bodyRow[c]), userId)
+    } else {
+      db.prepare(
+        `INSERT INTO body_metrics (user_id, ${columns.join(', ')})
+         VALUES (?, ${columns.map(() => '?').join(', ')})`,
+      ).run(userId, ...columns.map((c) => bodyRow[c]))
+    }
+    saved.body = columns.length
+  }
+
+  const faceRow = {}
+  for (const field of FACE_FIELDS) {
+    const val = pick(profile, field)
+    if (val !== null) faceRow[field.column] = val
+  }
+  if (Object.keys(faceRow).length > 0) {
+    const existing = db.prepare('SELECT * FROM face_profiles WHERE user_id = ?').get(userId)
+    const columns = Object.keys(faceRow)
+    if (existing) {
+      db.prepare(
+        `UPDATE face_profiles SET ${columns.map((c) => `${c} = ?`).join(', ')},
+         updated_at = datetime('now') WHERE user_id = ?`,
+      ).run(...columns.map((c) => faceRow[c]), userId)
+    } else {
+      db.prepare(
+        `INSERT INTO face_profiles (user_id, ${columns.join(', ')})
+         VALUES (?, ${columns.map(() => '?').join(', ')})`,
+      ).run(userId, ...columns.map((c) => faceRow[c]))
+    }
+    saved.face = columns.length
+  }
+
+  if (isFilled(profile.gender)) {
+    db.prepare('UPDATE users SET gender = ? WHERE id = ? AND (gender IS NULL OR gender = ?)').run(
+      cleanText(profile.gender),
+      userId,
+      '',
+    )
+  }
+
+  return saved
+}
+
+/**
+ * 落一条样本：输入快照 + 输出 + 是谁 + 哪家店
+ * 快照里不留昵称与手机号：样本要长期留存，身份信息不需要
+ * @returns {number|null} 日志 id
+ */
+function writeRecommendationLog({ sessionId, userId, storeId, mode, profile, result }) {
+  try {
+    const snapshot = { ...(profile || {}) }
+    delete snapshot.nickname
+    delete snapshot.phone
+    const info = db
+      .prepare(
+        `INSERT INTO recommendation_logs (session_id, user_id, store_id, mode, input_snapshot, result)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+      )
+      .run(
+        sessionId || null,
+        userId || null,
+        storeId || null,
+        mode,
+        JSON.stringify(snapshot),
+        JSON.stringify(result || {}),
+      )
+    return Number(info.lastInsertRowid)
+  } catch (err) {
+    // 样本写不进去不能带崩推荐
+    console.error('[档案] 推荐样本写入失败:', err.message)
+    return null
+  }
+}
+
+/**
+ * 读这个人的标签（按 TAG_DEFS 顺序，库里没有的键不会出现）
+ * @param {number} userId
+ * @returns {Array<{key: string, label: string, value: string}>}
+ */
+function loadTags(userId) {
+  if (!userId) return []
+  const rows = db.prepare('SELECT tag_key, tag_value FROM profile_tags WHERE user_id = ?').all(userId)
+  const found = new Map(rows.map((r) => [r.tag_key, r.tag_value]))
+  return TAG_DEFS.filter((def) => found.has(def.key)).map((def) => ({
+    key: def.key,
+    label: def.label,
+    value: found.get(def.key),
+  }))
+}
+
+/**
+ * 把本次算出来的结论标签按人存下来（每人每标签一行，再算一次就覆盖）
+ * 写标签失败不能带崩推荐，所以整段兜住
+ * @param {number} userId
+ * @param {object} result 引擎返回，只读它的 _computed
+ * @returns {Array<{key, label, value}>} 落库后从库里读回来的标签
+ */
+function saveTags(userId, result) {
+  if (!userId) return []
+  const computed = (result && result._computed) || {}
+  try {
+    const upsert = db.prepare(
+      `INSERT INTO profile_tags (user_id, tag_key, tag_value) VALUES (?, ?, ?)
+       ON CONFLICT(user_id, tag_key) DO UPDATE SET
+         tag_value = excluded.tag_value, updated_at = datetime('now')`,
+    )
+    for (const def of TAG_DEFS) {
+      if (!isFilled(computed[def.key])) continue
+      upsert.run(userId, def.key, String(computed[def.key]).slice(0, 200))
+    }
+    return loadTags(userId)
+  } catch (err) {
+    console.error('[档案] 标签写入失败:', err.message)
+    return []
+  }
+}
+
+module.exports = {
+  loadArchive,
+  mergeWithArchive,
+  saveArchive,
+  writeRecommendationLog,
+  loadTags,
+  saveTags,
+}

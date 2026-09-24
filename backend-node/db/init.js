@@ -104,7 +104,18 @@ function initSchema() {
  */
 const MISSING_COLUMNS = [
   ['rule_groups', 'last_hit_at', 'TEXT'],
+  ['rule_groups', 'feedback_up', 'INTEGER'],
+  ['rule_groups', 'feedback_down', 'INTEGER'],
+  ['rule_groups', 'source_key', 'TEXT'],
   ['recommendation_logs', 'input_snapshot', 'TEXT'],
+  ['recommendation_logs', 'user_id', 'INTEGER'],
+  ['recommendation_logs', 'store_id', 'INTEGER'],
+  ['customer_sessions', 'store_id', 'INTEGER'],
+  ['body_metrics', 'leg_length_cm', 'REAL'],
+  ['body_metrics', 'shoulder_type', 'TEXT'],
+  ['body_metrics', 'frame_size', 'TEXT'],
+  ['body_metrics', 'line_quality', 'TEXT'],
+  ['face_profiles', 'color_chroma', 'TEXT'],
 ];
 
 function initMissingColumns() {
@@ -115,6 +126,12 @@ function initMissingColumns() {
       console.log(`[数据库] ${table} 已补列 ${column}`);
     }
   }
+  // 新列的索引必须等补列完成后再建(schema.sql 跑在这之前)
+  db.exec('CREATE INDEX IF NOT EXISTS ix_recommendation_logs_user_id ON recommendation_logs(user_id)');
+  db.exec('CREATE INDEX IF NOT EXISTS ix_customer_sessions_store_id ON customer_sessions(store_id)');
+  db.exec('CREATE INDEX IF NOT EXISTS ix_recommendation_logs_store_id ON recommendation_logs(store_id)');
+  // 种子靠这个唯一标记判断"库里有没有这条规则";手工建的规则是 NULL,SQLite 允许 NULL 重复
+  db.exec('CREATE UNIQUE INDEX IF NOT EXISTS ix_rule_groups_source_key ON rule_groups(source_key)');
 }
 
 /**
@@ -138,6 +155,28 @@ function initSeedData() {
     }
   } else {
     console.warn('[种子数据] seed.js 不存在,请运行 npm run seed');
+  }
+}
+
+/**
+ * 启动期增量应用新规则种子(db/seed/rules-*.json)
+ * 只补库里没有的规则;后台改过优先级、关掉的规则一律不动。
+ * 拉代码 + 重启即生效,不用碰库文件,也不需要跑全删重建的 seed.js。
+ */
+function initRuleSeedIncrement() {
+  try {
+    const { applyRuleSeeds } = require('./applyRuleSeeds');
+    const stat = applyRuleSeeds(db);
+    if (stat.checked === 0) return;
+    console.log(
+      `[规则种子] 核对 ${stat.checked} 条:新增 ${stat.inserted} 条,已存在不动 ${stat.existing} 条` +
+        (stat.rejected.length ? `,不合格未入库 ${stat.rejected.length} 条` : ''),
+    );
+    for (const reason of stat.rejected) {
+      console.warn(`[规则种子] ✗ ${reason}`);
+    }
+  } catch (err) {
+    console.error('[规则种子] 增量应用失败(不影响启动):', err.message);
   }
 }
 
@@ -289,6 +328,7 @@ function initAll() {
   initSchema();
   initMissingColumns();
   initSeedData();
+  initRuleSeedIncrement();
   initModelConfigs();
   // ★ 启动时清理失效模型记录:
   // - 用户已移入"残缺模型"文件夹的

@@ -95,10 +95,20 @@ export default function TryonCard() {
         )}
         {result && (
           <div className="mt-2">
-            <div className="text-xs mb-1" style={{ color: 'var(--muted)' }}>试穿效果：</div>
+            <div className="text-xs mb-1" style={{ color: 'var(--muted)' }}>
+              {result.degraded ? '原图（未生成试穿效果）：' : '试穿效果：'}
+            </div>
+            {result.degraded && (
+              <div
+                className="text-xs mb-2"
+                style={{ color: 'var(--warning)', lineHeight: 1.6 }}
+              >
+                试穿模型未开通，下面这张就是你上传的人物照片，不是换装效果。
+              </div>
+            )}
             <img
               src={result.result_url}
-              alt="虚拟试穿结果"
+              alt={result.degraded ? '人物原图（未生成试穿效果）' : '虚拟试穿结果'}
               style={{
                 width: '100%',
                 borderRadius: '8px',

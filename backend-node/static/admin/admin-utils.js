@@ -21,6 +21,8 @@ var State = {
   currentTable: null,
   currentPage: 1,
   perPage: 20,
+  storeId: '',
+  stores: [],
   editingRuleId: null,
   editingProductId: null,
 };
@@ -36,7 +38,7 @@ var SCENARIO_LABELS = {
 /* ── 数据值翻译映射（显示用，不改数据库原始值）── */
 var VALUE_LABELS = {
   // rule_groups.mode
-  'rule_groups.mode': { 'store': '门店', 'personal': '个人' },
+  'rule_groups.mode': { 'store': '门店', 'personal': '个人', 'all': '门店+个人' },
   // rule_groups.category
   'rule_groups.category': { '穿搭': '穿搭', '妆容': '美妆', '发型': '发型', '配饰': '配饰', '姿势': '姿势' },
   // rule_groups.enabled / inventory_products.enabled / model_configs.enabled 等
@@ -47,7 +49,12 @@ var VALUE_LABELS = {
   // face_features.status
   'face_features.status': { 'pending': '待处理', 'done': '完成', 'error': '错误' },
   // tryon_results.status
-  'tryon_results.status': { 'pending': '处理中', 'done': '完成', 'failed': '失败' },
+  'tryon_results.status': {
+    'pending': '处理中',
+    'done': '完成',
+    'failed': '失败',
+    'degraded': '未生成(原图)',
+  },
   // shopping_wishlist
   'shopping_wishlist.status': { 'pending': '待买', 'bought': '已买' },
   'shopping_wishlist.priority': { 'low': '低', 'medium': '中', 'high': '高' },
@@ -62,15 +69,28 @@ var VALUE_LABELS = {
   'customer_sessions.synced': { '1': '已同步', '0': '未同步', 1: '已同步', 0: '未同步' },
   // recommendation_logs.mode
   'recommendation_logs.mode': { 'store': '门店', 'personal': '个人' },
+  // profile_tags.tag_key —— 与后端 services/profileArchive.js 的 TAG_DEFS 一字一样,改那边要改这里
+  'profile_tags.tag_key': {
+    'bmi': 'BMI', 'bmi_level': 'BMI 档位', 'body_shape': '体型（算出）', 'wh_ratio': '腰臀比',
+    'leg_ratio': '腿身比', 'shoulder_ratio': '肩宽比', 'color_match': '适合色系', 'color_avoid': '回避色系',
+    'color_season': '色彩四季型（算出）', 'color_season_12': '色彩十二型（算出）', 'kibbe_type': '风格型（算出）',
+  },
+  // feedback_events.signal —— 与后端 services/ruleFeedback.js 的 SIGNALS 一字一样,改那边要改这里
+  'feedback_events.signal': { 'useful': '有用', 'inaccurate': '不准' },
   // photos.type
   'photos.type': { 'face': '面部', 'body': '全身', 'cloth': '衣物' },
-  // rule_conditions.field
+  // rule_conditions.field —— 与后端 services/ruleExplainer.js 的 FIELD_LABELS 一字一样,改那边要改这里
   'rule_conditions.field': {
     'gender': '性别', 'category': '分类', 'scenario': '场景', 'skin_tone': '肤色',
     'face_shape': '脸型', 'region': '地区', 'body_type': '体型', 'bmi_level': 'BMI等级',
     'preferred_style': '偏好风格', 'main_goal': '主要目标', 'posture': '体态',
     'eye_size': '眼睛大小', 'nose_bridge': '鼻梁', 'lip_thickness': '嘴唇厚度',
-    'season': '季节', 'age_range': '年龄段'
+    'season': '季节', 'age_range': '年龄段',
+    'color_chroma': '色彩纯度', 'frame_size': '骨架量感', 'line_quality': '线条倾向',
+    'color_season': '色彩四季型（算出）', 'color_season_12': '色彩十二型（算出）',
+    'kibbe_type': '风格型（算出）',
+    'leg_proportion': '腿身比（算出）',
+    'shoulder_frame': '肩宽比（算出）', 'waist_definition': '腰线（算出）'
   },
   // rule_conditions.operator
   'rule_conditions.operator': { 'eq': '等于', 'in': '包含', 'ne': '不等于', 'gt': '大于', 'lt': '小于', 'gte': '大于等于', 'lte': '小于等于' },
@@ -114,6 +134,8 @@ var TABLE_LABELS = {
   'users': '用户表',
   'photos': '照片表',
   'face_features': '人脸特征表',
+  'face_profiles': '面容档案表(手工)',
+  'profile_tags': '形象标签表(算出)',
   'body_metrics': '身体数据表',
   'recommendations': '推荐记录表',
   'tryon_results': '试穿结果表',
@@ -124,6 +146,7 @@ var TABLE_LABELS = {
   'inventory_products': '库存商品表',
   'customer_sessions': '顾客会话表',
   'recommendation_logs': '推荐日志表',
+  'feedback_events': '反馈表(规则评价)',
   'clothing_items': '衣服照片表',
   'user_wardrobe': '用户衣橱表',
   'wardrobe_outfits': '衣橱搭配表',
@@ -178,6 +201,31 @@ var COLUMN_COMMENTS = {
     'status': '状态',
     'created_at': '创建时间',
   },
+  // face_profiles 手工面容档案表(照片识别未开放时由用户自己填)
+  'face_profiles': {
+    'id': '主键ID',
+    'user_id': '用户ID',
+    'skin_tone': '肤色',
+    'skin_tone_detail': '肤色细分',
+    'color_chroma': '色彩纯度',
+    'skin_type': '肤质',
+    'face_shape': '脸型',
+    'face_ratio': '三庭比例',
+    'eye_spacing': '眼距',
+    'eye_size': '眼睛大小',
+    'eye_shape': '眼型',
+    'nose_bridge': '鼻梁',
+    'lip_thickness': '唇厚',
+    'updated_at': '更新时间',
+  },
+  // profile_tags 形象标签表(每次算完按人覆盖,存的是算出来的结论)
+  'profile_tags': {
+    'id': '主键ID',
+    'user_id': '用户ID',
+    'tag_key': '标签',
+    'tag_value': '标签值',
+    'updated_at': '更新时间',
+  },
   // body_metrics 身体指标表
   'body_metrics': {
     'id': '主键ID',
@@ -189,8 +237,12 @@ var COLUMN_COMMENTS = {
     'waist_cm': '腰围(cm)',
     'hip_cm': '臀围(cm)',
     'leg_length_ratio': '腿长比例',
+    'leg_length_cm': '腿长(cm)',
     'bust_cm': '胸围(cm)',
     'neck_length': '颈部长度',
+    'shoulder_type': '肩型',
+    'frame_size': '骨架量感',
+    'line_quality': '线条倾向',
     'updated_at': '更新时间',
   },
   // recommendations 穿搭推荐记录表
@@ -241,7 +293,10 @@ var COLUMN_COMMENTS = {
     'enabled': '是否启用',
     'hit_count': '命中次数',
     'last_hit_at': '最近命中时间',
+    'feedback_up': '好评数',
+    'feedback_down': '差评数',
     'created_at': '创建时间',
+    'source_key': '内置规则标识（空=手工新建）',
   },
   // rule_conditions 规则条件表
   'rule_conditions': {
@@ -285,10 +340,17 @@ var COLUMN_COMMENTS = {
     'enabled': '是否上架',
     'created_at': '创建时间',
   },
+  // stores 门店表(同一套系统给多家店用,店名第一次出现时自动登记)
+  'stores': {
+    'id': '主键ID',
+    'name': '门店名称',
+    'created_at': '登记时间',
+  },
   // customer_sessions 顾客会话表
   'customer_sessions': {
     'id': '主键ID',
     'session_id': '会话ID',
+    'store_id': '归属门店ID',
     'profile_data': '档案数据(JSON)',
     'synced': '是否已同步',
     'synced_at': '同步时间',
@@ -299,10 +361,21 @@ var COLUMN_COMMENTS = {
   'recommendation_logs': {
     'id': '主键ID',
     'session_id': '会话ID',
+    'user_id': '用户ID(个人模式归属)',
+    'store_id': '归属门店ID',
     'mode': '模式',
     'input_snapshot': '输入快照',
     'result': '推荐结果(JSON)',
     'created_at': '创建时间',
+  },
+  // feedback_events 反馈表(规则评价)
+  'feedback_events': {
+    'id': '主键ID',
+    'user_id': '用户ID',
+    'group_id': '规则组ID',
+    'category': '分类',
+    'signal': '评价',
+    'updated_at': '评价时间',
   },
   // user_wardrobe 个人衣橱表
   'user_wardrobe': {
@@ -584,6 +657,7 @@ function switchSection(section) {
   if (section === 'inventory') loadInventory();
   if (section === 'payments') loadDeposits();
   if (section === 'creator') loadCreatorWorks();
+  if (section === 'members') loadAccounts();
   if (section === 'models') loadModels();
   if (section === 'tables' && State.tables.length === 0) loadTables();
   if (section === 'functions' && State.functions.length === 0) loadFunctions();

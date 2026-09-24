@@ -80,7 +80,7 @@ try {
   });
 
   // ============ 8. 门店模式 vs 个人模式覆盖 ============
-  console.log('\n--- 门店模式规则(8字段:性别/肤色/脸型/体型/场景)覆盖情况 ---');
+  console.log('\n--- 门店模式规则(13项采集:性别/肤色/肤色细分/色彩纯度/脸型/体型/骨架量感/线条倾向/身高/体重/年龄段/地区/场景)覆盖情况 ---');
   const storeGroups = groups.filter(g => g.mode === 'store');
   console.log(`  门店规则总数: ${storeGroups.length}`);
   const storeFields = {};

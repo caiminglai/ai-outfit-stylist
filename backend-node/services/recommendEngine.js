@@ -171,6 +171,24 @@ function parseConditionValue(rawValue) {
 }
 
 /**
+ * 场合别名 → 规范场合
+ * 库里有 9 组 personal 规则把 scenario 写成表单原始选项(上班通勤/约会聚会/派对),
+ * 而运行时 profile.scenario 已被 profileEnricher 的 OCCASION_TO_SCENARIO 归一成 通勤/约会/聚会,
+ * 导致这些规则从写下起永远命中不了。SQL 预筛和条件评估都按这张表放宽一次。
+ */
+const SCENARIO_ALIASES = {
+  通勤: ['上班通勤'],
+  约会: ['约会聚会'],
+  聚会: ['派对'],
+};
+
+// 反转成 别名 → 规范值,给下面的条件值归一用
+const SCENARIO_ALIAS_TO_CANON = {};
+for (const [canon, list] of Object.entries(SCENARIO_ALIASES)) {
+  for (const alias of list) SCENARIO_ALIAS_TO_CANON[alias] = canon;
+}
+
+/**
  * 条件值别名 → 规范值
  * 种子数据里"姿势"类规则的条件值有两种写法:
  * store 模式 8 组写 posture、personal 模式 8 组写 pose,
@@ -179,6 +197,7 @@ function parseConditionValue(rawValue) {
  */
 const COND_VALUE_ALIASES = {
   category: { pose: 'posture' },
+  scenario: SCENARIO_ALIAS_TO_CANON,
 };
 
 /** 检查单个条件是否命中 */
@@ -278,7 +297,8 @@ function evaluateGroup(group, conditions, profile) {
  */
 function matchRules(profile, mode = 'store', category = null, incrementHitCount = true) {
   // 构建查询
-  let query = 'SELECT * FROM rule_groups WHERE enabled = 1 AND mode = ?';
+  // mode='all' 表示门店与个人通用(第二批色彩/比例类规则不分两套口径)
+  let query = "SELECT * FROM rule_groups WHERE enabled = 1 AND (mode = ? OR mode = 'all')";
   const params = [mode];
 
   // 按 gender 筛选
@@ -292,8 +312,10 @@ function matchRules(profile, mode = 'store', category = null, incrementHitCount 
   const scenarioKey =
     category === '姿势' ? profile.photo_scene || profile.scenario : profile.scenario;
   if (scenarioKey) {
-    query += ' AND (scenario = ? OR scenario IS NULL)';
-    params.push(scenarioKey);
+    // 别名一起放行:老规则里把场合写成表单原始选项的,归一后会对不上 SQL 预筛
+    const aliases = SCENARIO_ALIASES[scenarioKey] || [];
+    query += ` AND (scenario IS NULL OR scenario = ?${' OR scenario = ?'.repeat(aliases.length)})`;
+    params.push(scenarioKey, ...aliases);
   }
 
   // 按 category 筛选
@@ -348,13 +370,21 @@ function matchRules(profile, mode = 'store', category = null, incrementHitCount 
         actions[action.action_type] = action.content;
       }
 
+      // 顾客反馈微调:一条好评 +1、一条不准 -1,最多影响 ±3 分
+      // 没收到反馈的规则 feedback=0,分数与排序跟改动前完全一样
+      const feedback = Math.max(
+        -3,
+        Math.min(3, (group.feedback_up || 0) - (group.feedback_down || 0)),
+      );
+
       matched.push({
         group_id: group.id,
         group_name: group.name,
         category: group.category,
         scenario: group.scenario,
         priority: group.priority || 0,
-        score,
+        score: score + feedback,
+        feedback,
         actions,
         // 命中条件详情(含每个条件的命中状态,供生成可解释性说明)
         condition_details: conditionDetails,
@@ -364,8 +394,8 @@ function matchRules(profile, mode = 'store', category = null, incrementHitCount 
       if (incrementHitCount) {
         try {
           db.prepare('UPDATE rule_groups SET hit_count = hit_count + 1, last_hit_at = datetime(\'now\') WHERE id = ?').run(group.id);
-        } catch {
-          // 不影响主流程
+        } catch (err) {
+          console.warn(`[推荐引擎] 规则组 ${group.id} 命中次数写入失败: ${err.message}`);
         }
       }
     }
@@ -422,6 +452,15 @@ function buildRecommendation(profile, mode = 'store', incrementHitCount = true) 
     result._computed.color_match = enriched.color_match;
     result._computed.color_avoid = enriched.color_avoid;
   }
+  if (enriched.color_season) {
+    result._computed.color_season = enriched.color_season;
+  }
+  if (enriched.color_season_12) {
+    result._computed.color_season_12 = enriched.color_season_12;
+  }
+  if (enriched.kibbe_type) {
+    result._computed.kibbe_type = enriched.kibbe_type;
+  }
 
   // 3. 填充 algorithm_analysis(个人模式的深度分析报告)
   if (mode === 'personal') {
@@ -434,6 +473,9 @@ function buildRecommendation(profile, mode = 'store', incrementHitCount = true) 
     if (enriched.wh_ratio) metrics.push(`腰臀比 ${enriched.wh_ratio}`);
     if (enriched.leg_ratio) metrics.push(`腿身比 ${enriched.leg_ratio}`);
     if (enriched.shoulder_ratio) metrics.push(`肩宽比 ${enriched.shoulder_ratio}`);
+    if (enriched.color_season) metrics.push(`色彩 ${enriched.color_season}`);
+    if (enriched.color_season_12) metrics.push(`十二型 ${enriched.color_season_12}`);
+    if (enriched.kibbe_type) metrics.push(`风格型 ${enriched.kibbe_type}`);
 
     // 体型分析
     if (enriched.body_shape_key) {
@@ -456,6 +498,20 @@ function buildRecommendation(profile, mode = 'store', incrementHitCount = true) 
           `修容建议:${faceGuide.contour_advice}`,
           `配饰建议:${faceGuide.accessory_advice}`,
         ],
+      });
+    }
+
+    // 三庭五眼比例分析
+    if (enriched.proportion_analysis) {
+      sections.push({
+        title: '三庭五眼比例',
+        advices: [
+          enriched.proportion_analysis,
+          `发型建议:${enriched.proportion_hair}`,
+          `妆容建议:${enriched.proportion_makeup}`,
+          `修容建议:${enriched.proportion_contour}`,
+          `配饰建议:${enriched.proportion_accessory}`,
+        ].filter(Boolean),
       });
     }
 
@@ -493,6 +549,7 @@ function buildRecommendation(profile, mode = 'store', incrementHitCount = true) 
         group_name: m.group_name,
         priority: m.priority,
         score: m.score,
+        feedback: m.feedback,
       };
       Object.assign(recommendation, m.actions);
       // 注入可解释性说明:这条推荐命中了哪些条件(中文人话,供前端展示"为什么推荐")

@@ -1,6 +1,6 @@
 # 私人形象定制 AI 网站
 
-门店级 **3D 形象展厅 + 规则引擎形象定制** 一体化应用.后端基于 Node.js 本地规则引擎,无外部 AI 服务依赖(仅阿里云 DashScope 作可选增强,缺 Key 时自动降级为模拟数据;星座文案走本地模板).
+门店级 **3D 形象展厅 + 规则引擎形象定制** 一体化应用.后端基于 Node.js 本地规则引擎,无外部 AI 服务依赖(仅虚拟试穿接了阿里云 DashScope,缺 Key 时降级返回你上传的原图并在页面上说明;面容分析接口当前返回 501,不调外部服务;星座文案走本地模板).
 
 ---
 
@@ -12,9 +12,9 @@
 | 3D 渲染 | Three.js + MMDLoader(PMX/MMD) | 卡渲材质、自动旋转、模型轮播 |
 | 前端构建 | Vite(容器内生产 + 开发 HMR)、esbuild(本机中文路径备选) | 本机路径含中文时 Vite 在 TRAE VFS 下会崩,故留 `build-esbuild.cjs` 作本机备选;容器内路径为 ASCII,Dockerfile 用 `npx vite build`;`app/dist` 不进 Git,每次构建镜像时在容器内重新生成 |
 | 后端 | Node.js ≥18 + Express 4 + better-sqlite3 | 同步 API,单服务提供 API + 静态文件 |
-| 数据库 | SQLite(WAL 模式,21 张表) | 零配置,首次启动自动建表 + 导入种子数据 |
-| 规则引擎 | 三表结构(规则组/条件/动作) | 预筛 4 字段(性别/场景/模式/类别)+ 25 类条件表达式 |
-| 外部服务 | 阿里云 DashScope(面容分析/试穿) | 可选,未配置 Key 时降级返回模拟数据;星座文案为本地模板 |
+| 数据库 | SQLite(WAL 模式,27 张表) | 零配置,首次启动自动建表 + 导入种子数据 |
+| 规则引擎 | 三表结构(规则组/条件/动作) | 预筛 4 字段(性别/场景/模式/类别)+ 31 类条件字段(本机 `DISTINCT field` 实测) |
+| 外部服务 | 阿里云 DashScope(仅虚拟试穿调用) | 可选,缺 Key 时原样返回人物图并标记为降级;面容分析不调外部服务,直接返回 501 让顾客在表单里选;星座文案为本地模板 |
 | 部署 | Docker Compose + Caddy | 本机与服务器共用一份 `docker-compose.yml`(服务名 `style-ai`);服务器 Debian 12 + Docker 已于 2026-09-20 上线,Caddy 自动申请/续期 Let's Encrypt 证书;旧栈 Nginx + PM2 已作废.三站共用的服务器口径见仓库上一级的 `SERVER-OPS.md` |
 
 ---
@@ -34,12 +34,12 @@
 │   │   │   ├── CosmeticTab.tsx       # 化妆品柜(CRUD/保质期/缺口分析)
 │   │   │   ├── AccessoryTab.tsx      # 配饰柜(CRUD/缺口分析)
 │   │   │   ├── CrossCabinetReport.tsx  # 跨柜联动总入口
-│   │   │   ├── CrossCabinetMatch.tsx   # 场合统一推荐
+│   │   │   ├── CrossCabinetMatch.tsx   # 场合统一推荐(含「今天这身」完整搭配)
 │   │   │   ├── CrossCabinetSeasonal.tsx# 季节提醒
 │   │   │   ├── CrossCabinetBrand.tsx   # 品牌偏好分析
 │   │   │   ├── CrossCabinetHealth.tsx  # 三柜健康检查
-│   │   │   ├── CustomerForm.tsx      # 门店模式顾客表单(8 字段)
-│   │   │   ├── PersonalProfileForm.tsx# 个人模式深度档案(50+ 字段)
+│   │   │   ├── CustomerForm.tsx      # 门店模式顾客表单(快速采集)
+│   │   │   ├── PersonalProfileForm.tsx# 个人模式深度档案(全量采集)
 │   │   │   ├── RecommendationReport.tsx # 推荐结果展示
 │   │   │   ├── InventoryCard.tsx     # 库存商品卡片
 │   │   │   └── ErrorBoundary.tsx     # 全局错误边界
@@ -68,6 +68,8 @@
 │   ├── services/                     # 服务层
 │   │   ├── recommendEngine.js        # 推荐引擎(规则匹配 + 旧版兼容)
 │   │   ├── profileEnricher.js        # 档案增强(BMI/体型/腰臀比算法)
+│   │   ├── profileArchive.js         # 长期档案读写(身体/面容入库、算出的结论标签、计算前合并)
+│   │   ├── fullLookAdvisor.js        # 「今天这身」(三柜候选拼一套 + 冷暖皮定金属色)
 │   │   ├── dashscopeService.js       # 阿里云 DashScope(面容/试穿,无 Key 降级)
 │   │   ├── horoscopeService.js       # 星座运势(本地模板文案,LLM 链路未实现)
 │   │   └── weatherService.js         # 天气查询
@@ -77,7 +79,7 @@
 │   ├── db/
 │   │   ├── styleai.db                # SQLite 库文件(整目录挂载,勿单文件挂载)
 │   │   ├── init.js                   # 自动建表 + 种子数据 + 管理员 + 清理过期会话
-│   │   ├── schema.sql                # 表结构(21 张表)
+│   │   ├── schema.sql                # 表结构(27 张表)
 │   │   ├── seed.js                   # 种子数据导入(读 seed/ 下两份 JSON)
 │   │   ├── seed/rules.json           # 规则组/条件/动作数据源
 │   │   ├── seed/inventory.json       # 库存分类/商品数据源
@@ -97,6 +99,8 @@
 │   ├── server.js                     # 后端入口
 │   ├── .env / .env.example           # 环境变量(.env 已 gitignore)
 │   └── package.json                  # 含 npm run format 一键格式化
+├── docs/                             # 设计与路线文档
+│   └── 形象设计模型-现状与路线.md      # 数字形象目标 / 实测缺口 / 7 步实施路线(活文档)
 ├── models/                           # 3D 角色模型库(38 个顶层文件夹 / 44 个 .pmx;model_configs 启用 42 个 = 展厅实际数量)
 │   └── 角色名+IP来源/                # 命名规则:`优菈+原神`、`雷电将军+原神`
 ├── Dockerfile                        # 生产镜像(前端 npx vite build + 后端代码 COPY 进镜像)
@@ -134,10 +138,11 @@ cd ../backend-node && npm install --registry=https://registry.npmmirror.com
 | `PORT` | 否 | 默认 5000 |
 | `HOST` | 否 | 默认 127.0.0.1;**容器内必须设 `0.0.0.0`**,否则端口映射与反代都连不上(Dockerfile 已设) |
 | `CORS_ORIGINS` | 否 | 生产环境必填,逗号分隔 |
-| `DASHSCOPE_API_KEY` | 否 | 阿里云通义面容分析/试穿,留空则降级返回模拟数据 |
+| `DASHSCOPE_API_KEY` | 否 | 只影响虚拟试穿:留空时原样返回你上传的人物图并标记 `degraded`;面容分析不读它(接口直接返回 501) |
 | `CUSTOMER_DATA_TTL` | 否 | 顾客临时会话过期秒数,默认 7200(2 小时) |
 
-> 试穿/面容分析只有 DashScope 一条链路,不存在独立的第三方试穿服务变量;星座文案是本地模板,代码未接 LLM(`package.json` 里的 `openai` 依赖无人引用)。
+> 只有虚拟试穿会调 DashScope,不存在独立的第三方试穿服务变量;面容分析接口不碰它,固定返回 501;星座文案是本地模板,代码未接 LLM(`package.json` 里的 `openai` 依赖 `backend-node/**/*.js` 零引用,实测结论)。
+> `openai` 这条依赖**没顺手删**:后端镜像用 `npm ci --omit=dev`,只改 `package.json` 而不同步 `package-lock.json` 会让构建当场失败;本机 `node_modules` 已按决定删掉不重装,锁文件只能单独重解,故列为待办而不是随手改一行。
 
 ### 3. 启动
 
@@ -190,31 +195,32 @@ cd ../backend-node; node --require ../npm-patch.js server.js
 - 展厅取模型走 `/api/models/file/*`(一个角色 = `.pmx` + 多张贴图),该前缀已在限流中豁免;不豁免的话浏览几个模型就吃掉 100 次/15 分钟额度,前端表现为"无法加载人物模型"白屏
 
 ### 规则引擎推荐
-- **匹配机制**:`rule_groups` 先用 `性别 / 适用场景 / 模式 / 类别` 四个字段做 SQL 预筛,再由 `recommendEngine.js` 逐条求值 `rule_conditions`(25 类条件表达式:肤色、脸型、年龄段、地区、身高体重、季节等),命中的组输出 `rule_actions`
-- **5 类别输出**:穿搭 139 / 妆容 45 / 发型 34 / 配饰 30 / 姿势 16
+- **匹配机制**:`rule_groups` 先用 `性别 / 适用场景 / 模式 / 类别` 四个字段做 SQL 预筛,再由 `recommendEngine.js` 逐条求值 `rule_conditions`(31 类条件字段:肤色、脸型、年龄段、地区、身高体重、季节、色彩四季型/十二型、风格型等),命中的组输出 `rule_actions`
+- **5 类别输出**:穿搭 179 / 妆容 61 / 配饰 42 / 发型 38 / 姿势 16
 - **双模式**:
-  - 门店模式:8 字段快速建档,推荐关联库存商品
-  - 个人模式:50+ 字段深度档案,附加 BMI/体型/腰臀比算法分析
-- **规则规模**:264 条规则组 / 790 条件 / 1388 动作,男女双性别全覆盖
+  - 门店模式:少数字段快速建档,推荐关联库存商品;每家店用带 `?store=店名` 的链接进入,样本按店分开
+  - 个人模式:完整深度档案,附加 BMI/体型/腰臀比/色彩十二型/风格型算法分析
+- **规则规模**:336 条规则组 / 862 条件 / 1696 动作,男女双性别全覆盖
 
 ### 个人三柜管理
-- 衣橱 / 化妆品柜(含保质期追踪)/ 配饰柜:单品 CRUD、缺口分析、购物评估
-- 跨柜联动:场合统一推荐、季节提醒、品牌偏好、三柜健康检查
+- 衣橱 / 化妆品柜(含保质期追踪)/ 配饰柜:单品 CRUD(三柜都有「修改」入口,复用新增表单)、缺口分析、购物评估
+- 跨柜联动:场合统一推荐、季节提醒、品牌偏好、三柜健康检查;场合统一推荐会把三柜与长期档案接进同一套评分,拼出「今天这身」(衣服 + 妆容 + 配饰,每件带入选理由)
 
 ### 隐私保护
-- 门店顾客数据:临时会话,TTL 过期自动清理(默认 2 小时)
+- 门店顾客数据:画像存服务端临时会话,TTL 过期自动清理(默认 2 小时)
+- 推荐日志(含输入快照,不含昵称)留存供门店复盘与画像累积;顾客删除会话时连带删除其日志
 - 上传照片存 `uploads/`(已 gitignore)
 - 大字体隐私声明告知
 
 ---
 
-## API 接口(18 个路由模块)
+## API 接口(20 个路由模块:19 个 `/api` + 管理后台)
 
 | 模块 | 路径前缀 | 主要能力 | 鉴权 |
 |------|---------|---------|------|
-| 认证 | `/api/auth` | 游客身份 + 手机号注册/登录 + 管理员登录 | 公开 |
-| 顾客会话 | `/api/customer` | 临时会话 CRUD + 隐私声明 | 公开(按 session 隔离) |
-| 推荐 | `/api/recommend` | 规则引擎推荐(核心 `POST /engine`) | 公开;写历史需 `X-Session-Id` |
+| 认证 | `/api/auth` | 游客身份 + 手机号注册/登录 + 管理员登录 + 后台代重置密码(`GET /admin/accounts` 会员列表 / `POST /admin/reset-password`) | 注册登录公开;两个 admin 端点需管理员 Token |
+| 顾客会话 | `/api/customer` | 临时会话 CRUD + 隐私声明 + 门店归属(建档时带 `store` 店名,当场自动登记,店与店的数据分开) | 公开(按 session 隔离) |
+| 推荐 | `/api/recommend` | 规则引擎推荐(核心 `POST /engine`);原先无人调用的 `GET /` 空端点已删,现回真 404 | 公开;写历史需 `X-Session-Id` |
 | 规则 | `/api/rules` | 规则组/条件/动作 CRUD | 读公开;增删改需管理员 Token |
 | 库存 | `/api/inventory` | 分类 + 商品 CRUD | 读公开;增删改需管理员 Token |
 | 衣橱 | `/api/wardrobe` | CRUD + 缺口分析 + 购物评估 + 智能推荐 | 需 `X-Session-Id`(挂载级) |
@@ -222,36 +228,47 @@ cd ../backend-node; node --require ../npm-patch.js server.js
 | 配饰 | `/api/accessory` | CRUD + 缺口分析 | 需 `X-Session-Id`(挂载级) |
 | 跨柜 | `/api/cross-cabinet` | 场合/季节/品牌/健康 4 端点 | 需 `X-Session-Id`(挂载级) |
 | 3D 模型 | `/api/models` | 列表 + 文件服务 + 管理员扫描/启停 | 列表/文件公开;扫描与启停需管理员 Token |
-| 照片 | `/api/photos` | 上传 | 需 `X-Session-Id` |
-| 面容分析 | `/api/analysis` | DashScope 人脸特征 | 需 `X-Session-Id` |
-| 试穿 | `/api/tryon` | 虚拟试穿 | 需 `X-Session-Id` |
+| 照片 | `/api/photos` | 上传 / 列表 / 删除(删记录连带删掉 `uploads/` 里的文件) | 需 `X-Session-Id` |
+| 面容分析 | `/api/analysis` | `POST /face` 返回 501(照片识别未开放);`GET /body` `GET /archive` 读长期档案;`DELETE /archive` 删本人全部数据(档案 + 标签 + 反馈 + 样本 + 搭配记录 + 照片 + 试穿结果 + 上传文件) | 需 `X-Session-Id`(游客 id 即可,首次访问自动补一条) |
+| 试穿 | `/api/tryon` | `POST /direct` 可用:接 DashScope,缺 Key 时返回原图并带 `degraded:true`;带 `X-Session-Id` 时把两张上传图与结果落库,不带身份只返回图、不落库;`POST /`(异步任务)返回 501 | 需 `X-Session-Id` |
 | 服装识别 | `/api/clothing` | 服装类型识别 | 需 `X-Session-Id`(挂载级) |
 | 天气 | `/api/weather` | 天气查询 | 公开 |
 | 星座 | `/api/horoscope` | 星座运势(本地模板文案) | 公开 |
 | 历史 | `/api/history` | 推荐历史 | 需 `X-Session-Id` |
-| 管理后台 | `/admin` | 后台页面 + 数据库浏览 | 管理员 Token |
+| 支付 | `/api/payment` | 收款码列表 + 保证金凭证上传 + 我的记录 + 管理员审核 | 码表公开;提交与查询需登录态;审核需管理员 Token |
+| 创作者 | `/api/creator` | 作品列表/详情/提交 + 封面上传 + 我的作品 + 管理员审核与加精 | 读公开;提交需登录态;审核需管理员 Token |
+| 管理后台 | `/admin` | 后台页面 + 数据库浏览(顾客会话/推荐日志可按门店筛,归属门店列显示店名) | 管理员 Token |
 
 身份有三类:游客走 `X-Session-Id` 请求头(前端 `api.ts` 自动带,本地生成、2 小时换一次;门店模式下顾客建档时由 `/api/customer` 下发,TTL 到期即失效);正式账号走 `POST /api/auth/register` / `POST /api/auth/login`(手机号 + bcrypt 密码),注册即分配一条固定的服务端 `session_id`,前端存进 `localStorage.style_ai_account` 并**覆盖**游客那条的 2 小时轮换,所以登录后衣橱/历史/作品都跟着手机号走,换浏览器只要重新登录就能找回;账号与身份的对应关系记在 `user_accounts` 表(不往 `users` 老表加列);管理员走 `Authorization: Bearer <token>`(HMAC-SHA256 签名,24 小时有效),对应中间件 `loginRequired` 与 `adminLoginRequired`,均在 `middleware/auth.js`.
+
+注册/登录那一刻,游客身份名下攒的数据会**自动过户**到账号身份(三柜与心愿单/搭配、体型与面容档案、结论标签、规则反馈、推荐样本与记录、照片、试穿结果、保证金凭证、投稿作品一并跟着走;带唯一约束的表若账号那边已有同名项,以账号已有的为准并丢弃游客那条,`merged.dropped` 会回报丢了几条);**已经绑定过手机号的身份不会被并进来**,所以登录第二个账号不会把第一个账号的数据抽走。忘记密码走后台:管理员在「会员账号」一节按手机号代重置新密码,档案/衣橱/作品都不受影响(短信与邮箱自助找回未做,那需要外部通道)。门店模式靠链接上的 `?store=店名` 区分是哪家店(前端记进 `localStorage.style_ai_store`,建档时随请求带上),店名第一次出现就当场登记进 `stores` 表 ⇒ 店数不预设也不封顶,一家店一份数据。
 
 响应统一格式:`{ success: boolean, data?: any, error?: { code, message } }`
 
 ---
 
-## 数据库表(21 张)
+## 数据库表(28 张)
 
 | 表名 | 说明 |
 |------|------|
 | users / admin_users | 用户 / 管理员 |
-| photos / face_features / body_metrics | 照片 / 人脸特征 / 体型指标 |
-| recommendations / recommendation_logs | 推荐记录 / 推荐日志 |
-| tryon_results | 试穿结果 |
+| user_accounts | 正式账号(手机号 + bcrypt 密码)与身份的对应关系 |
+| stores | 门店表(`name` UNIQUE,店名第一次出现时自动登记);`customer_sessions` 与 `recommendation_logs` 各带一个 `store_id` 指向它,同一套系统给任意多家店用时数据按店分开 |
+| photos / face_features / body_metrics | 照片 / 人脸特征 / 体型指标(试穿上传的人物图与服装图也会各登记一条 `photos`,`type='tryon'`) |
+| face_profiles | 面容档案长期表,列名=规则条件字段名(五官手选 + 三庭/眼距) |
+| recommendations / recommendation_logs | 推荐记录 / 推荐日志(含 `input_snapshot` 与 `user_id`) |
+| profile_tags | 算完落库的结论标签(BMI/体型/色系/四季型/十二型/风格型…),同一人同一项覆盖不加行 |
+| feedback_events | 规则反馈「有用/不准」,同一人对同一规则只留最新一次 |
+| tryon_results | 试穿结果,`status` = done / degraded(未生成、返回的是原图);线上 `user_id` 与 `photo_id` 都是 NOT NULL,所以不带 `X-Session-Id` 的请求**不落库** |
 | clothing_items | 服装识别结果 |
-| rule_groups / rule_conditions / rule_actions | 规则引擎三表(264 组 / 790 条件 / 1388 动作) |
+| rule_groups / rule_conditions / rule_actions | 规则引擎三表(本机实测 336 组 / 862 条件 / 1696 动作) |
 | inventory_categories / inventory_products | 库存分类 / 商品 |
 | customer_sessions | 顾客临时会话(TTL 过期清理) |
 | user_wardrobe / user_cosmetics / user_accessories | 个人三柜 |
 | wardrobe_outfits / shopping_wishlist | 搭配组合 / 心愿单 |
 | model_configs | 3D 模型启用配置 |
+| creator_works | 创作者投稿(搭配/化妆/推荐规则三类,带审核与加精状态) |
+| deposits | 保证金凭证与审核状态 |
 
 ---
 

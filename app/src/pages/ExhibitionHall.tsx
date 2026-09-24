@@ -4,9 +4,11 @@ import {
   clearExpiredSession,
   createCustomerSession,
   deleteCustomerSession,
+  deleteProfileArchive,
   getAccount,
   getCustomerRecommendation,
   getEngineRecommendation,
+  getProfileArchive,
   getSessionId,
   loginAccount,
   logoutAccount,
@@ -16,7 +18,7 @@ import {
 } from '../api';
 import type { AccountInfo } from '../api';
 import { useResponsive } from '../hooks/useResponsive';
-import type { CustomerProfile, EngineRecommendation } from '../types';
+import type { CustomerProfile, EngineRecommendation, ProfileTag } from '../types';
 
 // 代码分割:按需加载重型组件,减小首屏 bundle 体积
 const CustomerForm = lazy(() => import('../components/CustomerForm'));
@@ -30,8 +32,8 @@ const RuleBrowser = lazy(() => import('../components/RuleBrowser'));
  * 3D模型展厅 + 形象服务一体化页面
  *
  * 支持双模式:
- *   门店模式(store): 8字段快速采集 → 推荐 → 同步/删除
- *   个人模式(personal): 50+字段深度采集 → 推荐 → 橱柜管理 → 跨柜推荐
+ *   门店模式(store): 少数字段快速采集 → 推荐 → 同步/删除
+ *   个人模式(personal): 完整深度档案 → 推荐 → 橱柜管理 → 跨柜推荐
  */
 
 type Stage = 'standby' | 'mode-select' | 'form' | 'report' | 'rules';
@@ -53,6 +55,12 @@ export default function ExhibitionHall() {
   const [serviceMode, setServiceMode] = useState<ServiceMode>('store');
 
   const [profile, setProfile] = useState<CustomerProfile | null>(null);
+  /** 个人模式:后端长期档案,用于预填深度表单 */
+  const [archiveProfile, setArchiveProfile] = useState<CustomerProfile | null>(null);
+  /** 个人模式:本次计算从档案补进来的字段中文名 */
+  const [archiveUsed, setArchiveUsed] = useState<string[]>([]);
+  /** 个人模式:后端按人存下来的形象标签(算完即存) */
+  const [profileTags, setProfileTags] = useState<ProfileTag[]>([]);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [recommendation, setRecommendation] = useState<EngineRecommendation | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -78,6 +86,8 @@ export default function ExhibitionHall() {
       } else {
         const result = await getEngineRecommendation(p, 'personal');
         setRecommendation(result.recommendation);
+        setArchiveUsed(result.archive?.used_fields || []);
+        setProfileTags(result.archive?.tags || []);
         setSessionId(getSessionId());
       }
       setStage('report');
@@ -92,6 +102,22 @@ export default function ExhibitionHall() {
       setSubmitting(false);
     }
   }, [serviceMode]);
+
+  // 个人模式预填:只给正式账号读档案(游客会话会轮换,预填不可靠)
+  const archiveFetched = useRef(false);
+  useEffect(() => {
+    if (serviceMode !== 'personal' || stage !== 'form') return;
+    if (archiveFetched.current || !getAccount()) return;
+    archiveFetched.current = true;
+    getProfileArchive()
+      .then((res) => {
+        if (res.profile) setArchiveProfile(res.profile);
+        if (res.tags) setProfileTags(res.tags);
+      })
+      .catch(() => {
+        /* 档案读取失败不影响正常填写 */
+      });
+  }, [serviceMode, stage]);
 
   const handleSync = useCallback(async () => {
     if (!sessionId) return;
@@ -123,6 +149,8 @@ export default function ExhibitionHall() {
     setProfile(null);
     setSessionId(null);
     setRecommendation(null);
+    setArchiveUsed([]);
+    setProfileTags([]);
     setSynced(false);
     setReportTab('recommendation');
   }, []);
@@ -213,7 +241,8 @@ export default function ExhibitionHall() {
             <div className="p-4">
               <ServicePanel
                 stage={stage} serviceMode={serviceMode} profile={profile} sessionId={sessionId}
-                recommendation={recommendation} submitting={submitting} syncing={syncing} synced={synced}
+                recommendation={recommendation} archiveProfile={archiveProfile} archiveUsed={archiveUsed} profileTags={profileTags}
+                submitting={submitting} syncing={syncing} synced={synced}
                 reportTab={reportTab}
                 onSubmit={handleSubmit} onSync={handleSync} onDelete={handleDelete}
                 onBack={handleBack} onSelectMode={selectMode} onReset={resetToStandby}
@@ -238,7 +267,8 @@ export default function ExhibitionHall() {
       <div className="split-right h-full overflow-y-auto" style={{ flex: '0 0 420px', background: 'var(--panel)', borderLeft: '1px solid var(--line)', padding: '20px 18px 14px' }}>
         <ServicePanel
           stage={stage} serviceMode={serviceMode} profile={profile} sessionId={sessionId}
-          recommendation={recommendation} submitting={submitting} syncing={syncing} synced={synced}
+          recommendation={recommendation} archiveProfile={archiveProfile} archiveUsed={archiveUsed} profileTags={profileTags}
+          submitting={submitting} syncing={syncing} synced={synced}
           reportTab={reportTab}
           onSubmit={handleSubmit} onSync={handleSync} onDelete={handleDelete}
           onBack={handleBack} onSelectMode={selectMode} onReset={resetToStandby}
@@ -327,12 +357,48 @@ function AccountEntry() {
         tab === 'login'
           ? await loginAccount(phone.trim(), password)
           : await registerAccount(phone.trim(), password, nickname.trim() || undefined);
-      setAccount(next);
+      const { merged, ...accountInfo } = next;
+      setAccount(accountInfo);
       setOpen(false);
       setPassword('');
-      toast.success(tab === 'login' ? '已登录' : '注册成功,已为你保留这份身份');
+      const movedCount = merged
+        ? Object.values(merged.moved).reduce((a: number, b) => a + b, 0)
+        : 0;
+      const base = tab === 'login' ? '已登录' : '注册成功,已为你保留这份身份';
+      const withData = movedCount
+        ? `${base};之前游客期间攒的 ${movedCount} 条记录已并入本账号${
+            merged && merged.dropped ? `,另有 ${merged.dropped} 条与账号里已有的重复,以已有的为准` : ''
+          }`
+        : base;
+      toast.success(withData);
     } catch (e) {
       setError(e instanceof Error ? e.message : '操作失败,请重试');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  /** 兑现隐私承诺:可随时删掉本机档案与属于本人的全部记录(含上传的照片文件) */
+  const removeArchive = async () => {
+    if (busy) return;
+    if (!window.confirm('将删除你存下的身体档案、面容档案、形象标签、点过的建议评价、推荐与搭配记录、试穿结果,以及上传过的照片和它在服务器上的文件.删除后无法恢复,确定继续?')) return;
+    setBusy(true);
+    try {
+      const r = await deleteProfileArchive();
+      const deleted = [
+        `身体档案 ${r.body} 份`,
+        `面容档案 ${r.face} 份`,
+        `形象标签 ${r.tags} 条`,
+        `建议评价 ${r.feedback} 条`,
+        `推荐记录 ${r.logs} 条`,
+        `搭配记录 ${r.records} 条`,
+        `试穿结果 ${r.tryon} 条`,
+        `照片 ${r.photos} 张`,
+      ].join('、');
+      toast.success(`已删除:${deleted}${r.files ? `,同时清掉 ${r.files} 个文件` : ''}${r.files_failed ? `;${r.files_failed} 个文件没删掉,请联系管理员` : ''}`);
+      setOpen(false);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : '删除失败,请重试');
     } finally {
       setBusy(false);
     }
@@ -405,6 +471,22 @@ function AccountEntry() {
                 >
                   退出登录
                 </button>
+                <p className="text-xs" style={{ color: '#a8b8c4', lineHeight: '1.6' }}>
+                  下面这项删除的是我们替你记住的身体与面容档案、以及挂在账号下的推荐记录,删完仍可随时重新填写试用.
+                </p>
+                <button
+                  onClick={removeArchive}
+                  disabled={busy}
+                  className="w-full py-2 text-sm"
+                  style={{
+                    ...panelStyle,
+                    color: 'var(--danger)',
+                    cursor: busy ? 'not-allowed' : 'pointer',
+                    opacity: busy ? 0.6 : 1,
+                  }}
+                >
+                  删除我的形象档案与记录
+                </button>
               </div>
             ) : (
               <div className="space-y-3">
@@ -453,6 +535,11 @@ function AccountEntry() {
                     onChange={e => setNickname(e.target.value)}
                   />
                 )}
+                {tab === 'login' && (
+                  <p className="text-xs" style={{ color: 'var(--muted)', lineHeight: '1.6' }}>
+                    忘记密码?找门店管理员或本站管理员,报手机号即可重置;你的档案、衣橱和作品都不会受影响.
+                  </p>
+                )}
 
                 <button
                   onClick={submit}
@@ -490,6 +577,12 @@ interface ServicePanelProps {
   profile: CustomerProfile | null;
   sessionId: string | null;
   recommendation: EngineRecommendation | null;
+  /** 个人模式:后端长期档案,用于深度表单预填 */
+  archiveProfile: CustomerProfile | null;
+  /** 个人模式:本次计算从档案补进来的字段中文名 */
+  archiveUsed: string[];
+  /** 个人模式:后端按人存下来的形象标签 */
+  profileTags: ProfileTag[];
   submitting: boolean;
   syncing: boolean;
   synced: boolean;
@@ -508,7 +601,8 @@ interface ServicePanelProps {
 
 function ServicePanel(props: ServicePanelProps) {
   const { stage, serviceMode, profile, sessionId, recommendation, submitting, syncing, synced, reportTab,
-    onSubmit, onSync, onDelete, onBack, onSelectMode, onReset, onReportTabChange, onStageChange, compact } = props;
+    onSubmit, onSync, onDelete, onBack, onSelectMode, onReset, onReportTabChange, onStageChange, compact,
+    archiveProfile, archiveUsed, profileTags } = props;
 
   // 头部
   const Header = (
@@ -562,7 +656,7 @@ function ServicePanel(props: ServicePanelProps) {
               <span className="text-2xl">🏪</span>
               <div>
                 <h3 className="text-sm font-semibold" style={{ color: '#8ef5d8' }}>门店快速模式</h3>
-                <p className="text-xs" style={{ color: '#b8c7d4' }}>8个字段 · 快速推荐 · 门店同步</p>
+                <p className="text-xs" style={{ color: '#b8c7d4' }}>少填快算 · 快速推荐 · 门店同步</p>
               </div>
             </div>
             <p className="text-xs" style={{ color: '#a8b8c4', lineHeight: '1.6' }}>
@@ -594,7 +688,7 @@ function ServicePanel(props: ServicePanelProps) {
               <span className="text-2xl">📱</span>
               <div>
                 <h3 className="text-sm font-semibold" style={{ color: '#d4a5ff' }}>个人深度模式</h3>
-                <p className="text-xs" style={{ color: '#b8c7d4' }}>50+字段 · 算法分析 · 橱柜管理</p>
+                <p className="text-xs" style={{ color: '#b8c7d4' }}>完整档案 · 算法分析 · 橱柜管理</p>
               </div>
             </div>
             <p className="text-xs" style={{ color: '#a8b8c4', lineHeight: '1.6' }}>
@@ -652,7 +746,12 @@ function ServicePanel(props: ServicePanelProps) {
           {serviceMode === 'store' ? (
             <CustomerForm initial={profile || undefined} onSubmit={onSubmit} submitting={submitting} compact={compact} />
           ) : (
-            <PersonalProfileForm initial={profile || undefined} onSubmit={onSubmit} submitting={submitting} compact={compact} />
+            <PersonalProfileForm
+              initial={profile || (serviceMode === 'personal' ? archiveProfile : null) || undefined}
+              onSubmit={onSubmit}
+              submitting={submitting}
+              compact={compact}
+            />
           )}
         </Suspense>
       </div>
@@ -689,6 +788,28 @@ function ServicePanel(props: ServicePanelProps) {
             className={`tab-btn ${reportTab === 'rules' ? 'active' : ''}`}
           >📖 规则说明</button>
         </div>
+
+        {/* 长期档案生效提示:本次没填却用上了的字段 */}
+        {serviceMode === 'personal' && reportTab === 'recommendation' && archiveUsed.length > 0 && (
+          <div className="mb-3" style={{ fontSize: '12px', color: 'var(--muted)' }}>
+            本次有 {archiveUsed.length} 项沿用了你的历史档案：{archiveUsed.join('、')}
+          </div>
+        )}
+
+        {/* 形象标签:每次算完存进库里的那一份,关掉页面也还在 */}
+        {serviceMode === 'personal' && reportTab === 'recommendation' && profileTags.length > 0 && (
+          <div className="mb-3 flex flex-wrap items-center gap-1.5" style={{ fontSize: '12px' }}>
+            <span style={{ color: 'var(--muted)' }}>已存入你的形象标签：</span>
+            {profileTags.map((t) => (
+              <span
+                key={t.key}
+                style={{ color: 'var(--text)', border: '1px solid var(--line)', borderRadius: 999, padding: '1px 8px' }}
+              >
+                {t.label} {t.value}
+              </span>
+            ))}
+          </div>
+        )}
 
         {/* 推荐报告 */}
         {reportTab === 'recommendation' && (

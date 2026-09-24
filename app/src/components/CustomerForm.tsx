@@ -19,6 +19,22 @@ const SKIN_TONE_OPTIONS = [
   { value: '自然', label: '自然', desc: '中性肤色' },
 ] as const;
 
+/** 深浅档:与个人表单 SKIN_TONE_DETAIL_OPTIONS 同一套值,冷暖+深浅合起来才能算色彩四季型 */
+const SKIN_TONE_DETAIL_OPTIONS = [
+  { value: '白皙', label: '白皙' },
+  { value: '自然白', label: '自然白' },
+  { value: '偏黄', label: '偏黄' },
+  { value: '小麦色', label: '小麦色' },
+  { value: '古铜色', label: '古铜色' },
+] as const;
+
+/** 纯度档:值与后端 CHROMA_LEVEL 一字一样,冷暖+深浅定出四季后再用这根轴细分到十二型 */
+const COLOR_CHROMA_OPTIONS = [
+  { value: '净亮', label: '净亮' },
+  { value: '柔雾', label: '柔雾' },
+  { value: '中间', label: '中间' },
+] as const;
+
 const FACE_SHAPE_OPTIONS = [
   { value: '圆脸', label: '圆脸', icon: '⭕' },
   { value: '方脸', label: '方脸', icon: '⬜' },
@@ -33,6 +49,20 @@ const BODY_TYPE_OPTIONS = [
   { value: '偏胖', label: '偏胖' },
   { value: '梨形', label: '梨形' },
   { value: '苹果形', label: '苹果形' },
+] as const;
+
+/** 骨架量感:值与后端 FRAME_LEVEL 一字一样,与线条倾向合起来才判得出风格型 */
+const FRAME_SIZE_OPTIONS = [
+  { value: '小巧', label: '小巧' },
+  { value: '适中', label: '适中' },
+  { value: '大气', label: '大气' },
+] as const;
+
+/** 线条倾向:值与后端 LINE_LEVEL 一字一样 */
+const LINE_QUALITY_OPTIONS = [
+  { value: '偏直线', label: '偏直线' },
+  { value: '均衡', label: '均衡' },
+  { value: '偏曲线', label: '偏曲线' },
 ] as const;
 
 const AGE_RANGE_OPTIONS = [
@@ -72,8 +102,12 @@ export default function CustomerForm({ initial, onSubmit, submitting, compact }:
     height: initial?.height,
     weight: initial?.weight,
     skin_tone: initial?.skin_tone,
+    skin_tone_detail: initial?.skin_tone_detail,
+    color_chroma: initial?.color_chroma,
     face_shape: initial?.face_shape,
     body_type: initial?.body_type,
+    frame_size: initial?.frame_size,
+    line_quality: initial?.line_quality,
     scenario: initial?.scenario || '通勤',
   });
 
@@ -88,6 +122,32 @@ export default function CustomerForm({ initial, onSubmit, submitting, compact }:
 
   const gap = compact ? 'gap-2' : 'gap-3';
   const sectionClass = compact ? 'mb-4' : 'mb-5';
+
+  /** 选填的分类轴:一行标签 + 一句怎么自判的提示 + 三个按钮 */
+  const renderTriRow = (
+    label: string,
+    hint: string,
+    options: ReadonlyArray<{ value: string; label: string }>,
+    selected: string | undefined,
+    onPick: (value: string) => void,
+  ) => (
+    <>
+      <div className="text-xs mt-3 mb-2" style={{ opacity: 0.7 }}>{label}</div>
+      <div className="text-[10px] mb-2" style={{ color: 'var(--muted)' }}>{hint}</div>
+      <div className={`grid grid-cols-3 ${gap}`}>
+        {options.map(opt => (
+          <button
+            key={opt.value}
+            onClick={() => onPick(opt.value)}
+            className={`opt-btn ${selected === opt.value ? 'active' : ''}`}
+            style={{ textAlign: 'center', padding: '8px 4px', fontSize: '12px' }}
+          >
+            {opt.label}
+          </button>
+        ))}
+      </div>
+    </>
+  );
 
   return (
     <div className="space-y-1">
@@ -158,7 +218,7 @@ export default function CustomerForm({ initial, onSubmit, submitting, compact }:
 
       {/* 肤色 */}
       <section className={sectionClass} style={{ borderBottom: '1px solid var(--line)', paddingBottom: '14px', marginBottom: '14px' }}>
-        <div className="section-title">肤色基调</div>
+        <div className="section-title">肤色冷暖</div>
         <div className={`flex ${gap}`}>
           {SKIN_TONE_OPTIONS.map(opt => (
             <button
@@ -172,6 +232,28 @@ export default function CustomerForm({ initial, onSubmit, submitting, compact }:
             </button>
           ))}
         </div>
+        <div className="text-xs mt-3 mb-2" style={{ opacity: 0.7 }}>
+          深浅（选填，与冷暖一起判定色彩四季型）
+        </div>
+        <div className={`grid grid-cols-5 ${gap}`}>
+          {SKIN_TONE_DETAIL_OPTIONS.map(opt => (
+            <button
+              key={opt.value}
+              onClick={() => update('skin_tone_detail', opt.value)}
+              className={`opt-btn ${profile.skin_tone_detail === opt.value ? 'active' : ''}`}
+              style={{ textAlign: 'center', padding: '8px 4px' }}
+            >
+              <div className="text-xs">{opt.label}</div>
+            </button>
+          ))}
+        </div>
+        {renderTriRow(
+          '色彩纯度（选填，定到色彩十二型）',
+          '净亮＝穿饱和亮色更精神；柔雾＝穿灰调莫兰迪更耐看；拿不准选中间',
+          COLOR_CHROMA_OPTIONS,
+          profile.color_chroma,
+          (v) => update('color_chroma', v as CustomerProfile['color_chroma']),
+        )}
       </section>
 
       {/* 脸型 */}
@@ -207,6 +289,20 @@ export default function CustomerForm({ initial, onSubmit, submitting, compact }:
             </button>
           ))}
         </div>
+        {renderTriRow(
+          '骨架量感（选填，定风格型）',
+          '看手腕与肩：骨点细窄＝小巧，匀称＝适中，宽厚＝大气',
+          FRAME_SIZE_OPTIONS,
+          profile.frame_size,
+          (v) => update('frame_size', v as CustomerProfile['frame_size']),
+        )}
+        {renderTriRow(
+          '身体线条（选填）',
+          '肩平腰线直＝偏直线，有明显腰臀差＝偏曲线，两者都不突出＝均衡',
+          LINE_QUALITY_OPTIONS,
+          profile.line_quality,
+          (v) => update('line_quality', v as CustomerProfile['line_quality']),
+        )}
       </section>
 
       {/* 身高体重(选填,填了才有 BMI/体型数字) */}

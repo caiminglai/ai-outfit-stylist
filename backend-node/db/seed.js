@@ -29,14 +29,36 @@ function loadSeedData() {
   }
 }
 
+/** 取表行数,表还不存在(空库首次建)时按 0 算 */
+function countRows(db, table) {
+  const exists = db
+    .prepare('SELECT 1 FROM sqlite_master WHERE type = ? AND name = ?')
+    .get('table', table)
+  if (!exists) return 0
+  return db.prepare(`SELECT COUNT(*) AS cnt FROM ${table}`).get().cnt
+}
+
 /**
  * 导入种子数据
- * @param {Database} db
+ * @param {import('better-sqlite3').Database} db
  */
 function seedAll(db) {
   const data = loadSeedData()
 
   const { rule_groups, rule_conditions, rule_actions, inventory_categories } = data
+
+  // 这个脚本是"全删再全建",只适合空库首次灌数据:
+  // - 会连门店后台手工加过/关掉的规则一起删掉
+  // - 顾客点过一次"有用/不准"之后 feedback_events 有外键引用,删除会当场报约束失败
+  // 新增规则请放 db/seed/rules-*.json,由 db/applyRuleSeeds.js 在启动时只补缺的
+  const existingGroups = countRows(db, 'rule_groups')
+  const existingFeedback = countRows(db, 'feedback_events')
+  if ((existingGroups > 0 || existingFeedback > 0) && process.env.SEED_FORCE !== '1') {
+    throw new Error(
+      `库里已有 ${existingGroups} 条规则、${existingFeedback} 条反馈,全删重建会一起清掉。` +
+        `确认要重建请加 SEED_FORCE=1(先备份 styleai.db)。新增规则请写进 db/seed/rules-*.json,启动时会自动只补缺的。`,
+    )
+  }
 
   // 使用事务批量插入
   const insertGroup = db.prepare(`

@@ -42,6 +42,9 @@ const db = require('./db/init');
 // 日志工具(同时写控制台 + 文件,按日期轮转,保留 7 天)
 const { log: logMsg, error: logErr } = require('./utils/logger');
 
+// 扫描时不入库的目录判定(zip备份/残缺模型/_bak_*),文件下发时同样拦掉
+const { isSkippedPath } = require('./utils/model-utils');
+
 // 中间件
 const { requestLogger } = require('./middleware/logger');
 const { loginRequired } = require('./middleware/auth');
@@ -202,6 +205,12 @@ if (fs.existsSync(modelsDir)) {
         return res
           .status(400)
           .json({ success: false, error: { code: 'BAD_REQUEST', message: '非法路径' } });
+      }
+      // 扫描时不入库的目录一律不下发:express.static 会把 models/ 下任何文件直接送出去
+      if (isSkippedPath(decoded)) {
+        return res
+          .status(404)
+          .json({ success: false, error: { code: 'NOT_FOUND', message: '文件不存在' } });
       }
       next();
     },

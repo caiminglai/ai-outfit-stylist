@@ -12,7 +12,7 @@ const path = require('path')
 const fs = require('fs')
 const db = require('../db/init')
 const { sendSuccess, sendError } = require('../utils/response')
-const { loginRequired } = require('../middleware/auth')
+const { loginRequired, optionalUser } = require('../middleware/auth')
 const { upload, validateImage } = require('../middleware/upload')
 const { rateLimit } = require('../middleware/rateLimit')
 const dashscope = require('../services/dashscopeService')
@@ -77,23 +77,32 @@ router.post(
       }
 
       // 降级模式：返回人物照片作为结果
-      if (!resultUrl) {
+      // 注意 virtualTryon 在未配置 API Key 时不报错，而是原样返回人物图，
+      // 所以"结果等于原图"也必须算降级，否则会把原图说成试穿成功
+      if (!resultUrl || resultUrl === personUrl) {
         resultUrl = personUrl
         degraded = true
       }
 
       // 保存试穿结果到数据库
-      let resultId = null
-      try {
-        const result = db
-          .prepare(
+      // 线上这张表的 user_id / photo_id 都是 NOT NULL(实测 PRAGMA table_info,与 schema.sql 的宽松声明不一致,
+      // 而 CREATE TABLE IF NOT EXISTS 不会改动已存在的表),所以 photo_id 只能写真实值:
+      // 先按 /api/photos 同一套写法把两张上传图都登记成 photos 记录,再让结果引用人物那张。
+      // 服装图也必须登记,不登记就成了「删除我的数据」清不掉的孤儿文件。
+      // 没有可归属身份的请求(不带 X-Session-Id)跳过落库——图已经返回了,但不假装存住了。
+      const user = optionalUser(req)
+      if (user) {
+        try {
+          const insertPhoto = db.prepare('INSERT INTO photos (user_id, url, type) VALUES (?, ?, ?)')
+          const personPhoto = insertPhoto.run(user.id, personUrl, 'tryon')
+          insertPhoto.run(user.id, garmentUrl, 'tryon')
+          db.prepare(
             `INSERT INTO tryon_results (user_id, photo_id, result_url, status)
-         VALUES (?, ?, ?, ?)`,
-          )
-          .run(0, 0, resultUrl, 'done')
-        resultId = result.lastInsertRowid
-      } catch {
-        // tryon_results 表可能不存在，不影响主流程
+             VALUES (?, ?, ?, ?)`,
+          ).run(user.id, personPhoto.lastInsertRowid, resultUrl, degraded ? 'degraded' : 'done')
+        } catch (e) {
+          console.warn('[试穿] 结果落库失败:', e.message)
+        }
       }
 
       return sendSuccess(
@@ -105,7 +114,7 @@ router.post(
           garment_image: garmentUrl,
           degraded,
         },
-        '虚拟试穿完成',
+        degraded ? '未接入试穿模型，返回的是你的原图' : '虚拟试穿完成',
       )
     } catch (err) {
       console.error('[试穿] 直接试穿失败:', err)
@@ -114,10 +123,12 @@ router.post(
   },
 )
 
-/** 提交虚拟试穿（需登录） */
-router.post('/', loginRequired, (req, res) => {
-  // TODO: 调用 DashScope 虚拟试穿 API
-  return sendSuccess(res, { status: 'pending' })
+/**
+ * 异步试穿任务（未开通）
+ * 与 POST /api/analysis/face 同一口径：功能没实现就别回 200 假装排队中。
+ */
+router.post('/', loginRequired, (_req, res) => {
+  return sendError(res, '异步试穿任务尚未开通，请直接使用 /api/tryon/direct 上传照片试穿', 501)
 })
 
 /** 获取试穿结果 */

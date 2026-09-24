@@ -33,8 +33,12 @@ const FIELD_LABELS = {
   main_goal: '主要目标',
   posture: '体态',
   eye_size: '眼睛大小',
+  eye_shape: '眼型',
   nose_bridge: '鼻梁',
   lip_thickness: '唇厚',
+  face_ratio: '三庭比例',
+  eye_spacing: '眼距',
+  leg_length: '腿长',
   season: '季节',
   age_range: '年龄段',
   occasion: '场合',
@@ -46,6 +50,17 @@ const FIELD_LABELS = {
   shoulder_type: '肩型',
   skin_tone_detail: '肤色细分',
   allergy_metal: '过敏金属',
+  // ↓ 表单新收的三根美学轴(都是分类值,不是数值,所以可以当条件)
+  color_chroma: '色彩纯度',
+  frame_size: '骨架量感',
+  line_quality: '线条倾向',
+  // ↓ 第二批美学规则用得到的"算出来的"分类字段(只有分类值,不是数值,所以可以当条件)
+  color_season: '色彩四季型（算出）',
+  color_season_12: '色彩十二型（算出）',
+  kibbe_type: '风格型（算出）',
+  leg_proportion: '腿身比（算出）',
+  shoulder_frame: '肩宽比（算出）',
+  waist_definition: '腰线（算出）',
 };
 
 /**

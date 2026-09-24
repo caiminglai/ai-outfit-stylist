@@ -33,14 +33,7 @@ function ensureGuestUser(sessionId) {
  * 游客登录验证中间件
  */
 function loginRequired(req, res, next) {
-  let user = getCurrentUser(req)
-  if (!user) {
-    const sessionId = getSessionId(req)
-    // 只接受与 UUID / sess_ 同形状的 id，挡住脚本乱填产生的垃圾行
-    if (typeof sessionId === 'string' && /^[A-Za-z0-9_-]{8,64}$/.test(sessionId)) {
-      user = ensureGuestUser(sessionId)
-    }
-  }
+  const user = optionalUser(req)
   if (!user) {
     return res.status(401).json({
       success: false,
@@ -50,6 +43,22 @@ function loginRequired(req, res, next) {
   }
   req.user = user
   next()
+}
+
+/**
+ * 尽力识别当前用户：识别不出来就返回 null（不拦请求）
+ * 推荐引擎用它按人读写长期档案，同时保持匿名可用
+ */
+function optionalUser(req) {
+  let user = getCurrentUser(req)
+  if (!user) {
+    const sessionId = getSessionId(req)
+    // 只接受与 UUID / sess_ 同形状的 id，挡住脚本乱填产生的垃圾行
+    if (typeof sessionId === 'string' && /^[A-Za-z0-9_-]{8,64}$/.test(sessionId)) {
+      user = ensureGuestUser(sessionId)
+    }
+  }
+  return user || null
 }
 
 /**
@@ -144,6 +153,7 @@ function adminLoginRequired(req, res, next) {
 module.exports = {
   getSessionId,
   getCurrentUser,
+  optionalUser,
   loginRequired,
   generateAdminToken,
   verifyAdminToken,

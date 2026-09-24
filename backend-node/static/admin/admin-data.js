@@ -134,6 +134,29 @@ document.getElementById('data-per-page').addEventListener('change', function() {
 document.getElementById('data-refresh').addEventListener('click', function() {
   if (State.currentTable) loadTableData();
 });
+document.getElementById('data-store-filter').addEventListener('change', function() {
+  State.storeId = this.value;
+  State.currentPage = 1;
+  if (State.currentTable) loadTableData();
+});
+
+function renderStoreFilter(data) {
+  var select = document.getElementById('data-store-filter');
+  if (!data.store_filter) {
+    State.stores = [];
+    select.style.display = 'none';
+    select.innerHTML = '';
+    return;
+  }
+  State.stores = data.stores || [];
+  var html = '<option value="">全部门店</option>';
+  State.stores.forEach(function(s) {
+    html += '<option value="' + s.id + '">' + escapeHtml(s.name) + ' (#' + s.id + ')</option>';
+  });
+  select.innerHTML = html;
+  select.value = data.store_id === null || data.store_id === undefined ? '' : String(data.store_id);
+  select.style.display = '';
+}
 
 function loadTableData() {
   var container = document.getElementById('data-container');
@@ -148,9 +171,11 @@ function loadTableData() {
   pagination.style.display = 'none';
 
   var url = API_BASE + '/data/' + State.currentTable + '?page=' + State.currentPage + '&per_page=' + State.perPage;
+  if (State.storeId) url += '&store_id=' + encodeURIComponent(State.storeId);
 
   fetchJSON(url).then(function(res) {
     if (!res.success) throw new Error(res.message);
+    renderStoreFilter(res.data);
     renderTableData(res.data);
   }).catch(function(e) {
     container.className = '';
@@ -207,6 +232,11 @@ function renderTableData(data) {
         val = '<span style="color:var(--muted)">空</span>';
       } else if (typeof val === 'object') {
         val = '<span style="color:var(--purple)">' + escapeHtml(JSON.stringify(val).slice(0, 80)) + '...</span>';
+      } else if (c === 'store_id') {
+        // 归属门店列：换成店名，小字带 ID 便于核对（店名列表随数据接口一起返回）
+        var store = State.stores.find(function(s) { return s.id === val; });
+        val = '<span style="color:var(--accent)">' + escapeHtml(store ? store.name : '未登记门店') + '</span>' +
+              '<span style="color:var(--muted);font-size:10px"> (#' + escapeHtml(val) + ')</span>';
       } else {
         // 翻译英文枚举值为中文
         var translated = translateValue(State.currentTable, c, val);

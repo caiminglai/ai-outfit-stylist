@@ -190,3 +190,31 @@ test('buildRecommendation: 推荐结果按优先级排序', () => {
     assert.ok(Array.isArray(r.穿搭), '穿搭应是数组')
   }
 })
+
+// ============================================================
+// 场合别名归一(老规则把 scenario 写成表单原始选项)
+// ============================================================
+test('buildRecommendation: 场合写成"上班通勤"的老规则现在能命中(personal)', () => {
+  const profile = { gender: '女', occasion: '上班通勤', skin_tone: '暖皮', face_shape: '圆脸' }
+  const r = buildRecommendation(profile, 'personal', false)
+  const names = r['穿搭'].map((x) => x.group_name)
+  assert.ok(
+    names.some((n) => n && n.includes('上班通勤')),
+    `occasion=上班通勤 应命中该场合的规则,实际: ${names.join(' / ')}`,
+  )
+})
+
+test('buildRecommendation: 场合写成"派对"的老规则在聚会场景能命中(personal)', () => {
+  const profile = { gender: '女', scenario: '聚会', skin_tone: '暖皮', face_shape: '圆脸' }
+  const r = buildRecommendation(profile, 'personal', false)
+  const outfitNames = r['穿搭'].map((x) => x.group_name)
+  const makeupNames = r['妆容'].map((x) => x.group_name)
+  assert.ok(
+    outfitNames.some((n) => n && n.includes('派对')),
+    `scenario=聚会 应命中"派对"那组穿搭,实际: ${outfitNames.join(' / ')}`,
+  )
+  assert.ok(
+    makeupNames.some((n) => n && n.includes('派对')),
+    `scenario=聚会 应命中"派对"那组妆容,实际: ${makeupNames.join(' / ')}`,
+  )
+})

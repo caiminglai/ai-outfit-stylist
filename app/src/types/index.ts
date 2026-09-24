@@ -14,6 +14,13 @@ export interface ApiResponse<T = unknown> {
 // 顾客档案 + 规则引擎推荐 + 个人橱柜管理相关类型
 // ============================================================
 
+/** 后端按人存下来的形象标签(算出来的结论,不是本人填的条件) */
+export interface ProfileTag {
+  key: string;
+  label: string;
+  value: string;
+}
+
 /** 顾客档案(手动填写) */
 export interface CustomerProfile {
   // 基础信息
@@ -27,6 +34,8 @@ export interface CustomerProfile {
   bust?: number;
   waist?: number;
   hip?: number;
+  /** 腿长(cm,选填):档案表列名 leg_length_cm */
+  leg_length?: number;
 
   // 门店模式字段
   skin_tone?: '暖皮' | '冷皮' | '自然';
@@ -39,6 +48,8 @@ export interface CustomerProfile {
 
   // 个人模式扩展字段(50+)
   skin_tone_detail?: '白皙' | '自然白' | '偏黄' | '小麦色' | '古铜色';
+  /** 色彩纯度(选填):冷暖+深浅算出四季后再用这根轴细分到十二型;值与后端 CHROMA_LEVEL 键一致 */
+  color_chroma?: '净亮' | '柔雾' | '中间';
   body_type_detail?: '沙漏型' | '梨形' | '苹果型' | '直筒型' | '倒三角型';
   bmi_level?: '偏瘦' | '正常' | '偏胖' | '肥胖';
   preferred_style?: string;
@@ -49,12 +60,20 @@ export interface CustomerProfile {
   weight_wish?: '想显瘦' | '想丰满一些' | '保持就好';
   neck_length?: '短' | '中' | '长';
   shoulder_type?: '窄肩' | '标准肩' | '宽肩';
+  /** 骨架量感(选填):风格型第一轴;值与后端 FRAME_LEVEL 键一致 */
+  frame_size?: '小巧' | '适中' | '大气';
+  /** 线条倾向(选填):风格型第二轴;值与后端 LINE_LEVEL 键一致 */
+  line_quality?: '偏直线' | '均衡' | '偏曲线';
 
   // 五官细节
   eye_size?: '大' | '中' | '小';
   eye_shape?: '圆眼' | '杏眼' | '丹凤眼' | '下垂眼';
   nose_height?: '高' | '中' | '低';
   lip_thickness?: '厚' | '中' | '薄';
+  /** 三庭比例(纵向):额头/鼻/下巴三段谁偏长,驱动"三庭五眼比例"板块 */
+  face_ratio?: '比例均衡' | '上庭偏长' | '中庭偏长' | '下庭偏长';
+  /** 眼距(横向):两侧内眼角间距相对眼宽 */
+  eye_spacing?: '眼距偏宽' | '眼距适中' | '眼距偏窄';
 
   // 偏好
   season?: '春' | '夏' | '秋' | '冬';
@@ -89,6 +108,8 @@ export interface RuleRecommendationItem {
   group_name: string;
   priority: number;
   score: number;
+  /** 反馈对这条规则得分的加减量(好评为正、不准为负,最多 ±3) */
+  feedback?: number;
   /** 可解释性说明:这条推荐命中了哪些规则条件(中文人话) */
   explanation?: RecommendationExplanation;
   [key: string]: unknown;
@@ -409,11 +430,40 @@ export interface CrossCabinetRecommendation {
     cosmetic_count: number;
     accessory_count: number;
   };
+  /** 三柜拼出来的一套（"今天这身"） */
+  full_look?: FullLook;
+  /** 该配金还是银，没有可靠依据时后端不给这个字段 */
+  metal?: { color: string; basis: string } | null;
+  /** 本次计算里长期档案的参与情况 */
+  archive?: { used_fields: string[]; tags: ProfileTag[] };
+}
+
+/** 一套搭配里的单件 */
+export interface FullLookPiece {
+  /** 槽位：上装 / 下装 / 一件成套 / 外搭 / 底妆 / 唇色 / 颈饰 / 耳饰 */
+  slot: string;
+  name: string;
+  category: string;
+  score?: number;
+  /** 这一件自己的入选依据 */
+  why: string[];
+}
+
+/** 完整形象指导：三柜各出候选后拼成的一套 */
+export interface FullLook {
+  pieces: FullLookPiece[];
+  occasion: string;
+  /** 件数够不够算一套 */
+  complete: boolean;
+  /** 缺的是哪一类（柜子里没有这一类才会缺） */
+  missing_parts: string[];
+  note: string;
 }
 
 /** 橱柜匹配项 */
 export interface CabinetMatchedItem {
   name: string;
+  category?: string;
   score?: number;
   /** 得分依据,如 ['当季','场合匹配'] */
   reasons?: string[];
@@ -576,4 +626,6 @@ export interface TryonResult {
   category: string;
   person_image: string;
   garment_image: string;
+  /** true = 未接入试穿模型，result_url 就是原图 */
+  degraded?: boolean;
 }

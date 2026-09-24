@@ -28,6 +28,9 @@ function ensureSchema(done) {
     RULE_SCHEMA = res.data;
     RULE_SCHEMA.fields.forEach(function(p) { FIELD_LABEL_MAP[p.value] = p.label; });
     RULE_SCHEMA.actionTypes.forEach(function(p) { ACTION_LABEL_MAP[p.value] = p.label; });
+    // 数据浏览器也翻译这两列：以后端标签为准合并，新增条件字段不用再改前端
+    VALUE_LABELS['rule_conditions.field'] = Object.assign({}, VALUE_LABELS['rule_conditions.field'], FIELD_LABEL_MAP);
+    VALUE_LABELS['rule_actions.action_type'] = Object.assign({}, VALUE_LABELS['rule_actions.action_type'], ACTION_LABEL_MAP);
     fillOptions('filter-category', RULE_SCHEMA.categories, '全部类别');
     fillOptions('filter-scenario', RULE_SCHEMA.scenarios, '全部场景');
     done();

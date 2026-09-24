@@ -101,7 +101,12 @@ function shouldSkipDir(dirName) {
   return dirName.startsWith('_bak_') || SKIP_DIRS.has(dirName)
 }
 
+/** 相对 models/ 的路径中任一段命中跳过目录即返回 true(顶层与嵌套都拦) */
+function isSkippedPath(relPath) {
+  return String(relPath).split(/[/\\]+/).some((seg) => seg && shouldSkipDir(seg))
+}
+
 // 残缺模型文件夹名(供 init.js 清理记录时判断 folder 前缀用)
 const BROKEN_DIR_NAME = '残缺模型'
 
-module.exports = { SOURCE_MAP, ICON_MAP, findPmxFiles, parseFolderName, shouldSkipDir, SKIP_DIRS, BROKEN_DIR_NAME }
+module.exports = { SOURCE_MAP, ICON_MAP, findPmxFiles, parseFolderName, shouldSkipDir, isSkippedPath, SKIP_DIRS, BROKEN_DIR_NAME }

@@ -17,6 +17,7 @@ import type {
 import {
   listAccessories,
   addAccessory,
+  updateAccessory,
   deleteAccessory,
   getAccessoryGaps,
   suggestAccessories,
@@ -103,6 +104,8 @@ export default function AccessoryTab({ profile, compact }: AccessoryTabProps) {
   const [suggestionsLoading, setSuggestionsLoading] = useState(false);
 
   const [form, setForm] = useState(ACCESSORY_FORM_DEFAULT);
+  /** 非空 = 表单正在改这一条;null = 新增 */
+  const [editingId, setEditingId] = useState<number | null>(null);
 
   /* ---------- 数据加载 ---------- */
 
@@ -122,28 +125,53 @@ export default function AccessoryTab({ profile, compact }: AccessoryTabProps) {
     fetchItems();
   }, [fetchItems]);
 
-  /* ---------- 添加 ---------- */
+  /* ---------- 表单开关与提交 ---------- */
 
-  const handleAdd = async () => {
-    const { name, category, material, metal_color, price } = form;
-    if (!name.trim()) {
+  const closeForm = () => {
+    setShowAdd(false);
+    setEditingId(null);
+    setForm(ACCESSORY_FORM_DEFAULT);
+  };
+
+  const openEdit = (item: AccessoryItem) => {
+    if (!item.id) return;
+    setForm({
+      name: item.name ?? '',
+      category: item.category ?? '',
+      material: item.material ?? '',
+      metal_color: item.metal_color ?? '',
+      price: item.price != null ? String(item.price) : '',
+    });
+    setEditingId(item.id);
+    setShowAdd(true);
+  };
+
+  const buildPayload = () => ({
+    name: form.name.trim(),
+    category: form.category,
+    material: form.material.trim() || undefined,
+    metal_color: form.metal_color.trim() || undefined,
+    price: form.price ? Number(form.price) : undefined,
+  });
+
+  const handleSubmit = async () => {
+    if (!form.name.trim()) {
       toast.error('请输入配饰名称');
       return;
     }
+    const payload = buildPayload();
     try {
-      await addAccessory({
-        name: name.trim(),
-        category,
-        material: material.trim() || undefined,
-        metal_color: metal_color.trim() || undefined,
-        price: price ? Number(price) : undefined,
-      });
-      toast.success('添加成功');
-      setShowAdd(false);
-      setForm(ACCESSORY_FORM_DEFAULT);
+      if (editingId != null) {
+        await updateAccessory(editingId, payload);
+        toast.success('已保存修改');
+      } else {
+        await addAccessory(payload);
+        toast.success('添加成功');
+      }
+      closeForm();
       await fetchItems();
     } catch (e: unknown) {
-      toast.error(e instanceof Error ? e.message : '添加失败');
+      toast.error(e instanceof Error ? e.message : (editingId != null ? '保存失败' : '添加失败'));
     }
   };
 
@@ -221,7 +249,7 @@ export default function AccessoryTab({ profile, compact }: AccessoryTabProps) {
       <button
         className="gradient-btn"
         style={{ width: '100%', ...btnStyle(compact) }}
-        onClick={() => setShowAdd(true)}
+        onClick={() => { setForm(ACCESSORY_FORM_DEFAULT); setEditingId(null); setShowAdd(true); }}
       >
         + 添加配饰
       </button>
@@ -229,7 +257,7 @@ export default function AccessoryTab({ profile, compact }: AccessoryTabProps) {
       {/* 添加表单弹窗 */}
       {showAdd && (
         <div className="glass-card p-3 mt-3 animate-fade-in" style={{ borderColor: 'var(--accent)' }}>
-          <div className="section-title">添加配饰</div>
+          <div className="section-title">{editingId != null ? '修改配饰' : '添加配饰'}</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
             <input
               className="form-input"
@@ -266,10 +294,10 @@ export default function AccessoryTab({ profile, compact }: AccessoryTabProps) {
               onChange={e => setForm(prev => ({ ...prev, price: e.target.value }))}
             />
             <div style={{ display: 'flex', gap: '8px' }}>
-              <button className="gradient-btn" style={{ flex: 1, ...btnStyle(compact) }} onClick={handleAdd}>
-                确认添加
+              <button className="gradient-btn" style={{ flex: 1, ...btnStyle(compact) }} onClick={handleSubmit}>
+                {editingId != null ? '保存修改' : '确认添加'}
               </button>
-              <button className="ghost-btn" style={{ flex: 1, ...btnStyle(compact) }} onClick={() => setShowAdd(false)}>
+              <button className="ghost-btn" style={{ flex: 1, ...btnStyle(compact) }} onClick={closeForm}>
                 取消
               </button>
             </div>
@@ -306,7 +334,14 @@ export default function AccessoryTab({ profile, compact }: AccessoryTabProps) {
                 )}
               </div>
             </div>
-            <div style={{ marginLeft: '10px', flexShrink: 0 }}>
+            <div style={{ marginLeft: '10px', flexShrink: 0, display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <button
+                className="ghost-btn"
+                style={{ padding: '4px 8px', fontSize: '11px' }}
+                onClick={() => openEdit(item)}
+              >
+                修改
+              </button>
               <button
                 className="ghost-btn"
                 style={{ padding: '4px 8px', fontSize: '11px', color: 'var(--danger)', borderColor: 'var(--danger)' }}

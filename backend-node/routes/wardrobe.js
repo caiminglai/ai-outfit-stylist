@@ -803,7 +803,7 @@ router.post('/recommend', (req, res) => {
         wardrobe_count: wardrobeItems.length,
         gap_analysis: gapResult,
         shopping_suggestions: suggestions,
-        privacy_notice: '您的数据仅在本设备处理，不会上传到任何服务器。',
+        privacy_notice: '衣橱数据仅用于生成您自己的搭配建议，保存在您的账号下，可随时删除。',
       },
       '个人衣橱推荐已生成',
     )

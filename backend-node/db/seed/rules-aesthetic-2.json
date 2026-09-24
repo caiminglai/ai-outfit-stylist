@@ -1,0 +1,638 @@
+{
+  "_说明": "第二批美学规则·下半段(环5补齐):色彩十二型精修 + 风格型(量感与线条)。与 rules-aesthetic.json 同一套机制——db/applyRuleSeeds.js 每次启动按 key 只补库里没有的,已存在的一律不动。key 一旦上线不要改。",
+  "_派生字段": "color_season_12 由 冷暖×深浅(四季) 再乘 纯度 得到;纯度没选就停在四季,四季那 20 组照常命中。kibbe_type 由 骨架量感×线条倾向 得到,两轴缺一就不出。两个字段都在 services/profileEnricher.js 里算。",
+  "rules": [
+    {
+      "key": "color12-light-spring-outfit",
+      "name": "十二型-浅春型-配色",
+      "mode": "all",
+      "category": "穿搭",
+      "gender": null,
+      "scenario": null,
+      "priority": 24,
+      "enabled": 1,
+      "description": "十二型精修:浅春型=暖调+浅+中间纯度。只精修配色,衣型沿用四季档与比例档。",
+      "conditions": [{ "field": "color_season_12", "operator": "eq", "value": "浅春型", "weight": 3 }],
+      "actions": [
+        { "type": "color_combo", "content": "主色奶白 + 辅色浅杏 + 樱花粉或浅水绿点缀,按 60-30-10 分配" },
+        { "type": "avoid", "content": "整套重黑、深炭、冷灰紫;也别把高饱和正色堆满一身" },
+        { "type": "reason", "content": "浅春型靠的是浅与暖,颜色一深一冷就把肤色的透亮感压掉;中间纯度意味着粉彩最省力,不必靠高饱和撑气色" }
+      ]
+    },
+    {
+      "key": "color12-warm-spring-outfit",
+      "name": "十二型-暖春型-配色",
+      "mode": "all",
+      "category": "穿搭",
+      "gender": null,
+      "scenario": null,
+      "priority": 24,
+      "enabled": 1,
+      "description": "十二型精修:暖春型=暖调+浅+净亮纯度,暖调本身最突出。",
+      "conditions": [{ "field": "color_season_12", "operator": "eq", "value": "暖春型", "weight": 3 }],
+      "actions": [
+        { "type": "color_combo", "content": "主色暖象牙 + 辅色姜黄或桃色 + 珊瑚粉点缀,按 60-30-10 分配" },
+        { "type": "avoid", "content": "冷调粉、雾霾蓝、冰灰这类带灰冷色的组合" },
+        { "type": "reason", "content": "暖春型的干净感来自暖调本身而不是深浅,所以同明度下要一直往暖侧靠;一沾冷灰就显脸色发青" }
+      ]
+    },
+    {
+      "key": "color12-bright-spring-outfit",
+      "name": "十二型-亮春型-配色",
+      "mode": "all",
+      "category": "穿搭",
+      "gender": null,
+      "scenario": null,
+      "priority": 24,
+      "enabled": 1,
+      "description": "十二型精修:亮春型=暖调+浅+净亮,清透度是最强的一轴,能吃下高饱和。",
+      "conditions": [{ "field": "color_season_12", "operator": "eq", "value": "亮春型", "weight": 3 }],
+      "actions": [
+        { "type": "color_combo", "content": "主色暖白 + 辅色亮珊瑚或番茄红 + 翠绿或亮蓝绿点缀,按 60-30-10 分配" },
+        { "type": "avoid", "content": "灰调莫兰迪全套、雾粉雾蓝;也别用暗沉土棕压住亮度" },
+        { "type": "reason", "content": "亮春型的本钱是清透,颜色越干净越出彩;一掺灰就浑浊,等于把自己最强的一轴关掉" }
+      ]
+    },
+    {
+      "key": "color12-light-summer-outfit",
+      "name": "十二型-浅夏型-配色",
+      "mode": "all",
+      "category": "穿搭",
+      "gender": null,
+      "scenario": null,
+      "priority": 24,
+      "enabled": 1,
+      "description": "十二型精修:浅夏型=冷调+浅+净亮,浅是主导,颜色要轻但要干净。",
+      "conditions": [{ "field": "color_season_12", "operator": "eq", "value": "浅夏型", "weight": 3 }],
+      "actions": [
+        { "type": "color_combo", "content": "主色云白 + 辅色冰蓝 + 柔粉或浅丁香点缀,按 60-30-10 分配" },
+        { "type": "avoid", "content": "高饱和暖橘、土黄、铜棕;也别整套深灰近黑" },
+        { "type": "reason", "content": "浅夏型靠浅与冷撑住清爽感,配色要一直留在明度上端;暖深色会把脸拉到衣服下面去" }
+      ]
+    },
+    {
+      "key": "color12-cool-summer-outfit",
+      "name": "十二型-冷夏型-配色",
+      "mode": "all",
+      "category": "穿搭",
+      "gender": null,
+      "scenario": null,
+      "priority": 24,
+      "enabled": 1,
+      "description": "十二型精修:冷夏型=冷调+浅+中间纯度,冷调本身最突出。",
+      "conditions": [{ "field": "color_season_12", "operator": "eq", "value": "冷夏型", "weight": 3 }],
+      "actions": [
+        { "type": "color_combo", "content": "主色柔白 + 辅色灰蓝 + 玫粉或薄荷绿点缀,按 60-30-10 分配" },
+        { "type": "avoid", "content": "橘色、姜黄、暖棕与驼色系整套搭配" },
+        { "type": "reason", "content": "冷夏型的衬人是冷调一直纯粹,不必靠深浅或饱和度取胜;暖色靠近脸部就会显脏、显泛红" }
+      ]
+    },
+    {
+      "key": "color12-soft-summer-outfit",
+      "name": "十二型-柔夏型-配色",
+      "mode": "all",
+      "category": "穿搭",
+      "gender": null,
+      "scenario": null,
+      "priority": 24,
+      "enabled": 1,
+      "description": "十二型精修:柔夏型=冷调+浅+柔雾,灰调是最强的一轴。",
+      "conditions": [{ "field": "color_season_12", "operator": "eq", "value": "柔夏型", "weight": 3 }],
+      "actions": [
+        { "type": "color_combo", "content": "主色雾灰 + 辅色灰蓝紫 + 豆沙或鼠尾草绿点缀,按 60-30-10 分配" },
+        { "type": "avoid", "content": "荧光色、正红正橘等高饱和纯色;也别用强对比黑白撞色" },
+        { "type": "reason", "content": "柔夏型的所有颜色都带一层灰,灰调才是它的呼吸感;颜色一旦被提纯,衣服会盖过脸" }
+      ]
+    },
+    {
+      "key": "color12-warm-autumn-outfit",
+      "name": "十二型-暖秋型-配色",
+      "mode": "all",
+      "category": "穿搭",
+      "gender": null,
+      "scenario": null,
+      "priority": 24,
+      "enabled": 1,
+      "description": "十二型精修:暖秋型=暖调+深+中间纯度,暖调最突出。",
+      "conditions": [{ "field": "color_season_12", "operator": "eq", "value": "暖秋型", "weight": 3 }],
+      "actions": [
+        { "type": "color_combo", "content": "主色驼 + 辅色砖红或焦糖 + 橄榄绿点缀,按 60-30-10 分配" },
+        { "type": "avoid", "content": "冰蓝、雪粉、纯白等冷调浅色;也别整套冷黑" },
+        { "type": "reason", "content": "暖秋型的厚质感来自暖调本身,颜色要一直留在大地色一侧;冷浅色太薄,贴在身上显得没撑起来" }
+      ]
+    },
+    {
+      "key": "color12-deep-autumn-outfit",
+      "name": "十二型-深秋型-配色",
+      "mode": "all",
+      "category": "穿搭",
+      "gender": null,
+      "scenario": null,
+      "priority": 24,
+      "enabled": 1,
+      "description": "十二型精修:深秋型=暖调+深+净亮,深与浓度是最强的一轴。",
+      "conditions": [{ "field": "color_season_12", "operator": "eq", "value": "深秋型", "weight": 3 }],
+      "actions": [
+        { "type": "color_combo", "content": "主色咖啡 + 辅色酒红或墨绿 + 铜金或深芥黄点缀,按 60-30-10 分配" },
+        { "type": "avoid", "content": "浅粉彩全套、冰色与云白做主色;也别用灰调雾色冲淡浓度" },
+        { "type": "reason", "content": "深秋型能吃下浓与暗,深色反而把五官托出来;颜色一浅,脸就比衣服亮,整身失去重心" }
+      ]
+    },
+    {
+      "key": "color12-soft-autumn-outfit",
+      "name": "十二型-柔秋型-配色",
+      "mode": "all",
+      "category": "穿搭",
+      "gender": null,
+      "scenario": null,
+      "priority": 24,
+      "enabled": 1,
+      "description": "十二型精修:柔秋型=暖调+深+柔雾,灰调暖色最合适。",
+      "conditions": [{ "field": "color_season_12", "operator": "eq", "value": "柔秋型", "weight": 3 }],
+      "actions": [
+        { "type": "color_combo", "content": "主色灰驼 + 辅色雾杏或灰粉 + 橄榄灰点缀,按 60-30-10 分配" },
+        { "type": "avoid", "content": "高饱和亮色、纯黑纯白的强对比;也别上冷调荧光" },
+        { "type": "reason", "content": "柔秋型与柔夏型同属带灰一档,差别只在暖一侧:所有颜色都该像蒙了一层暖尘,纯色太锋利会显生硬" }
+      ]
+    },
+    {
+      "key": "color12-cool-winter-outfit",
+      "name": "十二型-冷冬型-配色",
+      "mode": "all",
+      "category": "穿搭",
+      "gender": null,
+      "scenario": null,
+      "priority": 24,
+      "enabled": 1,
+      "description": "十二型精修:冷冬型=冷调+深+中间纯度,冷调最突出。",
+      "conditions": [{ "field": "color_season_12", "operator": "eq", "value": "冷冬型", "weight": 3 }],
+      "actions": [
+        { "type": "color_combo", "content": "主色纯白或炭黑 + 辅色宝蓝或深紫红 + 冰灰点缀,按 60-30-10 分配" },
+        { "type": "avoid", "content": "橘色、土黄、暖驼、铜棕一整片暖大地色" },
+        { "type": "reason", "content": "冷冬型的清楚感来自冷调与明度差,颜色要干净利落;暖土色一上身,肤色的粉调立刻被带浑" }
+      ]
+    },
+    {
+      "key": "color12-deep-winter-outfit",
+      "name": "十二型-深冬型-配色",
+      "mode": "all",
+      "category": "穿搭",
+      "gender": null,
+      "scenario": null,
+      "priority": 24,
+      "enabled": 1,
+      "description": "十二型精修:深冬型=冷调+深+柔雾,以深色为主但别把颜色提纯。",
+      "conditions": [{ "field": "color_season_12", "operator": "eq", "value": "深冬型", "weight": 3 }],
+      "actions": [
+        { "type": "color_combo", "content": "主色深炭或黑 + 辅色藏蓝或深茄紫 + 墨绿点缀,按 60-30-10 分配" },
+        { "type": "avoid", "content": "浅粉彩、亮橘与荧光色;也别用大面积纯白做主色" },
+        { "type": "reason", "content": "深冬型在冬的一侧偏柔,深色要沉得住但不能刺亮;高纯度的亮色会把注意力从脸上抢走" }
+      ]
+    },
+    {
+      "key": "color12-bright-winter-outfit",
+      "name": "十二型-亮冬型-配色",
+      "mode": "all",
+      "category": "穿搭",
+      "gender": null,
+      "scenario": null,
+      "priority": 24,
+      "enabled": 1,
+      "description": "十二型精修:亮冬型=冷调+深+净亮,清透与对比都是最强项。",
+      "conditions": [{ "field": "color_season_12", "operator": "eq", "value": "亮冬型", "weight": 3 }],
+      "actions": [
+        { "type": "color_combo", "content": "主色黑白强对比 + 辅色宝蓝或玫红 + 翠绿点缀,按 60-30-10 分配" },
+        { "type": "avoid", "content": "整套灰调莫兰迪、雾杏雾粉;也别把颜色全部降到同一明度" },
+        { "type": "reason", "content": "亮冬型是十二型里对比上限最高的一档,颜色越纯越撑得住;一蒙灰就失去了它唯一不会被压住的优势" }
+      ]
+    },
+    {
+      "key": "color12-light-spring-makeup",
+      "name": "十二型-浅春型-妆容",
+      "mode": "all",
+      "category": "妆容",
+      "gender": "女",
+      "scenario": null,
+      "priority": 24,
+      "enabled": 1,
+      "description": "十二型妆容精修:浅春型=暖+浅+中间纯度,颜色要浅而不闷。",
+      "conditions": [{ "field": "color_season_12", "operator": "eq", "value": "浅春型", "weight": 3 }],
+      "actions": [
+        { "type": "foundation", "content": "暖调轻薄底妆,保留皮肤透亮度,不要厚 matte" },
+        { "type": "lip_color", "content": "蜜桃粉、浅珊瑚、水光暖豆沙" },
+        { "type": "blush", "content": "桃粉色系,微笑肌轻扫一层即可" },
+        { "type": "eye_shadow", "content": "浅金棕、暖杏、淡草绿;避免深烟熏" },
+        { "type": "reason", "content": "浅春型的脸部重点是'轻',彩妆一旦加深或偏冷,就会比五官先被看见" }
+      ]
+    },
+    {
+      "key": "color12-warm-spring-makeup",
+      "name": "十二型-暖春型-妆容",
+      "mode": "all",
+      "category": "妆容",
+      "gender": "女",
+      "scenario": null,
+      "priority": 24,
+      "enabled": 1,
+      "description": "十二型妆容精修:暖春型=暖+浅+净亮,暖调要纯净。",
+      "conditions": [{ "field": "color_season_12", "operator": "eq", "value": "暖春型", "weight": 3 }],
+      "actions": [
+        { "type": "foundation", "content": "暖调带光泽底妆,别用偏粉的中性色号" },
+        { "type": "lip_color", "content": "橘调珊瑚红、暖草莓红、姜调唇釉" },
+        { "type": "blush", "content": "杏橙、暖桃,位置略高提气色" },
+        { "type": "eye_shadow", "content": "金铜、暖棕、橄榄绿少量加深眼尾" },
+        { "type": "reason", "content": "暖春型最怕冷灰,彩妆选色号时以'暖且干净'为准,同色系里挑更亮的那支" }
+      ]
+    },
+    {
+      "key": "color12-bright-spring-makeup",
+      "name": "十二型-亮春型-妆容",
+      "mode": "all",
+      "category": "妆容",
+      "gender": "女",
+      "scenario": null,
+      "priority": 24,
+      "enabled": 1,
+      "description": "十二型妆容精修:亮春型=暖+浅+净亮且清透最强,能上饱和色。",
+      "conditions": [{ "field": "color_season_12", "operator": "eq", "value": "亮春型", "weight": 3 }],
+      "actions": [
+        { "type": "foundation", "content": "清透高光感底妆,遮瑕点到为止,保留反光" },
+        { "type": "lip_color", "content": "亮珊瑚红、番茄红、饱和水光橘" },
+        { "type": "blush", "content": "亮桃红,少量但纯度够" },
+        { "type": "eye_shadow", "content": "亮金、铜棕,可用干净眼线代替重眼影" },
+        { "type": "reason", "content": "亮春型能吃高饱和,反而在雾面低饱和里显平;彩妆留一层光泽,颜色才落在脸上而不是浮在上面" }
+      ]
+    },
+    {
+      "key": "color12-light-summer-makeup",
+      "name": "十二型-浅夏型-妆容",
+      "mode": "all",
+      "category": "妆容",
+      "gender": "女",
+      "scenario": null,
+      "priority": 24,
+      "enabled": 1,
+      "description": "十二型妆容精修:浅夏型=冷+浅+净亮,浅冷色最衬。",
+      "conditions": [{ "field": "color_season_12", "operator": "eq", "value": "浅夏型", "weight": 3 }],
+      "actions": [
+        { "type": "foundation", "content": "冷调轻薄底妆,色号偏粉不偏黄" },
+        { "type": "lip_color", "content": "浅玫瑰粉、莓果水光、冷调豆沙" },
+        { "type": "blush", "content": "冷粉色轻扫,别用橘调" },
+        { "type": "eye_shadow", "content": "浅冷棕、灰蓝、淡紫;眼线用深灰而非纯黑" },
+        { "type": "reason", "content": "浅夏型的干净来自冷+浅,任何暖橘或厚重深色都会破坏它最擅长的清爽感" }
+      ]
+    },
+    {
+      "key": "color12-cool-summer-makeup",
+      "name": "十二型-冷夏型-妆容",
+      "mode": "all",
+      "category": "妆容",
+      "gender": "女",
+      "scenario": null,
+      "priority": 24,
+      "enabled": 1,
+      "description": "十二型妆容精修:冷夏型=冷+浅+中间纯度,冷调要一贯。",
+      "conditions": [{ "field": "color_season_12", "operator": "eq", "value": "冷夏型", "weight": 3 }],
+      "actions": [
+        { "type": "foundation", "content": "冷调哑光或半哑底妆,避免暖黄光泽" },
+        { "type": "lip_color", "content": "玫瑰红、莓紫、冷调正粉" },
+        { "type": "blush", "content": "梅子粉、冷玫瑰,少量多层" },
+        { "type": "eye_shadow", "content": "灰紫、冷棕、雾蓝;下眼睑可用冷灰轻收" },
+        { "type": "reason", "content": "冷夏型对暖色最敏感,唇颊只要偏橘就会显脏;把冷暖调统一在冷侧比追流行色更重要" }
+      ]
+    },
+    {
+      "key": "color12-soft-summer-makeup",
+      "name": "十二型-柔夏型-妆容",
+      "mode": "all",
+      "category": "妆容",
+      "gender": "女",
+      "scenario": null,
+      "priority": 24,
+      "enabled": 1,
+      "description": "十二型妆容精修:柔夏型=冷+浅+柔雾,全部带一层灰。",
+      "conditions": [{ "field": "color_season_12", "operator": "eq", "value": "柔夏型", "weight": 3 }],
+      "actions": [
+        { "type": "foundation", "content": "柔雾冷调底妆,不要水光高光" },
+        { "type": "lip_color", "content": "灰粉玫瑰、干燥玫瑰、雾紫豆沙" },
+        { "type": "blush", "content": "灰调梅子,晕染范围略大" },
+        { "type": "eye_shadow", "content": "雾灰棕、灰绿、灰紫,不用亮片" },
+        { "type": "reason", "content": "柔夏型的所有颜色都要掺灰,亮面与高饱和都会让妆浮在皮肤上;统一雾感才有'天生气色好'的效果" }
+      ]
+    },
+    {
+      "key": "color12-warm-autumn-makeup",
+      "name": "十二型-暖秋型-妆容",
+      "mode": "all",
+      "category": "妆容",
+      "gender": "女",
+      "scenario": null,
+      "priority": 24,
+      "enabled": 1,
+      "description": "十二型妆容精修:暖秋型=暖+深+中间纯度,大地色系最衬。",
+      "conditions": [{ "field": "color_season_12", "operator": "eq", "value": "暖秋型", "weight": 3 }],
+      "actions": [
+        { "type": "foundation", "content": "暖调滋润底妆,色号偏黄不偏粉" },
+        { "type": "lip_color", "content": "砖红、焦糖、肉桂暖棕" },
+        { "type": "blush", "content": "赤陶、暖橙棕,少量渐开" },
+        { "type": "eye_shadow", "content": "橄榄绿、芥末金、暖铜棕" },
+        { "type": "reason", "content": "暖秋型的厚感需要暖且不太亮的颜色支撑,冷粉与冰色会立刻让妆显薄、显不相融" }
+      ]
+    },
+    {
+      "key": "color12-deep-autumn-makeup",
+      "name": "十二型-深秋型-妆容",
+      "mode": "all",
+      "category": "妆容",
+      "gender": "女",
+      "scenario": null,
+      "priority": 24,
+      "enabled": 1,
+      "description": "十二型妆容精修:深秋型=暖+深+净亮,浓色能压住。",
+      "conditions": [{ "field": "color_season_12", "operator": "eq", "value": "深秋型", "weight": 3 }],
+      "actions": [
+        { "type": "foundation", "content": "暖调中等遮瑕底妆,保留皮肤质感" },
+        { "type": "lip_color", "content": "深砖红、铁锈红、浓肉桂、深巧克力" },
+        { "type": "blush", "content": "深赤陶、暖红棕,位置偏颧骨上缘" },
+        { "type": "eye_shadow", "content": "古铜、深橄榄、暖黑棕,可做浓眼妆" },
+        { "type": "reason", "content": "深秋型的五官撑得住浓度,浅色反而显得没睡醒;但浓要浓在暖侧,冷黑会抢掉暖调的光" }
+      ]
+    },
+    {
+      "key": "color12-soft-autumn-makeup",
+      "name": "十二型-柔秋型-妆容",
+      "mode": "all",
+      "category": "妆容",
+      "gender": "女",
+      "scenario": null,
+      "priority": 24,
+      "enabled": 1,
+      "description": "十二型妆容精修:柔秋型=暖+深+柔雾,暖灰调最贴。",
+      "conditions": [{ "field": "color_season_12", "operator": "eq", "value": "柔秋型", "weight": 3 }],
+      "actions": [
+        { "type": "foundation", "content": "暖调柔雾底妆,别用水光强反光" },
+        { "type": "lip_color", "content": "雾暖豆沙、灰调砖红、肉桂奶茶" },
+        { "type": "blush", "content": "灰调杏橙,大范围轻晕" },
+        { "type": "eye_shadow", "content": "暖灰棕、橄榄灰、雾金;避免亮片" },
+        { "type": "reason", "content": "柔秋型与暖秋型的差别就在'带灰':所有颜色降一档纯度才协调,亮面与高饱和都会显突兀" }
+      ]
+    },
+    {
+      "key": "color12-cool-winter-makeup",
+      "name": "十二型-冷冬型-妆容",
+      "mode": "all",
+      "category": "妆容",
+      "gender": "女",
+      "scenario": null,
+      "priority": 24,
+      "enabled": 1,
+      "description": "十二型妆容精修:冷冬型=冷+深+中间纯度,冷调正色最衬。",
+      "conditions": [{ "field": "color_season_12", "operator": "eq", "value": "冷冬型", "weight": 3 }],
+      "actions": [
+        { "type": "foundation", "content": "冷调干净底妆,遮瑕到位、少光泽" },
+        { "type": "lip_color", "content": "玫红、深莓、冷调正红" },
+        { "type": "blush", "content": "冷梅子,少量精确" },
+        { "type": "eye_shadow", "content": "深冷棕、炭黑、冷紫;眼线要利落" },
+        { "type": "reason", "content": "冷冬型靠清楚与对比取胜,颜色可以重但不能暖;橘调、裸棕会立刻把妆化'糊'" }
+      ]
+    },
+    {
+      "key": "color12-deep-winter-makeup",
+      "name": "十二型-深冬型-妆容",
+      "mode": "all",
+      "category": "妆容",
+      "gender": "女",
+      "scenario": null,
+      "priority": 24,
+      "enabled": 1,
+      "description": "十二型妆容精修:深冬型=冷+深+柔雾,深色但不提纯。",
+      "conditions": [{ "field": "color_season_12", "operator": "eq", "value": "深冬型", "weight": 3 }],
+      "actions": [
+        { "type": "foundation", "content": "冷调柔雾偏厚的底妆,肤色要匀" },
+        { "type": "lip_color", "content": "深酒红、雾梅紫、冷调深棕红" },
+        { "type": "blush", "content": "冷灰梅子,轻扫不铺开" },
+        { "type": "eye_shadow", "content": "深灰棕、雾黑、冷紫灰;避开亮片" },
+        { "type": "reason", "content": "深冬型能穿最暗的色但不能上最亮的色:雾面深色留住分量,高饱和亮色会把注意力从眼睛挪走" }
+      ]
+    },
+    {
+      "key": "color12-bright-winter-makeup",
+      "name": "十二型-亮冬型-妆容",
+      "mode": "all",
+      "category": "妆容",
+      "gender": "女",
+      "scenario": null,
+      "priority": 24,
+      "enabled": 1,
+      "description": "十二型妆容精修:亮冬型=冷+深+净亮,对比与纯度上限最高。",
+      "conditions": [{ "field": "color_season_12", "operator": "eq", "value": "亮冬型", "weight": 3 }],
+      "actions": [
+        { "type": "foundation", "content": "干净高遮盖底妆,冷暖不调,留适度反光" },
+        { "type": "lip_color", "content": "正红、亮玫红、深莓红;雾面与亮面都能压" },
+        { "type": "blush", "content": "冷调亮玫粉,少量但纯度足" },
+        { "type": "eye_shadow", "content": "冷银灰、亮黑、饱和紫;眼线可画得锐" },
+        { "type": "reason", "content": "亮冬型是十二型里唯一能同时压住高饱和与强对比的档,颜色越干净越出彩;雾面低饱和反而让它显普通" }
+      ]
+    },
+    {
+      "key": "kibbe-gamine-outfit",
+      "name": "风格型-少女型-廓形",
+      "mode": "all",
+      "category": "穿搭",
+      "gender": null,
+      "scenario": null,
+      "priority": 21,
+      "enabled": 1,
+      "description": "风格型(小骨架+偏直线/均衡):廓形要短巧利落,量感别压过人。",
+      "conditions": [{ "field": "kibbe_type", "operator": "eq", "value": "少女型", "weight": 3 }],
+      "actions": [
+        { "type": "top_style", "content": "短款合身衬衫、 cropped 针织、立领小外套,肩线正好落在肩点" },
+        { "type": "bottom_style", "content": "九分直筒裤、及膝短半裙、高腰短裤;裤长露脚踝最省力" },
+        { "type": "outerwear", "content": "短夹克、收腰风衣,长度在臀上下;避免过长大摆" },
+        { "type": "shoe_style", "content": "小头平底、短靴、乐福鞋;避免厚底 oversized" },
+        { "type": "avoid", "content": "大面积垂坠面料、超大廓形、长至脚踝的宽松连衣裙" },
+        { "type": "reason", "content": "小骨架配直线条,人靠'紧凑'显精神;衣服一长一松,量感就盖过身高,人显被穿走" }
+      ]
+    },
+    {
+      "key": "kibbe-gamine-accessory",
+      "name": "风格型-少女型-配饰",
+      "mode": "all",
+      "category": "配饰",
+      "gender": null,
+      "scenario": null,
+      "priority": 21,
+      "enabled": 1,
+      "description": "风格型(少女型):配饰走小尺寸、几何、利落路线。",
+      "conditions": [{ "field": "kibbe_type", "operator": "eq", "value": "少女型", "weight": 3 }],
+      "actions": [
+        { "type": "earring_type", "content": "小几何耳钉、短线条耳线、细圈耳环" },
+        { "type": "necklace_type", "content": "细链、短吊坠、层叠到锁骨为止" },
+        { "type": "bag_style", "content": "小方包、剑桥包、细带斜挎" },
+        { "type": "watch", "content": "小表盘细带表" },
+        { "type": "avoid", "content": "大圆环、长流苏、粗链条、 oversized 托特" },
+        { "type": "reason", "content": "配饰的尺度要跟着骨架走:小巧骨架上出现大件,视线会停在配饰而不是脸" }
+      ]
+    },
+    {
+      "key": "kibbe-romantic-outfit",
+      "name": "风格型-浪漫型-廓形",
+      "mode": "all",
+      "category": "穿搭",
+      "gender": null,
+      "scenario": null,
+      "priority": 21,
+      "enabled": 1,
+      "description": "风格型(曲线明显):所有细节都要跟着腰线走。",
+      "conditions": [{ "field": "kibbe_type", "operator": "eq", "value": "浪漫型", "weight": 3 }],
+      "actions": [
+        { "type": "top_style", "content": "垂坠真丝、心形领、荷叶边、收腰针织;露出腰线最关键" },
+        { "type": "bottom_style", "content": "A字裙、鱼尾半裙、高腰微喇;腰头收在自然腰" },
+        { "type": "outerwear", "content": "收腰大衣、裹身式外套、圆摆短外套" },
+        { "type": "shoe_style", "content": "细带高跟、尖头浅口;避免笨重运动底" },
+        { "type": "avoid", "content": "直筒无腰身的宽松连衣裙、硬挺方肩、oversize 西装" },
+        { "type": "reason", "content": "浪漫型的辨识度就是曲线,把腰遮住等于把自己最强的信息抹掉;面料越垂顺越加分" }
+      ]
+    },
+    {
+      "key": "kibbe-romantic-accessory",
+      "name": "风格型-浪漫型-配饰",
+      "mode": "all",
+      "category": "配饰",
+      "gender": null,
+      "scenario": null,
+      "priority": 21,
+      "enabled": 1,
+      "description": "风格型(浪漫型):配饰取圆润、有光泽、中等偏大的尺度。",
+      "conditions": [{ "field": "kibbe_type", "operator": "eq", "value": "浪漫型", "weight": 3 }],
+      "actions": [
+        { "type": "earring_type", "content": "圆润坠子、水滴形、珍珠与花卉造型" },
+        { "type": "necklace_type", "content": "带坠的中长链、圆润珠串,落在锁骨下方" },
+        { "type": "bag_style", "content": "圆弧手提、软皮小包、有光泽面料" },
+        { "type": "belt", "content": "细腰带束在自然腰,是这套里最划算的一件" },
+        { "type": "avoid", "content": "硬朗几何金属、工业尼龙、过于中性的小方框" },
+        { "type": "reason", "content": "曲线型人配圆润有光的配饰会顺着身材说话;换成硬直几何,配饰和身体开始互相抵消" }
+      ]
+    },
+    {
+      "key": "kibbe-classic-outfit",
+      "name": "风格型-优雅型-廓形",
+      "mode": "all",
+      "category": "穿搭",
+      "gender": null,
+      "scenario": null,
+      "priority": 21,
+      "enabled": 1,
+      "description": "风格型(适中骨架+直线/均衡):比例对称、合体、正色是全部要点。",
+      "conditions": [{ "field": "kibbe_type", "operator": "eq", "value": "优雅型", "weight": 3 }],
+      "actions": [
+        { "type": "top_style", "content": "合身衬衫、Polo、圆领针织,肩线与腰身都刚好" },
+        { "type": "bottom_style", "content": "直筒西裤、及膝铅笔裙、锥形裤;长度规范不追怪" },
+        { "type": "outerwear", "content": "合身西装、Trench、短大衣,驳领宽度中等" },
+        { "type": "shoe_style", "content": "中跟浅口、乐福鞋、简洁短靴" },
+        { "type": "avoid", "content": "极端口径(超宽/超窄)、大面积撞色图案、破洞与过度做旧" },
+        { "type": "reason", "content": "优雅型的耐看来自'比例对',衣服一旦走极端就会盖过人;把每件买回标准尺寸,比追潮流更划算" }
+      ]
+    },
+    {
+      "key": "kibbe-classic-accessory",
+      "name": "风格型-优雅型-配饰",
+      "mode": "all",
+      "category": "配饰",
+      "gender": null,
+      "scenario": null,
+      "priority": 21,
+      "enabled": 1,
+      "description": "风格型(优雅型):配饰走中等尺寸、对称、质感优先。",
+      "conditions": [{ "field": "kibbe_type", "operator": "eq", "value": "优雅型", "weight": 3 }],
+      "actions": [
+        { "type": "earring_type", "content": "珍珠耳钉、中等尺寸对称耳圈" },
+        { "type": "necklace_type", "content": "单排珍珠或细金属短项链,位置居中" },
+        { "type": "bag_style", "content": "结构规整的中号手提、翻盖包" },
+        { "type": "watch", "content": "简约金属表带中小表盘" },
+        { "type": "avoid", "content": "夸张Statement 大件、多层混搭叠戴、亮片满布" },
+        { "type": "reason", "content": "这一型的配饰只负责'补一格',太大太抢眼会让人记住配饰、忘记衣服是否合体" }
+      ]
+    },
+    {
+      "key": "kibbe-natural-outfit",
+      "name": "风格型-自然型-廓形",
+      "mode": "all",
+      "category": "穿搭",
+      "gender": null,
+      "scenario": null,
+      "priority": 21,
+      "enabled": 1,
+      "description": "风格型(大骨架+均衡/曲线):宽松有度、哑光面料、大比例图案。",
+      "conditions": [{ "field": "kibbe_type", "operator": "eq", "value": "自然型", "weight": 3 }],
+      "actions": [
+        { "type": "top_style", "content": "宽松衬衫、落肩针织、厚棉T;领口开一点留呼吸" },
+        { "type": "bottom_style", "content": "直筒牛仔、阔腿裤、工装裙;腰臀留松量不贴着" },
+        { "type": "outerwear", "content": "大翻领大衣、廓形西装、派克外套" },
+        { "type": "shoe_style", "content": "厚底靴、德训鞋、宽方头单鞋" },
+        { "type": "avoid", "content": "紧身亮片、贴身小脚裤、过于精致小巧的细节" },
+        { "type": "reason", "content": "大骨架的气场靠松弛与分量,衣服越紧越精致越显得在'收着穿';把比例放大到和骨架相称才自然" }
+      ]
+    },
+    {
+      "key": "kibbe-natural-accessory",
+      "name": "风格型-自然型-配饰",
+      "mode": "all",
+      "category": "配饰",
+      "gender": null,
+      "scenario": null,
+      "priority": 21,
+      "enabled": 1,
+      "description": "风格型(自然型):配饰取哑光、有机材质、偏大尺度。",
+      "conditions": [{ "field": "kibbe_type", "operator": "eq", "value": "自然型", "weight": 3 }],
+      "actions": [
+        { "type": "earring_type", "content": "木质、哑光金属、不规则手作感的中大件" },
+        { "type": "necklace_type", "content": "长链、皮革绳、自然材质串珠" },
+        { "type": "bag_style", "content": "编织包、软皮托特、帆布大容量" },
+        { "type": "配饰要点", "content": "帽饰:宽檐帽、软呢帽、渔夫帽" },
+        { "type": "avoid", "content": "细小精致的水钻款、硬挺迷你手包、亮面高光金属" },
+        { "type": "reason", "content": "配饰材质要与身体的松弛度一致:哑光与有机材质顺着大骨架走,亮面小件会被衬得局促" }
+      ]
+    },
+    {
+      "key": "kibbe-dramatic-outfit",
+      "name": "风格型-戏剧型-廓形",
+      "mode": "all",
+      "category": "穿搭",
+      "gender": null,
+      "scenario": null,
+      "priority": 21,
+      "enabled": 1,
+      "description": "风格型(大骨架+偏直线):长线条、锐利肩线、大图案。",
+      "conditions": [{ "field": "kibbe_type", "operator": "eq", "value": "戏剧型", "weight": 3 }],
+      "actions": [
+        { "type": "top_style", "content": "尖领衬衫、结构感针织、深V;线条尽量纵向不切断" },
+        { "type": "bottom_style", "content": "高腰垂坠长裤、铅笔长裙;裤腰提到自然腰以上拉长比例" },
+        { "type": "outerwear", "content": "长线条大衣、戗驳领西装、斗篷式外套" },
+        { "type": "shoe_style", "content": "尖头高跟、方头长靴;避免圆头软帮" },
+        { "type": "avoid", "content": "碎花小图案、层层叠叠的甜美装饰、软塌无型的宽松" },
+        { "type": "reason", "content": "长直骨架穿小图案会被图案切碎,细节必须'大而锐'才对得上身材的尺度" }
+      ]
+    },
+    {
+      "key": "kibbe-dramatic-accessory",
+      "name": "风格型-戏剧型-配饰",
+      "mode": "all",
+      "category": "配饰",
+      "gender": null,
+      "scenario": null,
+      "priority": 21,
+      "enabled": 1,
+      "description": "风格型(戏剧型):配饰走棱角、大尺度、高光泽。",
+      "conditions": [{ "field": "kibbe_type", "operator": "eq", "value": "戏剧型", "weight": 3 }],
+      "actions": [
+        { "type": "earring_type", "content": "长线条棱角耳坠、几何金属大件" },
+        { "type": "necklace_type", "content": "雕塑感长项链、粗链条,纵向拉长" },
+        { "type": "bag_style", "content": "硬挺方正大包、锐角结构手袋" },
+        { "type": "glasses_type", "content": "猫眼、方框等有明确角度的镜架" },
+        { "type": "avoid", "content": "细巧的叠戴小件、圆润软塌的布包、小碎花丝巾" },
+        { "type": "reason", "content": "戏剧型的存在感来自锐与长,配饰越小巧越被自己的身高与线条吃掉;同一件东西选最大最有角度的那版" }
+      ]
+    }
+  ]
+}

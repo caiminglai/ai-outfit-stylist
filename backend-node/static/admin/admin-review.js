@@ -201,3 +201,80 @@ function featureWork(id, featured) {
     showToast(e.message, 'error');
   });
 }
+
+/* ── 会员账号（找回密码 = 管理员代重置） ── */
+var AUTH_API = '/api/auth';
+var MemberRows = [];
+
+document.getElementById('member-refresh').addEventListener('click', loadAccounts);
+document.getElementById('member-search').addEventListener('input', renderAccounts);
+
+function loadAccounts() {
+  var container = document.getElementById('member-container');
+  container.className = 'loading';
+  container.textContent = '加载中...';
+
+  fetchJSON(AUTH_API + '/admin/accounts').then(function(res) {
+    if (!res.success) throw new Error(apiErr(res));
+    MemberRows = (res.data && res.data.accounts) || [];
+    renderAccounts();
+  }).catch(function(e) {
+    MemberRows = [];
+    container.className = '';
+    container.innerHTML = '<div class="error-msg">加载失败: ' + escapeHtml(e.message) + '</div>';
+  });
+}
+
+function renderAccounts() {
+  var container = document.getElementById('member-container');
+  container.className = '';
+
+  var kw = (document.getElementById('member-search').value || '').trim();
+  var rows = kw
+    ? MemberRows.filter(function(a) {
+        return String(a.phone).indexOf(kw) >= 0 || String(a.nickname || '').indexOf(kw) >= 0;
+      })
+    : MemberRows;
+
+  document.getElementById('member-count').textContent =
+    '共 ' + MemberRows.length + ' 个账号' + (kw ? '，筛出 ' + rows.length + ' 个' : '');
+
+  if (!rows.length) {
+    container.innerHTML = cardFallback(MemberRows.length ? '没有匹配的账号' : '还没有人注册过账号');
+    return;
+  }
+
+  container.innerHTML = rows.map(function(a) {
+    return '<div class="inv-product-card">' +
+      '<div class="inv-product-info">' +
+        '<div class="inv-product-name">' + escapeHtml(a.nickname || '未填昵称') + '</div>' +
+        '<div class="inv-product-meta">' +
+          '<span style="color:var(--muted);font-size:12px;">' + escapeHtml(a.phone) +
+            ' · 身份 #' + a.user_id + ' · 注册于 ' + escapeHtml(a.created_at || '') + '</span>' +
+        '</div>' +
+      '</div>' +
+      '<div class="inv-actions">' +
+        '<input type="text" id="pw-' + a.user_id + '" placeholder="新密码 6-64 位" style="width:150px;">' +
+        '<button class="btn btn-sm btn-primary" onclick="resetMemberPassword(' + a.user_id + ')">重置密码</button>' +
+      '</div>' +
+    '</div>';
+  }).join('');
+}
+
+function resetMemberPassword(userId) {
+  var acc = MemberRows.find(function(a) { return a.user_id === userId; });
+  if (!acc) { showToast('账号已不在列表里，请刷新', 'error'); return; }
+
+  var input = document.getElementById('pw-' + userId);
+  var pw = input ? input.value : '';
+  if (pw.length < 6 || pw.length > 64) { showToast('新密码长度需在 6-64 位之间', 'error'); return; }
+  if (!confirm('把 ' + acc.phone + ' 的密码改成刚填的这个？会员数据不受影响。')) return;
+
+  apiCall(AUTH_API + '/admin/reset-password', 'POST', { phone: acc.phone, new_password: pw })
+    .then(function(res) {
+      if (!res.success) throw new Error(apiErr(res));
+      showToast(res.message || '密码已重置', 'success');
+      if (input) input.value = '';
+    })
+    .catch(function(e) { showToast(e.message, 'error'); });
+}

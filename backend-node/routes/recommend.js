@@ -2,17 +2,24 @@
  * 穿搭推荐路由模块
  * 对应 Python: app/routes/recommend.py
  *
- * 支持两种模式：
- * 1. 旧版模式：基于 photo_id 获取面部分析后推荐
- * 2. 新版规则引擎模式：直接传入 profile，调用规则引擎推荐
- * 3. LLM 文案增强
+ * 1. 规则引擎推荐：POST /engine（能识别出人时按人读写长期档案）
+ * 2. 规则反馈：POST /feedback（有用/不准）
+ * 3. LLM 文案增强：POST /enhance
  */
 const express = require('express')
 const db = require('../db/init')
 const { sendSuccess, sendError } = require('../utils/response')
-const { loginRequired } = require('../middleware/auth')
+const { optionalUser, getSessionId } = require('../middleware/auth')
 const { rateLimit } = require('../middleware/rateLimit')
-const { getRecommendations, buildRecommendation } = require('../services/recommendEngine')
+const { buildRecommendation } = require('../services/recommendEngine')
+const {
+  loadArchive,
+  mergeWithArchive,
+  saveArchive,
+  saveTags,
+  writeRecommendationLog,
+} = require('../services/profileArchive')
+const { SIGNALS, recordFeedback } = require('../services/ruleFeedback')
 const { ACTION_LABELS } = require('../services/ruleExplainer')
 
 // 推荐引擎限流：每分钟最多 20 次
@@ -20,67 +27,7 @@ const recommendLimiter = rateLimit({ windowMs: 60000, max: 20 })
 
 const router = express.Router()
 
-/** 旧版推荐（基于 photo_id + 场景） */
-router.get('/', loginRequired, (req, res) => {
-  try {
-    const photoId = req.query.photo_id ? parseInt(req.query.photo_id, 10) : null
-    const scenario = req.query.scenario || '通勤'
-
-    const validScenarios = ['通勤', '约会', '面试', '休闲', '聚会']
-    if (!validScenarios.includes(scenario)) {
-      return sendError(res, `无效的场景值，可选: ${validScenarios.join(', ')}`, 400)
-    }
-
-    let skinTone = null
-    let faceShape = null
-
-    if (photoId) {
-      const photo = db
-        .prepare('SELECT * FROM photos WHERE id = ? AND user_id = ?')
-        .get(photoId, req.user.id)
-      if (!photo) {
-        return sendError(res, '照片不存在或不属于当前用户', 404)
-      }
-
-      const feature = db
-        .prepare(
-          'SELECT * FROM face_features WHERE photo_id = ? AND user_id = ? AND status = ? ORDER BY created_at DESC LIMIT 1',
-        )
-        .get(photoId, req.user.id, 'done')
-
-      if (feature) {
-        skinTone = feature.skin_tone
-        faceShape = feature.face_shape
-      }
-    }
-
-    const recommendations = getRecommendations(skinTone, faceShape, scenario)
-
-    // 保存推荐记录
-    const result = db
-      .prepare(
-        'INSERT INTO recommendations (user_id, photo_id, scenario, result_json) VALUES (?, ?, ?, ?)',
-      )
-      .run(req.user.id, photoId, scenario, JSON.stringify(recommendations))
-
-    return sendSuccess(
-      res,
-      {
-        recommendation_id: result.lastInsertRowid,
-        skin_tone: skinTone,
-        face_shape: faceShape,
-        scenario: scenario,
-        recommendations: recommendations,
-      },
-      '获取推荐成功',
-    )
-  } catch (err) {
-    console.error('[推荐] 获取失败:', err)
-    return sendError(res, '获取推荐失败', 500)
-  }
-})
-
-/** 规则引擎推荐（新版，无需登录） */
+/** 规则引擎推荐（新版，无需登录；能识别出人时按人读写长期档案） */
 router.post('/engine', recommendLimiter, (req, res) => {
   try {
     const data = req.body || {}
@@ -91,7 +38,26 @@ router.post('/engine', recommendLimiter, (req, res) => {
       return sendError(res, '缺少 profile 数据', 400)
     }
 
-    const result = buildRecommendation(profile, mode)
+    const user = optionalUser(req)
+    const archive = loadArchive(user ? user.id : null)
+    const { profile: merged, used } = mergeWithArchive(profile, archive)
+
+    const result = buildRecommendation(merged, mode)
+
+    let savedFields = 0
+    let tags = []
+    if (user) {
+      const saved = saveArchive(user.id, profile)
+      savedFields = saved.body + saved.face
+      tags = saveTags(user.id, result)
+      writeRecommendationLog({
+        sessionId: getSessionId(req),
+        userId: user.id,
+        mode,
+        profile: merged,
+        result,
+      })
+    }
 
     return sendSuccess(
       res,
@@ -99,12 +65,42 @@ router.post('/engine', recommendLimiter, (req, res) => {
         recommendation: result,
         mode: mode,
         privacy_notice: '推荐结果基于您填写的数据生成。',
+        archive: {
+          // 本次沿用了档案里的哪些条件(中文名),供前端说明"少填了也没关系"
+          used_fields: used,
+          saved_fields: savedFields,
+          // 算完就存的结论标签,库里查得到同一份
+          tags,
+        },
       },
       '规则引擎推荐已生成',
     )
   } catch (err) {
     console.error('[推荐] 规则引擎失败:', err)
     return sendError(res, '推荐失败', 500)
+  }
+})
+
+/** 规则反馈：一条建议到底准不准，点一次记一行，换主意覆盖旧的那行 */
+router.post('/feedback', (req, res) => {
+  try {
+    const data = req.body || {}
+    const groupId = Number.parseInt(data.group_id, 10)
+    const signal = data.signal
+    const category = typeof data.category === 'string' ? data.category.slice(0, 20) : null
+
+    if (!Number.isInteger(groupId) || groupId <= 0) return sendError(res, '缺少有效的规则编号', 400)
+    if (!SIGNALS.includes(signal)) return sendError(res, `signal 只能是 ${SIGNALS.join(' / ')}`, 400)
+
+    const user = optionalUser(req)
+    if (!user) return sendError(res, '识别不出你是谁，无法记录反馈', 401)
+
+    const stat = recordFeedback(user.id, groupId, category, signal)
+    if (!stat) return sendError(res, '规则不存在', 404)
+    return sendSuccess(res, stat, '反馈已记录')
+  } catch (err) {
+    console.error('[推荐] 反馈记录失败:', err)
+    return sendError(res, '反馈记录失败', 500)
   }
 })
 
@@ -150,7 +146,7 @@ function generateStructuredText(recommendation, weather, mode) {
   }
 
   // 各类别建议(引擎返回的顶层键是中文类别名,动作键是 action_type)
-  const META_KEYS = ['group_id', 'group_name', 'priority', 'score', 'explanation']
+  const META_KEYS = ['group_id', 'group_name', 'priority', 'score', 'feedback', 'explanation']
   const categoryTitles = ['穿搭', '妆容', '发型', '配饰', '姿势']
   for (const cat of categoryTitles) {
     const items = recommendation[cat] || []

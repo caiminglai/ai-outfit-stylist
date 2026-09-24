@@ -8,6 +8,8 @@ const express = require('express')
 const db = require('../db/init')
 const { sendSuccess, sendError } = require('../utils/response')
 const { getSessionId, parseJsonField, getCurrentSeason } = require('../utils/common')
+const { loadArchive, loadTags, mergeWithArchive } = require('../services/profileArchive')
+const { pickMetal, buildFullLook } = require('../services/fullLookAdvisor')
 
 const router = express.Router()
 
@@ -33,24 +35,44 @@ function withinExpiry(item) {
   return expiry > new Date()
 }
 
+/** 有没有真算过保质期：没填开封日期时不能声称"在保质期内" */
+function expiryLabel(item) {
+  return item.opened_date && item.expiry_months ? '在保质期内' : '开封日期未填，按在用处理'
+}
+
+// 个人版表单存的是英文 value（app/src/components/CabinetConstants.ts），门店版和手填存中文。
+// 两套词表在这里统一成中文，否则"缺什么"的判断对个人版用户永远报缺。
+const CATEGORY_CN = {
+  top: '上衣', bottom: '裤子', outerwear: '外套', dress: '连衣裙', shoes: '鞋', bag: '包',
+  lipstick: '口红', eyeshadow: '眼影', foundation: '粉底', blush: '腮红', eyeliner: '眼线',
+  mascara: '睫毛膏', eyebrow: '眉笔', concealer: '遮瑕', powder: '蜜粉',
+  earring: '耳环', necklace: '项链', bracelet: '手链', ring: '戒指', hat: '帽子',
+  scarf: '围巾', watch: '手表', glasses: '眼镜', belt: '腰带',
+}
+
+function cnCategory(raw) {
+  const v = String(raw || '')
+  return CATEGORY_CN[v] || v
+}
+
 /**
- * 确定性打分:基础 40 分,每命中一个维度加权,最高 100
+ * 确定性打分:命中权重占全部权重的比例换算到 40~100
+ * 归一化是为了以后往维度表里加档案字段不会把分数顶到天花板、排序失去分辨力
  * 返回 { score, reasons } —— reasons 就是"这个分怎么来的"
  */
 function scoreItem(dims) {
-  let score = 40
-  const reasons = []
-  for (const d of dims) {
-    if (d.hit) {
-      score += d.weight
-      reasons.push(d.label)
-    }
+  const scored = dims.filter((d) => d.label)
+  const totalWeight = scored.reduce((sum, d) => sum + d.weight, 0) || 1
+  const hitDims = scored.filter((d) => d.hit)
+  const hitWeight = hitDims.reduce((sum, d) => sum + d.weight, 0)
+  return {
+    score: Math.round(40 + (60 * hitWeight) / totalWeight),
+    reasons: hitDims.map((d) => d.label),
   }
-  return { score: Math.min(100, score), reasons }
 }
 
 /** 跨柜联动推荐：针对场合统一推荐衣橱+化妆品+配饰 */
-function crossCabinetRecommend(profile, sessionId, occasion) {
+function crossCabinetRecommend(profile, sessionId, occasion, tags = {}) {
   // 查询三柜数据
   const wardrobeItems = db
     .prepare('SELECT * FROM user_wardrobe WHERE session_id = ? ORDER BY created_at DESC LIMIT 20')
@@ -68,12 +90,14 @@ function crossCabinetRecommend(profile, sessionId, occasion) {
     )
     .all(sessionId, '良好')
 
-  // 简单匹配逻辑：根据肤色/脸型/场合筛选
-  const skinTone = profile.skin_tone || '自然'
-  const faceShape = profile.face_shape || '鹅蛋脸'
+  // 匹配逻辑：根据肤色/脸型/场合筛选。没填就是不知道——空值不参与筛选，也不拿假默认值把单品筛掉
+  const skinTone = profile.skin_tone || ''
+  const faceShape = profile.face_shape || ''
   const currentSeason = getCurrentSeason()
-  // 冷暖皮适合的金属色(自然肤色不启用这一维度)
-  const preferredMetal = skinTone.includes('暖') ? '金' : skinTone.includes('冷') ? '银' : ''
+  // 该配金还是银：优先冷暖皮，档案里没有就退到算出来的四季型/十二型
+  const metal = pickMetal(profile, tags)
+  // 场合只认一个值：头部显示的与打分用的必须是同一个
+  const occ = occasion || profile.occasion || '日常'
 
   // 场合风格映射
   const occasionStyles = {
@@ -85,8 +109,7 @@ function crossCabinetRecommend(profile, sessionId, occasion) {
     运动: '运动活力',
     婚礼: '正式典雅',
   }
-  const occasionStyle = occasionStyles[occasion] || '百搭风格'
-  const occValue = occasion || profile.occasion || ''
+  const occasionStyle = occasionStyles[occ] || '百搭风格'
 
   // 衣橱推荐
   const outfitMatched = wardrobeItems
@@ -96,17 +119,19 @@ function crossCabinetRecommend(profile, sessionId, occasion) {
     })
     .map((item) => ({
       name: item.name,
+      category: cnCategory(item.category),
       ...scoreItem([
         { label: `${currentSeason}季可穿`, weight: 20, hit: tagHits(item.season_tags, currentSeason) },
-        { label: '适合该场合', weight: 20, hit: tagHits(item.occasion_tags, occValue) },
+        { label: '适合该场合', weight: 20, hit: tagHits(item.occasion_tags, occ) },
         { label: '风格与你相符', weight: 15, hit: tagHits(item.style_tags, profile.preferred_style) },
         { label: '衬你的体型', weight: 15, hit: tagHits(item.fit_body_types, profile.body_type) },
+        { label: '这个色衬你的肤色', weight: 10, hit: tagHits(item.fit_skin_tones, skinTone) },
       ]),
     }))
     .sort((a, b) => b.score - a.score)
     .slice(0, 5)
 
-  const outfitCategories = [...new Set(wardrobeItems.map((i) => i.category))]
+  const outfitCategories = [...new Set(wardrobeItems.map((i) => cnCategory(i.category)))]
   const essentialTops = ['上衣', '衬衫', 'T恤', '外套']
   const essentialBottoms = ['裤子', '裙', '半身裙']
   const hasTop = outfitCategories.some((c) => essentialTops.some((t) => c && c.includes(t)))
@@ -119,21 +144,23 @@ function crossCabinetRecommend(profile, sessionId, occasion) {
   const makeupMatched = cosmetics
     .filter((item) => {
       const skinFit = parseJsonField(item.skin_tone_fit) || []
-      return skinFit.length === 0 || skinFit.includes(skinTone)
+      return !skinTone || skinFit.length === 0 || tagHits(item.skin_tone_fit, skinTone)
     })
     .map((item) => ({
       name: item.name,
+      category: cnCategory(item.category),
       ...scoreItem([
         { label: '适配你的肤色', weight: 25, hit: tagHits(item.skin_tone_fit, skinTone) },
         { label: '适配你的肤质', weight: 15, hit: tagHits(item.skin_type_fit, profile.skin_type) },
-        { label: '适合该场合', weight: 20, hit: tagHits(item.occasion_tags, occValue) },
-        { label: '在保质期内', weight: 15, hit: withinExpiry(item) },
+        { label: '适合该场合', weight: 20, hit: tagHits(item.occasion_tags, occ) },
+        { label: expiryLabel(item), weight: 15, hit: withinExpiry(item) },
+        { label: '衬你的眼型', weight: 10, hit: tagHits(item.eye_shape_fit, profile.eye_shape) },
       ]),
     }))
     .sort((a, b) => b.score - a.score)
     .slice(0, 5)
 
-  const makeupCategories = [...new Set(cosmetics.map((i) => i.category))]
+  const makeupCategories = [...new Set(cosmetics.map((i) => cnCategory(i.category)))]
   const essentialMakeup = ['粉底', '口红', '眉笔', '眼影']
   const makeupMissing = essentialMakeup.filter(
     (e) => !makeupCategories.some((c) => c && c.includes(e)),
@@ -143,22 +170,28 @@ function crossCabinetRecommend(profile, sessionId, occasion) {
   const accessoryMatched = accessories
     .filter((item) => {
       const faceFit = parseJsonField(item.face_shape_fit) || []
-      return faceFit.length === 0 || faceFit.includes(faceShape)
+      return !faceShape || faceFit.length === 0 || tagHits(item.face_shape_fit, faceShape)
     })
     .map((item) => ({
       name: item.name,
+      category: cnCategory(item.category),
       ...scoreItem([
         { label: '衬你的脸型', weight: 25, hit: tagHits(item.face_shape_fit, faceShape) },
         { label: '长度适合你的颈长', weight: 10, hit: tagHits(item.neck_length_fit, profile.neck_length) },
-        { label: '适合该场合', weight: 20, hit: tagHits(item.occasion_tags, occValue) },
-        { label: '金属色衬肤色', weight: 15, hit: Boolean(preferredMetal) && String(item.metal_color || '').includes(preferredMetal) },
+        { label: '适合该场合', weight: 20, hit: tagHits(item.occasion_tags, occ) },
+        {
+          label: metal.basis ? `${metal.metal}色衬你(${metal.basis})` : '',
+          weight: 15,
+          hit: Boolean(metal.metal) && String(item.metal_color || '').includes(metal.metal),
+        },
+        { label: '这个色衬你的肤色', weight: 15, hit: tagHits(item.skin_tone_fit, skinTone) },
         { label: '低致敏材质', weight: 10, hit: Boolean(item.allergy_safe) },
       ]),
     }))
     .sort((a, b) => b.score - a.score)
     .slice(0, 5)
 
-  const accessoryCategories = [...new Set(accessories.map((i) => i.category))]
+  const accessoryCategories = [...new Set(accessories.map((i) => cnCategory(i.category)))]
   const essentialAccessories = ['项链', '耳环', '戒指', '手表']
   const accessoryMissing = essentialAccessories.filter(
     (e) => !accessoryCategories.some((c) => c && c.includes(e)),
@@ -172,15 +205,15 @@ function crossCabinetRecommend(profile, sessionId, occasion) {
   if (outfitMatched.length > 0 && accessoryMatched.length > 0) {
     crossTips.push('配饰风格建议与服装场合保持一致')
   }
-  if (makeupMatched.length > 0 && accessoryMatched.length > 0) {
-    crossTips.push('金属色配饰可与暖色系妆容搭配')
+  if (metal.metal) {
+    crossTips.push(`配饰金属色取${metal.metal}色（${metal.basis}）`)
   }
   if (outfitMissing.length > 0) {
     crossTips.push(`衣橱缺少${outfitMissing.join('、')}，影响整体搭配`)
   }
 
   return {
-    occasion: occasion || profile.occasion || '日常',
+    occasion: occ,
     occasion_style: occasionStyle,
     outfit_advice: {
       style: occasionStyle,
@@ -192,7 +225,7 @@ function crossCabinetRecommend(profile, sessionId, occasion) {
           : '衣橱搭配齐全，可根据个人喜好选择风格',
     },
     cosmetic_advice: {
-      style: skinTone + '肤色',
+      style: skinTone ? `${skinTone}肤色` : '肤色未填',
       matched: makeupMatched,
       missing: makeupMissing,
       suggestion:
@@ -201,7 +234,7 @@ function crossCabinetRecommend(profile, sessionId, occasion) {
           : '化妆品齐全，可根据场合调整妆容浓淡',
     },
     accessory_advice: {
-      style: faceShape + '脸型',
+      style: faceShape ? `${faceShape}脸型` : '脸型未填',
       matched: accessoryMatched,
       missing: accessoryMissing,
       suggestion:
@@ -209,6 +242,11 @@ function crossCabinetRecommend(profile, sessionId, occasion) {
           ? `建议补充${accessoryMissing.join('、')}等百搭配饰`
           : '配饰充足，可尝试不同风格搭配',
     },
+    full_look: buildFullLook(
+      { outfit: outfitMatched, makeup: makeupMatched, accessory: accessoryMatched },
+      occ,
+    ),
+    metal: metal.metal ? { color: metal.metal, basis: metal.basis } : null,
     cross_tips: crossTips,
     summary: {
       wardrobe_count: wardrobeItems.length,
@@ -401,7 +439,7 @@ function cabinetHealthCheck(profile, sessionId) {
   let accessoryScore = 0
 
   // 衣橱评分：基于数量和多样性
-  const wardrobeCategories = [...new Set(wardrobeItems.map((i) => i.category).filter(Boolean))]
+  const wardrobeCategories = [...new Set(wardrobeItems.map((i) => cnCategory(i.category)).filter(Boolean))]
   wardrobeScore = Math.min(100, wardrobeItems.length * 5 + wardrobeCategories.length * 10)
 
   // 化妆品评分：基于数量和保质期
@@ -410,7 +448,7 @@ function cabinetHealthCheck(profile, sessionId) {
   const cosmeticCategories = new Set()
   const expiredItems = []
   for (const item of cosmetics) {
-    cosmeticCategories.add(item.category)
+    cosmeticCategories.add(cnCategory(item.category))
     if (item.condition === '已淘汰') continue
     if (item.opened_date && item.expiry_months) {
       const opened = new Date(item.opened_date)
@@ -429,7 +467,7 @@ function cabinetHealthCheck(profile, sessionId) {
 
   // 配饰评分：基于数量和状态
   const goodAccessories = accessories.filter((a) => a.condition === '良好')
-  const accessoryCategories = [...new Set(accessories.map((a) => a.category).filter(Boolean))]
+  const accessoryCategories = [...new Set(accessories.map((a) => cnCategory(a.category)).filter(Boolean))]
   accessoryScore = Math.min(100, goodAccessories.length * 15 + (accessories.length > 0 ? 20 : 0))
 
   const overallScore = Math.round((wardrobeScore + cosmeticScore + accessoryScore) / 3)
@@ -491,18 +529,39 @@ router.get('/recommend', (req, res) => {
     const sessionId = getSessionId(req)
     if (!sessionId) return sendError(res, '缺少 X-Session-Id', 400)
 
-    const profile = {
-      skin_tone: req.query.skin_tone || '自然',
-      face_shape: req.query.face_shape || '鹅蛋脸',
-      occasion: req.query.occasion || '上班通勤',
-      body_type: req.query.body_type || '',
-      preferred_style: req.query.preferred_style || '',
-      skin_type: req.query.skin_type || '',
-      neck_length: req.query.neck_length || '',
+    const given = {}
+    for (const key of [
+      'skin_tone',
+      'face_shape',
+      'occasion',
+      'body_type',
+      'preferred_style',
+      'skin_type',
+      'neck_length',
+      'eye_shape',
+    ]) {
+      const value = req.query[key]
+      if (typeof value === 'string' && value.trim()) given[key] = value.trim()
     }
-    const occasion = req.query.occasion || ''
-    const result = crossCabinetRecommend(profile, sessionId, occasion || null)
-    return sendSuccess(res, result)
+    const occasion = req.query.occasion || null
+
+    // 长期档案打底：只填过一次的肤色/体型/眼型不用每次重填
+    const userId = req.user ? req.user.id : null
+    const tagRows = loadTags(userId)
+    const tags = {}
+    for (const t of tagRows) tags[t.key] = t.value
+    const merged = mergeWithArchive(given, loadArchive(userId))
+
+    const result = crossCabinetRecommend(merged.profile, sessionId, occasion, tags)
+    return sendSuccess(res, {
+      ...result,
+      archive: {
+        // 本次沿用了档案里的哪些条件(中文名),供前端说明"没填也能算"
+        used_fields: merged.used,
+        // 档案里算出来的结论标签,金属色这类判断的依据就在这里
+        tags: tagRows,
+      },
+    })
   } catch (err) {
     console.error('[跨柜] 推荐失败:', err)
     return sendError(res, '推荐失败', 500)

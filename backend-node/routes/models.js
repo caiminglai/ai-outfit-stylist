@@ -16,7 +16,7 @@ const fs = require('fs');
 const db = require('../db/init');
 const { sendSuccess, sendError } = require('../utils/response');
 const { adminLoginRequired } = require('../middleware/auth');
-const { ICON_MAP, findPmxFiles, parseFolderName, shouldSkipDir, BROKEN_DIR_NAME } = require('../utils/model-utils');
+const { ICON_MAP, findPmxFiles, parseFolderName, shouldSkipDir, isSkippedPath, BROKEN_DIR_NAME } = require('../utils/model-utils');
 
 const router = express.Router();
 
@@ -433,6 +433,13 @@ router.get('/file/*', (req, res) => {
 
     // 安全检查:防止目录遍历(去除 ../ 前缀)
     const safePath = path.normalize(relPath).replace(/^(\.\.[/\\])+/, '');
+
+    // 扫描时不入库的目录(zip备份/残缺模型/_bak_*)一律不下发。
+    // 本路由既不带鉴权也不限流,放行就等于 models/ 下的原始压缩包可被匿名直连拖走。
+    if (isSkippedPath(safePath)) {
+      return sendError(res, '文件不存在', 404);
+    }
+
     const fullPath = path.join(MODELS_DIR, safePath);
 
     // 确保路径在 models 目录内
@@ -458,20 +465,33 @@ router.get('/file/*', (req, res) => {
     const ext = path.extname(fullPath).toLowerCase();
 
     // ★ 纹理文件(.png/.jpg/.tga 等)特殊处理:
-    // 1. 不使用 .gz 预压缩(避免浏览器解压后数据损坏)
+    // 1. 同样优先用 .gz 预压缩(Content-Encoding: gzip 由浏览器透明解压,图片解码拿到的是原始字节)
     // 2. 禁用缓存(防止之前加载失败的空纹理被缓存)
+    //    纹理本来每次访问都重下,所以压缩收益比 .pmx 更值钱
     const TEXTURE_EXTENSIONS = ['.png', '.jpg', '.jpeg', '.tga', '.bmp', '.gif', '.webp'];
     const isTexture = TEXTURE_EXTENSIONS.includes(ext);
+    const noStore = {
+      'Cache-Control': 'no-cache, no-store, must-revalidate',
+      Pragma: 'no-cache',
+      Expires: '0',
+    };
 
     if (isTexture) {
-      // 纹理:禁用缓存,确保每次加载获取最新数据
       const mimeType = MODEL_FILE_MIME[ext] || 'image/png';
+      if (acceptsGzip && fs.existsSync(gzPath)) {
+        return res.sendFile(gzPath, {
+          headers: {
+            'Content-Encoding': 'gzip',
+            'Content-Type': mimeType,
+            Vary: 'Accept-Encoding',
+            ...noStore,
+          },
+        });
+      }
       return res.sendFile(fullPath, {
         headers: {
           'Content-Type': mimeType,
-          'Cache-Control': 'no-cache, no-store, must-revalidate',
-          'Pragma': 'no-cache',
-          'Expires': '0',
+          ...noStore,
         },
       });
     }

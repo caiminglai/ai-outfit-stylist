@@ -18,6 +18,7 @@ import type {
 import {
   listWardrobeItems,
   addWardrobeItem,
+  updateWardrobeItem,
   deleteWardrobeItem,
   getWardrobeGaps,
   suggestPurchases,
@@ -114,6 +115,8 @@ export default function WardrobeTab({ profile, compact }: WardrobeTabProps) {
   const [statusLoading, setStatusLoading] = useState(false);
 
   const [form, setForm] = useState(WARDROBE_FORM_DEFAULT);
+  /** 非空 = 表单正在改这一条;null = 新增 */
+  const [editingId, setEditingId] = useState<number | null>(null);
 
   /* 拍照上传 */
   const [showPhotoUpload, setShowPhotoUpload] = useState(true);
@@ -138,31 +141,59 @@ export default function WardrobeTab({ profile, compact }: WardrobeTabProps) {
     fetchItems();
   }, [fetchItems]);
 
-  /* ---------- 添加 ---------- */
+  /* ---------- 表单开关与提交 ---------- */
 
-  const handleAdd = async () => {
-    const { name, category, color, style_tags, season_tags, occasion_tags, price } = form;
-    if (!name.trim()) {
+  const closeForm = () => {
+    setShowAdd(false);
+    setEditingId(null);
+    setForm(WARDROBE_FORM_DEFAULT);
+    setShowPhotoUpload(true);
+  };
+
+  const openEdit = (item: WardrobeItem) => {
+    if (!item.id) return;
+    setForm({
+      name: item.name ?? '',
+      category: item.category ?? 'top',
+      color: item.color ?? '',
+      style_tags: (item.style_tags ?? []).join(','),
+      season_tags: (item.season_tags ?? []).join(','),
+      occasion_tags: (item.occasion_tags ?? []).join(','),
+      price: item.price != null ? String(item.price) : '',
+    });
+    setEditingId(item.id ?? null);
+    setShowPhotoUpload(false);
+    setShowAdd(true);
+  };
+
+  const buildPayload = () => ({
+    name: form.name.trim(),
+    category: form.category,
+    color: form.color.trim() || undefined,
+    style_tags: form.style_tags ? form.style_tags.split(',').map(s => s.trim()).filter(Boolean) : undefined,
+    season_tags: form.season_tags ? form.season_tags.split(',').map(s => s.trim()).filter(Boolean) : undefined,
+    occasion_tags: form.occasion_tags ? form.occasion_tags.split(',').map(s => s.trim()).filter(Boolean) : undefined,
+    price: form.price ? Number(form.price) : undefined,
+  });
+
+  const handleSubmit = async () => {
+    if (!form.name.trim()) {
       toast.error('请输入衣物名称');
       return;
     }
+    const payload = buildPayload();
     try {
-      await addWardrobeItem({
-        name: name.trim(),
-        category,
-        color: color.trim() || undefined,
-        style_tags: style_tags ? style_tags.split(',').map(s => s.trim()).filter(Boolean) : undefined,
-        season_tags: season_tags ? season_tags.split(',').map(s => s.trim()).filter(Boolean) : undefined,
-        occasion_tags: occasion_tags ? occasion_tags.split(',').map(s => s.trim()).filter(Boolean) : undefined,
-        price: price ? Number(price) : undefined,
-      });
-      toast.success('添加成功');
-      setShowAdd(false);
-      setShowPhotoUpload(true);
-      setForm(WARDROBE_FORM_DEFAULT);
+      if (editingId != null) {
+        await updateWardrobeItem(editingId, payload);
+        toast.success('已保存修改');
+      } else {
+        await addWardrobeItem(payload);
+        toast.success('添加成功');
+      }
+      closeForm();
       await fetchItems();
     } catch (e: unknown) {
-      toast.error(e instanceof Error ? e.message : '添加失败');
+      toast.error(e instanceof Error ? e.message : (editingId != null ? '保存失败' : '添加失败'));
     }
   };
 
@@ -186,6 +217,7 @@ export default function WardrobeTab({ profile, compact }: WardrobeTabProps) {
         occasion_tags: (sem.usage ?? []).join(','),
         price: '',
       });
+      setEditingId(null);
       setShowAdd(true);
       setShowPhotoUpload(false);
       toast.success('AI识别成功，请确认信息');
@@ -283,7 +315,7 @@ export default function WardrobeTab({ profile, compact }: WardrobeTabProps) {
       <button
         className="gradient-btn"
         style={{ width: '100%', ...btnStyle(compact) }}
-        onClick={() => { setShowAdd(true); setShowPhotoUpload(false); }}
+        onClick={() => { setForm(WARDROBE_FORM_DEFAULT); setEditingId(null); setShowAdd(true); setShowPhotoUpload(false); }}
       >
         + 添加衣物
       </button>
@@ -317,7 +349,7 @@ export default function WardrobeTab({ profile, compact }: WardrobeTabProps) {
       {/* 添加表单弹窗 */}
       {showAdd && (
         <div className="glass-card p-3 mt-3 animate-fade-in" style={{ borderColor: 'var(--accent)' }}>
-          <div className="section-title">添加衣物</div>
+          <div className="section-title">{editingId != null ? '修改衣物' : '添加衣物'}</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
             <input
               className="form-input"
@@ -366,10 +398,10 @@ export default function WardrobeTab({ profile, compact }: WardrobeTabProps) {
               onChange={e => setForm(prev => ({ ...prev, price: e.target.value }))}
             />
             <div style={{ display: 'flex', gap: '8px' }}>
-              <button className="gradient-btn" style={{ flex: 1, ...btnStyle(compact) }} onClick={handleAdd}>
-                确认添加
+              <button className="gradient-btn" style={{ flex: 1, ...btnStyle(compact) }} onClick={handleSubmit}>
+                {editingId != null ? '保存修改' : '确认添加'}
               </button>
-              <button className="ghost-btn" style={{ flex: 1, ...btnStyle(compact) }} onClick={() => { setShowAdd(false); setShowPhotoUpload(true); }}>
+              <button className="ghost-btn" style={{ flex: 1, ...btnStyle(compact) }} onClick={closeForm}>
                 取消
               </button>
             </div>
@@ -406,6 +438,13 @@ export default function WardrobeTab({ profile, compact }: WardrobeTabProps) {
               </div>
             </div>
             <div style={{ display: 'flex', gap: '6px', marginLeft: '10px', flexShrink: 0 }}>
+              <button
+                className="ghost-btn"
+                style={{ padding: '4px 8px', fontSize: '11px' }}
+                onClick={() => openEdit(item)}
+              >
+                修改
+              </button>
               <button
                 className="ghost-btn"
                 style={{ padding: '4px 8px', fontSize: '11px', color: 'var(--danger)', borderColor: 'var(--danger)' }}

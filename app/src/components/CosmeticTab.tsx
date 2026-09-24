@@ -17,6 +17,7 @@ import type {
 import {
   listCosmetics,
   addCosmetic,
+  updateCosmetic,
   deleteCosmetic,
   getCosmeticGaps,
   suggestCosmetics,
@@ -97,8 +98,11 @@ function normalizeSuggestions(raw: unknown): ShoppingWishlistItem[] {
   }));
 }
 
+/** 保质期检查结果条目（后端额外带状态与剩余天数） */
+type ExpiryItem = CosmeticItem & { status?: string; days_left?: number };
+
 /** 规范化保质期检查结果 */
-function normalizeExpiryItems(raw: unknown): CosmeticItem[] {
+function normalizeExpiryItems(raw: unknown): ExpiryItem[] {
   if (!Array.isArray(raw)) return [];
   return raw.map((item: Record<string, unknown>) => ({
     id: item.id as number | undefined,
@@ -107,6 +111,8 @@ function normalizeExpiryItems(raw: unknown): CosmeticItem[] {
     category: (item.category as string) ?? '',
     opened_date: item.opened_date as string | undefined,
     expiry_months: item.expiry_months as number | undefined,
+    status: item.status as string | undefined,
+    days_left: item.days_left as number | undefined,
   }));
 }
 
@@ -123,10 +129,12 @@ export default function CosmeticTab({ profile, compact }: CosmeticTabProps) {
   const [gapsLoading, setGapsLoading] = useState(false);
   const [suggestions, setSuggestions] = useState<ShoppingWishlistItem[] | null>(null);
   const [suggestionsLoading, setSuggestionsLoading] = useState(false);
-  const [expiry, setExpiry] = useState<CosmeticItem[] | null>(null);
+  const [expiry, setExpiry] = useState<ExpiryItem[] | null>(null);
   const [expiryLoading, setExpiryLoading] = useState(false);
 
   const [form, setForm] = useState(COSMETIC_FORM_DEFAULT);
+  /** 非空 = 表单正在改这一条;null = 新增 */
+  const [editingId, setEditingId] = useState<number | null>(null);
 
   /* ---------- 数据加载 ---------- */
 
@@ -146,33 +154,63 @@ export default function CosmeticTab({ profile, compact }: CosmeticTabProps) {
     fetchItems();
   }, [fetchItems]);
 
-  /* ---------- 添加 ---------- */
+  /* ---------- 表单开关与提交 ---------- */
 
-  const handleAdd = async () => {
-    const { name, brand, category, color_name, color_tone, color_family, finish, price, opened_date, expiry_months } = form;
-    if (!name.trim()) {
+  const closeForm = () => {
+    setShowAdd(false);
+    setEditingId(null);
+    setForm(COSMETIC_FORM_DEFAULT);
+  };
+
+  const openEdit = (item: CosmeticItem) => {
+    if (!item.id) return;
+    setForm({
+      name: item.name ?? '',
+      brand: item.brand ?? '',
+      category: item.category ?? '',
+      color_name: item.color_name ?? '',
+      color_tone: item.color_tone ?? '',
+      color_family: item.color_family ?? '',
+      finish: item.finish ?? '',
+      price: item.price != null ? String(item.price) : '',
+      opened_date: item.opened_date ?? '',
+      expiry_months: item.expiry_months != null ? String(item.expiry_months) : '',
+    });
+    setEditingId(item.id);
+    setShowAdd(true);
+  };
+
+  const buildPayload = () => ({
+    name: form.name.trim(),
+    brand: form.brand.trim() || undefined,
+    category: form.category,
+    color_name: form.color_name.trim() || undefined,
+    color_tone: (form.color_tone as '冷' | '暖' | '中性') || undefined,
+    color_family: form.color_family.trim() || undefined,
+    finish: form.finish.trim() || undefined,
+    price: form.price ? Number(form.price) : undefined,
+    opened_date: form.opened_date || undefined,
+    expiry_months: form.expiry_months ? Number(form.expiry_months) : undefined,
+  });
+
+  const handleSubmit = async () => {
+    if (!form.name.trim()) {
       toast.error('请输入化妆品名称');
       return;
     }
+    const payload = buildPayload();
     try {
-      await addCosmetic({
-        name: name.trim(),
-        brand: brand.trim() || undefined,
-        category,
-        color_name: color_name.trim() || undefined,
-        color_tone: (color_tone as '冷' | '暖' | '中性') || undefined,
-        color_family: color_family.trim() || undefined,
-        finish: finish.trim() || undefined,
-        price: price ? Number(price) : undefined,
-        opened_date: opened_date || undefined,
-        expiry_months: expiry_months ? Number(expiry_months) : undefined,
-      });
-      toast.success('添加成功');
-      setShowAdd(false);
-      setForm(COSMETIC_FORM_DEFAULT);
+      if (editingId != null) {
+        await updateCosmetic(editingId, payload);
+        toast.success('已保存修改');
+      } else {
+        await addCosmetic(payload);
+        toast.success('添加成功');
+      }
+      closeForm();
       await fetchItems();
     } catch (e: unknown) {
-      toast.error(e instanceof Error ? e.message : '添加失败');
+      toast.error(e instanceof Error ? e.message : (editingId != null ? '保存失败' : '添加失败'));
     }
   };
 
@@ -236,10 +274,11 @@ export default function CosmeticTab({ profile, compact }: CosmeticTabProps) {
     const now = new Date();
     let expiring = 0;
     let expired = 0;
+    let noDate = 0;
     items.forEach(item => {
       if (item.opened_date && item.expiry_months) {
         const opened = new Date(item.opened_date);
-        if (isNaN(opened.getTime())) return; // 无效日期跳过
+        if (isNaN(opened.getTime())) { noDate++; return; } // 无效日期跳过
         const expiryDate = new Date(opened);
         expiryDate.setMonth(expiryDate.getMonth() + item.expiry_months);
         if (now > expiryDate) {
@@ -247,6 +286,8 @@ export default function CosmeticTab({ profile, compact }: CosmeticTabProps) {
         } else if (now >= new Date(expiryDate.getTime() - 30 * 24 * 60 * 60 * 1000)) {
           expiring++;
         }
+      } else {
+        noDate++;
       }
     });
     const byCategory: Record<string, number> = {};
@@ -254,7 +295,7 @@ export default function CosmeticTab({ profile, compact }: CosmeticTabProps) {
       const cat = item.category || '其他';
       byCategory[cat] = (byCategory[cat] || 0) + 1;
     });
-    return { total: items.length, expiring, expired, byCategory };
+    return { total: items.length, expiring, expired, noDate, byCategory };
   }, [items]);
 
   /* ---------- 渲染 ---------- */
@@ -289,7 +330,7 @@ export default function CosmeticTab({ profile, compact }: CosmeticTabProps) {
       <button
         className="gradient-btn"
         style={{ width: '100%', ...btnStyle(compact) }}
-        onClick={() => setShowAdd(true)}
+        onClick={() => { setForm(COSMETIC_FORM_DEFAULT); setEditingId(null); setShowAdd(true); }}
       >
         + 添加化妆品
       </button>
@@ -297,7 +338,7 @@ export default function CosmeticTab({ profile, compact }: CosmeticTabProps) {
       {/* 添加表单弹窗 */}
       {showAdd && (
         <div className="glass-card p-3 mt-3 animate-fade-in" style={{ borderColor: 'var(--accent)' }}>
-          <div className="section-title">添加化妆品</div>
+          <div className="section-title">{editingId != null ? '修改化妆品' : '添加化妆品'}</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
             <input
               className="form-input"
@@ -370,10 +411,10 @@ export default function CosmeticTab({ profile, compact }: CosmeticTabProps) {
               onChange={e => setForm(prev => ({ ...prev, expiry_months: e.target.value }))}
             />
             <div style={{ display: 'flex', gap: '8px' }}>
-              <button className="gradient-btn" style={{ flex: 1, ...btnStyle(compact) }} onClick={handleAdd}>
-                确认添加
+              <button className="gradient-btn" style={{ flex: 1, ...btnStyle(compact) }} onClick={handleSubmit}>
+                {editingId != null ? '保存修改' : '确认添加'}
               </button>
-              <button className="ghost-btn" style={{ flex: 1, ...btnStyle(compact) }} onClick={() => setShowAdd(false)}>
+              <button className="ghost-btn" style={{ flex: 1, ...btnStyle(compact) }} onClick={closeForm}>
                 取消
               </button>
             </div>
@@ -431,7 +472,14 @@ export default function CosmeticTab({ profile, compact }: CosmeticTabProps) {
                   <span style={{ fontSize: '11px', color: 'var(--muted)', flexShrink: 0 }}>{remaining}%</span>
                 </div>
               </div>
-              <div style={{ marginLeft: '10px', flexShrink: 0 }}>
+              <div style={{ marginLeft: '10px', flexShrink: 0, display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                <button
+                  className="ghost-btn"
+                  style={{ padding: '4px 8px', fontSize: '11px' }}
+                  onClick={() => openEdit(item)}
+                >
+                  修改
+                </button>
                 <button
                   className="ghost-btn"
                   style={{ padding: '4px 8px', fontSize: '11px', color: 'var(--danger)', borderColor: 'var(--danger)' }}
@@ -525,7 +573,11 @@ export default function CosmeticTab({ profile, compact }: CosmeticTabProps) {
         <div className="glass-card p-3 mt-3 animate-fade-in">
           <div className="section-title">保质期检查</div>
           {expiry.length === 0 ? (
-            <div style={{ color: 'var(--muted)', fontSize: '13px' }}>所有化妆品均在保质期内</div>
+            <div style={{ color: 'var(--muted)', fontSize: '13px' }}>
+              {stats.noDate > 0
+                ? `已填开封日期的化妆品都在保质期内；另有 ${stats.noDate} 件未填开封日期或保质期，无法判断`
+                : '所有化妆品均在保质期内'}
+            </div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
               {expiry.map((item, idx) => (
@@ -533,6 +585,18 @@ export default function CosmeticTab({ profile, compact }: CosmeticTabProps) {
                   <div style={{ fontWeight: 600, fontSize: '13px', color: 'var(--text)' }}>
                     {item.name}
                     {item.brand && <span style={{ color: 'var(--muted)', fontWeight: 400, marginLeft: '6px' }}>{item.brand}</span>}
+                    <span
+                      style={{
+                        marginLeft: '8px',
+                        fontSize: '12px',
+                        fontWeight: 600,
+                        color: item.status === '已过期' ? 'var(--danger)' : 'var(--warning)',
+                      }}
+                    >
+                      {item.status === '已过期'
+                        ? `已过期 ${Math.abs(item.days_left ?? 0)} 天`
+                        : `还剩 ${item.days_left ?? 0} 天`}
+                    </span>
                   </div>
                   <div style={{ display: 'flex', gap: '6px', marginTop: '4px', alignItems: 'center' }}>
                     <span className={pillCls}>{getCosmeticCategoryLabel(item.category)}</span>

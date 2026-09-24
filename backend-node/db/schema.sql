@@ -72,7 +72,46 @@ CREATE TABLE IF NOT EXISTS body_metrics (
   leg_length_ratio REAL,
   bust_cm REAL,
   neck_length TEXT,
+  leg_length_cm REAL,
+  shoulder_type TEXT,
+  frame_size TEXT,
+  line_quality TEXT,
   updated_at TEXT DEFAULT (datetime('now'))
+);
+
+-- 手工面容档案表(每人一行;face_features 依赖照片,照片识别未开放时用这张)
+-- 列名一律取规则引擎的条件字段名,入库即命中,不再二次翻译
+CREATE TABLE IF NOT EXISTS face_profiles (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL UNIQUE REFERENCES users(id),
+  -- 肤色与肤质
+  skin_tone TEXT,
+  skin_tone_detail TEXT,
+  color_chroma TEXT,
+  skin_type TEXT,
+  -- 脸型与比例
+  face_shape TEXT,
+  face_ratio TEXT,
+  eye_spacing TEXT,
+  -- 五官(规则引擎在用的三个:eye_size / nose_bridge / lip_thickness)
+  eye_size TEXT,
+  eye_shape TEXT,
+  nose_bridge TEXT,
+  lip_thickness TEXT,
+  updated_at TEXT DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS ix_face_profiles_user_id ON face_profiles(user_id);
+
+-- 形象标签表(每人每标签一行):算完就存,库里查得到"这个人被算成了什么"
+-- 只存算出来的结论;本人填的条件在 body_metrics 与 face_profiles
+-- UNIQUE(user_id, tag_key) 同时充当 upsert 的冲突目标与查询索引
+CREATE TABLE IF NOT EXISTS profile_tags (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL REFERENCES users(id),
+  tag_key TEXT NOT NULL,
+  tag_value TEXT NOT NULL,
+  updated_at TEXT DEFAULT (datetime('now')),
+  UNIQUE(user_id, tag_key)
 );
 
 -- 穿搭推荐记录表
@@ -131,6 +170,11 @@ CREATE TABLE IF NOT EXISTS rule_groups (
   enabled INTEGER DEFAULT 1,
   hit_count INTEGER DEFAULT 0,
   last_hit_at TEXT,
+  feedback_up INTEGER DEFAULT 0,
+  feedback_down INTEGER DEFAULT 0,
+  -- 规则种子的来源标记:增量应用只认这个 key 判断"库里有没有这条"。
+  -- 后台手工建的规则留空(NULL),永远不会被种子覆盖;索引在 db/init.js 补列之后才建
+  source_key TEXT,
   created_at TEXT DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS ix_rule_groups_mode_enabled_category
@@ -192,10 +236,19 @@ CREATE TABLE IF NOT EXISTS inventory_products (
 -- D. 隐私数据表
 -- ============================================================
 
+-- 门店表:同一套系统给任意多家店用,店与店的数据要能分开
+-- 店名由前端带(?store=店名),第一次出现的店名当场自动登记,店数不预设也不封顶
+CREATE TABLE IF NOT EXISTS stores (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL UNIQUE,
+  created_at TEXT DEFAULT (datetime('now'))
+);
+
 -- 顾客临时会话数据表
 CREATE TABLE IF NOT EXISTS customer_sessions (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   session_id TEXT UNIQUE NOT NULL,
+  store_id INTEGER REFERENCES stores(id),
   profile_data TEXT,
   synced INTEGER DEFAULT 0,
   synced_at TEXT,
@@ -203,17 +256,33 @@ CREATE TABLE IF NOT EXISTS customer_sessions (
   expires_at TEXT
 );
 CREATE INDEX IF NOT EXISTS ix_customer_sessions_session_id ON customer_sessions(session_id);
+-- store_id 的索引不在这里建:本文件跑在补列迁移之前,老库此时还没有 store_id 列
 
 -- 建议记录表
 CREATE TABLE IF NOT EXISTS recommendation_logs (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   session_id TEXT NOT NULL,
+  user_id INTEGER REFERENCES users(id),
+  store_id INTEGER REFERENCES stores(id),
   mode TEXT NOT NULL,
   input_snapshot TEXT,
   result TEXT,
   created_at TEXT DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS ix_recommendation_logs_session_id ON recommendation_logs(session_id);
+-- user_id 的索引不在这里建:本文件跑在补列迁移之前,老库此时还没有 user_id 列
+
+-- 反馈表:记下"这条规则用对了没有",recommendation_logs 只有"用了几次"
+-- 一个人对同一条规则只留最新一次评价,换主意是覆盖不是加一行,好评率不会被重复点击灌大
+CREATE TABLE IF NOT EXISTS feedback_events (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL REFERENCES users(id),
+  group_id INTEGER NOT NULL REFERENCES rule_groups(id),
+  category TEXT,
+  signal TEXT NOT NULL,
+  updated_at TEXT DEFAULT (datetime('now')),
+  UNIQUE(user_id, group_id)
+);
 
 -- ============================================================
 -- E. 个人衣橱表

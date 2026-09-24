@@ -43,7 +43,7 @@ export const FIELD_LABELS: Record<string, string> = {
 };
 
 /** 不在卡片上展示的隐藏字段(explanation 单独在"为什么推荐"区展示) */
-export const HIDDEN_FIELDS = ['group_id', 'group_name', 'priority', 'score', 'explanation'];
+export const HIDDEN_FIELDS = ['group_id', 'group_name', 'priority', 'score', 'feedback', 'explanation'];
 
 /** 根据 Tab key 获取中文标签 */
 export function TAB_LABEL(key: string): string {

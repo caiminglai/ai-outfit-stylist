@@ -1,6 +1,7 @@
 /** 建议报告页 - 门店/个人模式 + 天气/AI文案/星座/试穿增强功能 */
 import { useState } from 'react';
 import type { CustomerProfile, EngineRecommendation, InventoryProduct, RuleRecommendationItem, WeatherData } from '../types';
+import { postRuleFeedback } from '../api';
 import InventoryCard from './InventoryCard';
 import AlgorithmAnalysisCard from './recommend/AlgorithmAnalysis';
 import EnhancedTextCard from './recommend/EnhancedTextCard';
@@ -37,6 +38,26 @@ export default function RecommendationReport({
   /** 切换某条推荐的"为什么推荐"展开/收起 */
   const toggleExplain = (groupId: number): void => {
     setExplainOpen((prev) => ({ ...prev, [groupId]: !prev[groupId] }));
+  };
+
+  // 反馈:本次会话每条规则点成了什么(后端按人+规则覆盖,重复点不会累加)
+  const [myFeedback, setMyFeedback] = useState<Record<number, 'useful' | 'inaccurate'>>({});
+  const [feedbackBusy, setFeedbackBusy] = useState(0);
+  const [feedbackError, setFeedbackError] = useState('');
+
+  /** 提交"这条建议准吗",成功后把选中的信号记下来 */
+  const sendFeedback = async (groupId: number, signal: 'useful' | 'inaccurate'): Promise<void> => {
+    if (feedbackBusy !== 0) return;
+    setFeedbackBusy(groupId);
+    setFeedbackError('');
+    try {
+      await postRuleFeedback(groupId, activeTab, signal);
+      setMyFeedback((prev) => ({ ...prev, [groupId]: signal }));
+    } catch (err) {
+      setFeedbackError(err instanceof Error ? err.message : '反馈没存上，再点一次');
+    } finally {
+      setFeedbackBusy(0);
+    }
   };
 
   const items: RuleRecommendationItem[] = recommendation[activeTab] || [];
@@ -103,6 +124,7 @@ export default function RecommendationReport({
                   {item.score > 0 && (
                     <span className="pill-tag" style={{ color: 'var(--accent)', borderColor: 'var(--accent)' }}>
                       匹配度 {item.score}
+                      {(item.feedback ?? 0) !== 0 && `（含反馈 ${item.feedback! > 0 ? '+' : ''}${item.feedback}）`}
                     </span>
                   )}
                 </div>
@@ -150,8 +172,35 @@ export default function RecommendationReport({
                   )}
                 </div>
               )}
+              {/* 反馈:唯一能回答"哪条规则用对了"的信号,兜底推荐没有规则号所以不显示 */}
+              {item.group_id > 0 && (
+                <div className="mt-2 pt-2 flex items-center gap-2" style={{ borderTop: '1px dashed var(--line)' }}>
+                  <span className="text-xs" style={{ color: 'var(--muted)' }}>这条建议准吗？</span>
+                  {(['useful', 'inaccurate'] as const).map((signal) => (
+                    <button
+                      key={signal}
+                      onClick={() => sendFeedback(item.group_id, signal)}
+                      className="ghost-btn"
+                      style={{
+                        padding: '2px 8px',
+                        fontSize: '11px',
+                        color: myFeedback[item.group_id] === signal ? 'var(--accent)' : 'var(--muted)',
+                        borderColor: myFeedback[item.group_id] === signal ? 'var(--accent)' : 'var(--line)',
+                      }}
+                    >
+                      {signal === 'useful' ? '👍 有用' : '👎 不准'}
+                    </button>
+                  ))}
+                  {myFeedback[item.group_id] && (
+                    <span className="text-[10px]" style={{ color: 'var(--good)' }}>已记录</span>
+                  )}
+                </div>
+              )}
             </div>
           ))
+        )}
+        {feedbackError && (
+          <div className="text-xs" style={{ color: 'var(--danger)' }}>{feedbackError}</div>
         )}
       </div>
 

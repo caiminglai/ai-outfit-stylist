@@ -3,10 +3,15 @@
  * 对应 Python: app/routes/analysis.py
  */
 const express = require('express')
+const fs = require('fs')
+const path = require('path')
 const db = require('../db/init')
 const { sendSuccess, sendError } = require('../utils/response')
 const { loginRequired } = require('../middleware/auth')
 const { rateLimit } = require('../middleware/rateLimit')
+const { loadArchive, loadTags } = require('../services/profileArchive')
+const { clearFeedback } = require('../services/ruleFeedback')
+const { UPLOAD_DIR } = require('../utils/common')
 
 const router = express.Router()
 
@@ -144,6 +149,79 @@ router.get('/body', loginRequired, (req, res) => {
   } catch (err) {
     console.error('[分析] 获取身体指标失败:', err)
     return sendError(res, '获取失败', 500)
+  }
+})
+
+/** 获取长期档案（身体 + 面容 + 已算出的标签，字段名与推荐表单一致，供前端预填） */
+router.get('/archive', loginRequired, (req, res) => {
+  try {
+    return sendSuccess(res, {
+      profile: loadArchive(req.user.id),
+      tags: loadTags(req.user.id),
+    })
+  } catch (err) {
+    console.error('[分析] 获取长期档案失败:', err)
+    return sendError(res, '获取失败', 500)
+  }
+})
+
+/** 删除我的全部数据：档案 + 标签 + 反馈 + 样本 + 照片 + 试穿结果（含磁盘文件），一并清掉 */
+router.delete('/archive', loginRequired, (req, res) => {
+  try {
+    const userId = req.user.id
+
+    // 文件清单必须在删行之前取：行一旦删掉就再也不知道文件叫什么
+    const fileUrls = [
+      ...db.prepare('SELECT url FROM photos WHERE user_id = ?').all(userId),
+      ...db.prepare('SELECT result_url AS url FROM tryon_results WHERE user_id = ?').all(userId),
+    ]
+      .map((row) => row.url)
+      .filter((url) => typeof url === 'string' && url.startsWith('/uploads/'))
+
+    const delBody = db.prepare('DELETE FROM body_metrics WHERE user_id = ?')
+    const delFace = db.prepare('DELETE FROM face_profiles WHERE user_id = ?')
+    const delTags = db.prepare('DELETE FROM profile_tags WHERE user_id = ?')
+    const delLogs = db.prepare('DELETE FROM recommendation_logs WHERE user_id = ?')
+    const delRecords = db.prepare('DELETE FROM recommendations WHERE user_id = ?')
+    const delTryon = db.prepare('DELETE FROM tryon_results WHERE user_id = ?')
+    const delPhotos = db.prepare('DELETE FROM photos WHERE user_id = ?')
+    const removed = db.transaction(() => ({
+      body: delBody.run(userId).changes,
+      face: delFace.run(userId).changes,
+      tags: delTags.run(userId).changes,
+      // 反馈要连带把规则的计数改回来，不能只删行
+      feedback: clearFeedback(userId),
+      logs: delLogs.run(userId).changes,
+      // recommendations 与 tryon_results 都外键引用 photos，删除必须排在清照片之前
+      records: delRecords.run(userId).changes,
+      tryon: delTryon.run(userId).changes,
+      photos: delPhotos.run(userId).changes,
+    }))()
+
+    // 磁盘文件放在事务之后：删掉的文件回滚不了，先保证库里的账对上
+    let files = 0
+    let filesFailed = 0
+    for (const url of fileUrls) {
+      const filepath = path.join(UPLOAD_DIR, path.basename(url))
+      try {
+        if (fs.existsSync(filepath)) {
+          fs.unlinkSync(filepath)
+          files += 1
+        }
+      } catch (err) {
+        filesFailed += 1
+        console.warn('[档案] 删除照片文件失败:', err.message)
+      }
+    }
+
+    return sendSuccess(
+      res,
+      filesFailed > 0 ? { ...removed, files, files_failed: filesFailed } : { ...removed, files },
+      '您的档案与相关记录已删除',
+    )
+  } catch (err) {
+    console.error('[分析] 删除长期档案失败:', err)
+    return sendError(res, '删除失败', 500)
   }
 })
 

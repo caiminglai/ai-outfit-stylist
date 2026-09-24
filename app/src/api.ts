@@ -20,7 +20,7 @@ import type {
   CustomerProfile, CustomerSession, EngineRecommendation,
   EnhancedText,
   HoroscopeData, HoroscopeListData,
-  PrivacyNoticeData,
+  PrivacyNoticeData, ProfileTag,
   PurchaseEvaluation,
   RuleBrowseItem, RuleBrowseQuery,
   SeasonalReminder,
@@ -86,6 +86,14 @@ export function getSessionId(): string {
 }
 
 /**
+ * 只取游客 id（已登录时也不返回账号 id）
+ * 注册/登录要用它把游客期间攒的数据过户到账号上
+ */
+export function getGuestSessionId(): string {
+  return localStorage.getItem('style_ai_session') || '';
+}
+
+/**
  * 页面加载时主动清理过期 Session(防止长时间停留不操作导致旧 session 残留)
  * 在 App 入口调用一次即可
  */
@@ -123,10 +131,25 @@ export function setAccount(account: AccountInfo | null): void {
   else localStorage.removeItem(ACCOUNT_KEY);
 }
 
-async function authRequest(path: string, body: Record<string, string>): Promise<AccountInfo> {
+/** 游客数据过户结果：moved = 每张表跟过来的条数，dropped = 因账号已有同类记录而被丢掉的条数 */
+export interface GuestMergeResult {
+  moved: Record<string, number>;
+  dropped: number;
+}
+
+/** 注册/登录响应 = 账号信息 + 本次过户结果 */
+export interface AuthResult extends AccountInfo {
+  merged: GuestMergeResult | null;
+}
+
+async function authRequest(path: string, body: Record<string, string>): Promise<AuthResult> {
   const res = await fetchWithTimeout(
     `${BASE}${path}`,
-    { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) },
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Session-Id': getGuestSessionId() },
+      body: JSON.stringify(body),
+    },
     15000
   );
   const data = await res.json();
@@ -139,14 +162,18 @@ async function authRequest(path: string, body: Record<string, string>): Promise<
     nickname: data.data.nickname ?? null,
   };
   setAccount(account);
-  return account;
+  return { ...account, merged: data.data.merged ?? null };
 }
 
-export function registerAccount(phone: string, password: string, nickname?: string): Promise<AccountInfo> {
+export function registerAccount(
+  phone: string,
+  password: string,
+  nickname?: string
+): Promise<AuthResult> {
   return authRequest('/auth/register', nickname ? { phone, password, nickname } : { phone, password });
 }
 
-export function loginAccount(phone: string, password: string): Promise<AccountInfo> {
+export function loginAccount(phone: string, password: string): Promise<AuthResult> {
   return authRequest('/auth/login', { phone, password });
 }
 
@@ -221,10 +248,22 @@ async function unwrap<T>(res: Response): Promise<T> {
 
 // ============ 顾客隐私数据 API(门店模式) ============
 
+const STORE_KEY = 'style_ai_store';
+
+/**
+ * 门店名：地址栏带 ?store=店名 时记一次,之后这台设备就一直归属这家店
+ * 每家店用自己的链接(或二维码)打开展厅即可,数据按店分开
+ */
+export function getStoreName(): string {
+  const fromUrl = new URLSearchParams(location.search).get('store')?.trim();
+  if (fromUrl) localStorage.setItem(STORE_KEY, fromUrl.slice(0, 40));
+  return localStorage.getItem(STORE_KEY) || '';
+}
+
 export async function createCustomerSession(profileData: CustomerProfile): Promise<CustomerSession> {
   const res = await fetchWithTimeout(`${BASE}/customer/session`, {
     method: 'POST', headers: headers(),
-    body: JSON.stringify({ profile_data: profileData }),
+    body: JSON.stringify({ profile_data: profileData, store: getStoreName() }),
   });
   return unwrap(res);
 }
@@ -283,10 +322,42 @@ export async function getEngineRecommendation(profile: CustomerProfile, mode: 's
   recommendation: EngineRecommendation;
   mode: string;
   privacy_notice: string;
+  /** 本次与长期档案的交互:used_fields=从档案补进来的字段中文名,saved_fields=本次存进档案的字段数,tags=算完落库的标签 */
+  archive?: { used_fields: string[]; saved_fields: number; tags?: ProfileTag[]; };
 }> {
   const res = await fetchWithTimeout(`${BASE}/recommend/engine`, {
     method: 'POST', headers: headers(),
     body: JSON.stringify({ profile, mode }),
+  });
+  return unwrap(res);
+}
+
+// ============ 规则反馈 API(点一次记一行,换主意覆盖旧的那行) ============
+
+/** 这条建议准不准:useful=有用 / inaccurate=不准 */
+export async function postRuleFeedback(
+  groupId: number,
+  category: string,
+  signal: 'useful' | 'inaccurate',
+): Promise<{ group_id: number; signal: string; feedback_up: number; feedback_down: number; }> {
+  const res = await fetchWithTimeout(`${BASE}/recommend/feedback`, {
+    method: 'POST', headers: headers(),
+    body: JSON.stringify({ group_id: groupId, category, signal }),
+  });
+  return unwrap(res);
+}
+
+// ============ 长期档案 API(个人模式:越用越懂你) ============
+/** 读取本人长期档案(身体 + 面容 + 已存标签),档案用于表单预填,未填过返回 null */
+export async function getProfileArchive(): Promise<{ profile: CustomerProfile | null; tags?: ProfileTag[]; }> {
+  const res = await fetchWithTimeout(`${BASE}/analysis/archive`, { headers: headers() });
+  return unwrap(res);
+}
+
+/** 删除本人档案、标签、归属本人的推荐样本与照片(含上传目录里的文件),返回各类被删条数 */
+export async function deleteProfileArchive(): Promise<{ body: number; face: number; tags: number; feedback: number; logs: number; records: number; tryon: number; photos: number; files: number; files_failed?: number; }> {
+  const res = await fetchWithTimeout(`${BASE}/analysis/archive`, {
+    method: 'DELETE', headers: headers(),
   });
   return unwrap(res);
 }
@@ -330,7 +401,7 @@ export async function addWardrobeItem(item: Partial<WardrobeItem>): Promise<Ward
   return unwrap(res);
 }
 
-/** @unused 待实现:编辑衣橱单品 */
+/** 编辑衣橱单品(三柜「修改」入口已接) */
 export async function updateWardrobeItem(id: number, item: Partial<WardrobeItem>): Promise<WardrobeItem> {
   const res = await fetchWithTimeout(`${BASE}/wardrobe/items/${id}`, {
     method: 'PUT', headers: headers(),
@@ -421,7 +492,7 @@ export async function addCosmetic(item: Partial<CosmeticItem>): Promise<Cosmetic
   return data.item;
 }
 
-/** @unused 待实现:编辑化妆品 */
+/** 编辑化妆品(三柜「修改」入口已接) */
 export async function updateCosmetic(id: number, item: Partial<CosmeticItem>): Promise<CosmeticItem> {
   const res = await fetchWithTimeout(`${BASE}/cosmetic/items/${id}`, {
     method: 'PUT', headers: headers(),
@@ -484,7 +555,7 @@ export async function addAccessory(item: Partial<AccessoryItem>): Promise<Access
   return data.item;
 }
 
-/** @unused 待实现:编辑配饰 */
+/** 编辑配饰(三柜「修改」入口已接) */
 export async function updateAccessory(id: number, item: Partial<AccessoryItem>): Promise<AccessoryItem> {
   const res = await fetchWithTimeout(`${BASE}/accessory/items/${id}`, {
     method: 'PUT', headers: headers(),
@@ -530,7 +601,7 @@ export async function suggestAccessories(profile?: CustomerProfile): Promise<Sho
 export async function getCrossCabinetRecommend(occasion?: string, profile?: CustomerProfile): Promise<CrossCabinetRecommendation> {
   const params = new URLSearchParams();
   if (occasion) params.set('occasion', occasion);
-  for (const key of ['skin_tone', 'face_shape', 'body_type', 'preferred_style', 'skin_type', 'neck_length'] as const) {
+  for (const key of ['skin_tone', 'face_shape', 'body_type', 'preferred_style', 'skin_type', 'neck_length', 'eye_shape'] as const) {
     const value = profile?.[key];
     if (typeof value === 'string' && value) params.set(key, value);
   }

@@ -47,7 +47,9 @@ const TABLE_NAMES = {
   users: '用户/游客表',
   photos: '照片表',
   face_features: '面容分析表',
+  face_profiles: '面容档案表(手工)',
   body_metrics: '身体指标表',
+  profile_tags: '形象标签表(算出)',
   recommendations: '推荐记录表',
   tryon_results: '试穿结果表',
   clothing_items: '衣服照片表',
@@ -56,8 +58,10 @@ const TABLE_NAMES = {
   rule_actions: '规则动作表',
   inventory_categories: '商品分类表',
   inventory_products: '库存商品表',
+  stores: '门店表',
   customer_sessions: '顾客会话表',
   recommendation_logs: '推荐日志表',
+  feedback_events: '反馈表(规则评价)',
   user_wardrobe: '个人衣橱表',
   wardrobe_outfits: '搭配组合表',
   shopping_wishlist: '购物心愿单',
@@ -130,13 +134,22 @@ function getTableSchema() {
   return tables
 }
 
-/** 安全获取表的行数 */
-function getRowCount(tableName) {
+/** 安全获取表的行数（where 只能是本文件内拼出的固定片段，值一律走 params 绑定） */
+function getRowCount(tableName, where = '', params = []) {
   try {
-    const result = db.prepare(`SELECT COUNT(*) as count FROM ${tableName}`).get()
+    const result = db.prepare(`SELECT COUNT(*) as count FROM ${tableName}${where}`).get(...params)
     return result ? result.count : 0
   } catch {
     return -1
+  }
+}
+
+/** 该表当前是否有 store_id 列：只能查现库，schema.sql 的 CREATE TABLE IF NOT EXISTS 不会给老表补列 */
+function hasStoreColumn(tableName) {
+  try {
+    return db.prepare(`PRAGMA table_info(${tableName})`).all().some((col) => col.name === 'store_id')
+  } catch {
+    return false
   }
 }
 
@@ -172,10 +185,27 @@ router.get('/api/data/:tableName', adminLoginRequired, (req, res) => {
         .json({ success: false, error: { code: 'NOT_FOUND', message: `未知表名: ${tableName}` } })
     }
 
-    const total = getRowCount(tableName)
+    const storeFilter = hasStoreColumn(tableName)
+    const storeId = Number.parseInt(req.query.store_id, 10)
+    const filterStore = storeFilter && Number.isInteger(storeId)
+    const where = filterStore ? ' WHERE store_id = ?' : ''
+    const whereParams = filterStore ? [storeId] : []
+
+    const total = getRowCount(tableName, where, whereParams)
     const offset = (page - 1) * perPage
 
-    const rows = db.prepare(`SELECT * FROM ${tableName} LIMIT ? OFFSET ?`).all(perPage, offset)
+    const rows = db
+      .prepare(`SELECT * FROM ${tableName}${where} LIMIT ? OFFSET ?`)
+      .all(...whereParams, perPage, offset)
+
+    let storeList = null
+    if (storeFilter) {
+      try {
+        storeList = db.prepare('SELECT id, name FROM stores ORDER BY id').all()
+      } catch {
+        storeList = []
+      }
+    }
 
     // 处理 JSON 字段反序列化
     const jsonColumns = [
@@ -225,6 +255,9 @@ router.get('/api/data/:tableName', adminLoginRequired, (req, res) => {
         page,
         per_page: perPage,
         total_pages: Math.ceil(total / perPage),
+        store_filter: storeFilter,
+        store_id: filterStore ? storeId : null,
+        stores: storeList,
       },
     })
   } catch (err) {
