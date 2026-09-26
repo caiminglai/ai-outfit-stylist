@@ -5,11 +5,11 @@
 app/dist
 
 # ===== 运行时数据（全部走 compose 挂载，不该进镜像）=====
-backend-node/db/styleai.db
-backend-node/db/styleai.db-shm
-backend-node/db/styleai.db-wal
-backend-node/uploads
-backend-node/logs
+backend/db/styleai.db
+backend/db/styleai.db-shm
+backend/db/styleai.db-wal
+backend/uploads
+backend/logs
 
 # ===== 密钥（仓库与镜像都是公开的）=====
 .env

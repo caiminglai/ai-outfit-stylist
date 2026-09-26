@@ -1,0 +1,174 @@
+# ============================================================
+# 私人形象定制 AI - Git 属性配置
+# 作用：统一换行符、标记二进制文件、设置 diff 策略等
+# ============================================================
+
+
+# ============================================================
+# 1. 文本文件 - 自动换行符归一化
+# ============================================================
+# 核心原则：仓库内统一使用 LF，检出时根据操作系统自动转换
+# - text=auto：自动检测文本文件，换行符归一化为 LF
+# - eol=lf：强制使用 LF 换行符（推荐前端/Node 项目）
+# - eol=crlf：强制使用 CRLF（Windows 特有文件）
+
+* text=auto eol=lf
+
+
+# ============================================================
+# 2. 明确指定文本文件类型
+# ============================================================
+
+# --- 源代码 ---
+*.js        text eol=lf
+*.jsx       text eol=lf
+*.ts        text eol=lf
+*.tsx       text eol=lf
+*.mjs       text eol=lf
+*.cjs       text eol=lf
+
+# --- 样式表 ---
+*.css       text eol=lf
+*.scss      text eol=lf
+*.sass      text eol=lf
+*.less      text eol=lf
+
+# --- 标记语言 ---
+*.html      text eol=lf
+*.htm       text eol=lf
+*.xml       text eol=lf
+*.svg       text eol=lf
+*.md        text eol=lf
+*.mdx       text eol=lf
+
+# --- 配置文件 ---
+*.json      text eol=lf
+*.jsonc     text eol=lf
+*.yaml      text eol=lf
+*.yml       text eol=lf
+*.toml      text eol=lf
+*.ini       text eol=lf
+*.conf      text eol=lf
+*.env       text eol=lf
+*.env.*     text eol=lf
+
+# --- SQL ---
+*.sql       text eol=lf
+
+# --- Python ---
+*.py        text eol=lf
+
+# --- Shell 脚本 ---
+*.sh        text eol=lf
+*.bash      text eol=lf
+*.zsh       text eol=lf
+
+# --- Windows 批处理（保持 CRLF） ---
+*.bat       text eol=crlf
+*.cmd       text eol=crlf
+
+# --- 文档 ---
+*.txt       text eol=lf
+
+
+# ============================================================
+# 3. 二进制文件 - 不做换行符转换，不做 diff
+# ============================================================
+
+# --- 图片 ---
+*.png       binary
+*.jpg       binary
+*.jpeg      binary
+*.gif       binary
+*.bmp       binary
+*.ico       binary
+*.webp      binary
+*.avif      binary
+
+# --- 字体 ---
+*.woff      binary
+*.woff2     binary
+*.ttf       binary
+*.otf       binary
+*.eot       binary
+
+# --- 数据库 ---
+*.db        binary
+*.db-shm    binary
+*.db-wal    binary
+*.db-journal binary
+*.sqlite    binary
+*.sqlite3   binary
+
+# --- 压缩包 ---
+*.zip       binary
+*.rar       binary
+*.7z        binary
+*.tar       binary
+*.gz        binary
+
+# --- 音视频 ---
+*.mp3       binary
+*.mp4       binary
+*.wav       binary
+*.avi       binary
+*.mov       binary
+
+# --- Office 文档 ---
+*.pdf       binary
+*.doc       binary
+*.docx      binary
+*.xls       binary
+*.xlsx      binary
+*.ppt       binary
+*.pptx      binary
+
+# --- 其他 ---
+*.exe       binary
+*.dll       binary
+*.so        binary
+*.dylib     binary
+*.class     binary
+*.jar       binary
+
+
+# ============================================================
+# 4. 特殊文件处理
+# ============================================================
+
+# Git 配置文件本身
+.gitattributes  text eol=lf
+.gitignore      text eol=lf
+.gitmodules     text eol=lf
+
+# EditorConfig
+.editorconfig   text eol=lf
+
+# Prettier 配置
+.prettierrc     text eol=lf
+.prettierrc.json text eol=lf
+.prettierignore text eol=lf
+
+# ESLint 配置
+.eslintrc       text eol=lf
+.eslintrc.json  text eol=lf
+eslint.config.js text eol=lf
+eslint.config.mjs text eol=lf
+
+# TypeScript 配置
+tsconfig.json   text eol=lf
+
+# Tailwind 配置
+tailwind.config.js text eol=lf
+tailwind.config.ts text eol=lf
+
+# PostCSS 配置
+postcss.config.js text eol=lf
+
+# Vite 配置
+vite.config.ts  text eol=lf
+vite.config.js  text eol=lf
+
+# 包管理
+package.json    text eol=lf
+package-lock.json text eol=lf

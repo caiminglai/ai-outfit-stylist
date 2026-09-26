@@ -1,10 +1,7 @@
 /** @type {import('tailwindcss').Config} */
 export default {
   darkMode: ['class'],
-  content: [
-    "./index.html",
-    "./src/**/*.{js,ts,jsx,tsx}",
-  ],
+  content: ['./index.html', './src/**/*.{js,ts,jsx,tsx}'],
   theme: {
     extend: {
       colors: {
@@ -113,9 +110,9 @@ export default {
         xs: 'calc(var(--radius) - 6px)',
       },
       animation: {
-        'float': 'float 6s ease-in-out infinite',
+        float: 'float 6s ease-in-out infinite',
         'float-delayed': 'float 6s ease-in-out 2s infinite',
-        'sparkle': 'sparkle 2s ease-in-out infinite',
+        sparkle: 'sparkle 2s ease-in-out infinite',
         'pulse-glow': 'pulse-glow 2s ease-in-out infinite',
         'petal-fall': 'petalFall 8s linear infinite',
         'petal-fall-2': 'petalFall 10s linear 2s infinite',
@@ -150,10 +147,10 @@ export default {
         },
       },
       boxShadow: {
-        'pink': '0 10px 40px rgba(255, 107, 157, 0.15)',
+        pink: '0 10px 40px rgba(255, 107, 157, 0.15)',
         'pink-lg': '0 20px 60px rgba(255, 107, 157, 0.2)',
       },
     },
   },
   plugins: [require('tailwindcss-animate')],
-};
+}

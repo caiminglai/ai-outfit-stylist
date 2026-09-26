@@ -1,55 +1,98 @@
 /** 建议报告页 - 门店/个人模式 + 天气/AI文案/星座/试穿增强功能 */
-import { useState } from 'react';
-import type { CustomerProfile, EngineRecommendation, InventoryProduct, RuleRecommendationItem, WeatherData } from '../types';
-import InventoryCard from './InventoryCard';
-import AlgorithmAnalysisCard from './recommend/AlgorithmAnalysis';
-import EnhancedTextCard from './recommend/EnhancedTextCard';
-import HoroscopeCard from './recommend/HoroscopeCard';
-import { FIELD_LABELS, HIDDEN_FIELDS, TAB_LABEL, TABS } from './recommend/RecommendTab';
-import TryonCard from './recommend/TryonCard';
-import WeatherCard from './recommend/WeatherCard';
+import { useState } from 'react'
+import type {
+  CustomerProfile,
+  EngineRecommendation,
+  InventoryProduct,
+  RuleRecommendationItem,
+  WeatherData,
+} from '../types'
+import { postRuleFeedback } from '../api'
+import InventoryCard from './InventoryCard'
+import AlgorithmAnalysisCard from './recommend/AlgorithmAnalysis'
+import EnhancedTextCard from './recommend/EnhancedTextCard'
+import HoroscopeCard from './recommend/HoroscopeCard'
+import { FIELD_LABELS, HIDDEN_FIELDS, TAB_LABEL, TABS } from './recommend/RecommendTab'
+import TryonCard from './recommend/TryonCard'
+import WeatherCard from './recommend/WeatherCard'
 
 interface RecommendationReportProps {
-  recommendation: EngineRecommendation;
-  profile: CustomerProfile;
-  mode: 'store' | 'personal';
-  sessionId?: string;
-  onSync?: () => void;
-  onDelete?: () => void;
-  onBack?: () => void;
-  synced?: boolean;
-  syncing?: boolean;
-  compact?: boolean;
+  recommendation: EngineRecommendation
+  profile: CustomerProfile
+  mode: 'store' | 'personal'
+  sessionId?: string
+  onSync?: () => void
+  onDelete?: () => void
+  onBack?: () => void
+  synced?: boolean
+  syncing?: boolean
+  compact?: boolean
 }
 
 export default function RecommendationReport({
-  recommendation, profile, mode, sessionId,
-  onSync, onDelete, onBack, synced, syncing, compact,
+  recommendation,
+  profile,
+  mode,
+  sessionId,
+  onSync,
+  onDelete,
+  onBack,
+  synced,
+  syncing,
+  compact,
 }: RecommendationReportProps) {
-  const [activeTab, setActiveTab] = useState<typeof TABS[number]['key']>('穿搭');
+  const [activeTab, setActiveTab] = useState<(typeof TABS)[number]['key']>('穿搭')
   // 天气数据,供 AI 文案增强使用
-  const [weather, setWeather] = useState<WeatherData | null>(null);
+  const [weather, setWeather] = useState<WeatherData | null>(null)
   // 虚拟试穿面板展开状态
-  const [tryonOpen, setTryonOpen] = useState(false);
+  const [tryonOpen, setTryonOpen] = useState(false)
   // "为什么推荐"展开状态(按 group_id 记录哪些卡片展开了)
-  const [explainOpen, setExplainOpen] = useState<Record<number, boolean>>({});
+  const [explainOpen, setExplainOpen] = useState<Record<number, boolean>>({})
 
   /** 切换某条推荐的"为什么推荐"展开/收起 */
   const toggleExplain = (groupId: number): void => {
-    setExplainOpen((prev) => ({ ...prev, [groupId]: !prev[groupId] }));
-  };
+    setExplainOpen((prev) => ({ ...prev, [groupId]: !prev[groupId] }))
+  }
 
-  const items: RuleRecommendationItem[] = recommendation[activeTab] || [];
-  const inventory: InventoryProduct[] = recommendation.inventory?.[activeTab] || [];
-  const analysis = recommendation.algorithm_analysis;
+  // 反馈:本次会话每条规则点成了什么(后端按人+规则覆盖,重复点不会累加)
+  const [myFeedback, setMyFeedback] = useState<Record<number, 'useful' | 'inaccurate'>>({})
+  const [feedbackBusy, setFeedbackBusy] = useState(0)
+  const [feedbackError, setFeedbackError] = useState('')
+
+  /** 提交"这条建议准吗",成功后把选中的信号记下来 */
+  const sendFeedback = async (groupId: number, signal: 'useful' | 'inaccurate'): Promise<void> => {
+    if (feedbackBusy !== 0) return
+    setFeedbackBusy(groupId)
+    setFeedbackError('')
+    try {
+      await postRuleFeedback(groupId, activeTab, signal)
+      setMyFeedback((prev) => ({ ...prev, [groupId]: signal }))
+    } catch (err) {
+      setFeedbackError(err instanceof Error ? err.message : '反馈没存上，再点一次')
+    } finally {
+      setFeedbackBusy(0)
+    }
+  }
+
+  const items: RuleRecommendationItem[] = recommendation[activeTab] || []
+  const inventory: InventoryProduct[] = recommendation.inventory?.[activeTab] || []
+  const analysis = recommendation.algorithm_analysis
 
   return (
     <div className="space-y-3">
       {/* 顾客档案摘要 */}
       <div className="glass-card p-3" style={{ borderColor: 'var(--accent)' }}>
-        <div className="flex items-center justify-between mb-2 pb-2" style={{ borderBottom: '1px solid var(--line)' }}>
-          <h2 className="text-sm font-semibold" style={{ color: 'var(--accent)' }}>形象建议报告</h2>
-          <span className="pill-tag" style={{ color: 'var(--accent)', borderColor: 'var(--accent)' }}>
+        <div
+          className="flex items-center justify-between mb-2 pb-2"
+          style={{ borderBottom: '1px solid var(--line)' }}
+        >
+          <h2 className="text-sm font-semibold" style={{ color: 'var(--accent)' }}>
+            形象建议报告
+          </h2>
+          <span
+            className="pill-tag"
+            style={{ color: 'var(--accent)', borderColor: 'var(--accent)' }}
+          >
             {mode === 'store' ? '🏪 门店推荐' : '📱 个人深度分析'}
           </span>
         </div>
@@ -71,13 +114,11 @@ export default function RecommendationReport({
       <WeatherCard onWeather={setWeather} />
 
       {/* 个人模式:算法分析报告 */}
-      {mode === 'personal' && analysis && (
-        <AlgorithmAnalysisCard analysis={analysis} />
-      )}
+      {mode === 'personal' && analysis && <AlgorithmAnalysisCard analysis={analysis} />}
 
       {/* 分类 Tab */}
       <div className="flex gap-1 pb-2" style={{ borderBottom: '1px solid var(--line)' }}>
-        {TABS.map(tab => (
+        {TABS.map((tab) => (
           <button
             key={tab.key}
             onClick={() => setActiveTab(tab.key)}
@@ -98,11 +139,21 @@ export default function RecommendationReport({
           items.map((item) => (
             <div key={item.group_id} className="glass-card p-3">
               {item.group_name && (
-                <div className="flex items-center gap-2 mb-2 pb-2" style={{ borderBottom: '1px solid var(--line)' }}>
-                  <span className="text-sm font-medium" style={{ color: 'var(--text)' }}>{item.group_name}</span>
+                <div
+                  className="flex items-center gap-2 mb-2 pb-2"
+                  style={{ borderBottom: '1px solid var(--line)' }}
+                >
+                  <span className="text-sm font-medium" style={{ color: 'var(--text)' }}>
+                    {item.group_name}
+                  </span>
                   {item.score > 0 && (
-                    <span className="pill-tag" style={{ color: 'var(--accent)', borderColor: 'var(--accent)' }}>
+                    <span
+                      className="pill-tag"
+                      style={{ color: 'var(--accent)', borderColor: 'var(--accent)' }}
+                    >
                       匹配度 {item.score}
+                      {(item.feedback ?? 0) !== 0 &&
+                        `（含反馈 ${item.feedback! > 0 ? '+' : ''}${item.feedback}）`}
                     </span>
                   )}
                 </div>
@@ -111,17 +162,24 @@ export default function RecommendationReport({
                 {Object.entries(item)
                   .filter(([k]) => !HIDDEN_FIELDS.includes(k))
                   .map(([key, val]) => {
-                    const label = FIELD_LABELS[key] || key;
-                    const isAvoid = key === 'avoid';
+                    const label = FIELD_LABELS[key] || key
+                    const isAvoid = key === 'avoid'
                     return (
                       <div key={key} className="flex gap-2 text-xs">
-                        <span className="flex-shrink-0 w-16" style={{ color: 'var(--muted)' }}>{label}</span>
-                        <span className="flex-1" style={{
-                          color: isAvoid ? 'var(--danger)' : 'var(--text)',
-                          lineHeight: '1.5',
-                        }}>{String(val)}</span>
+                        <span className="flex-shrink-0 w-16" style={{ color: 'var(--muted)' }}>
+                          {label}
+                        </span>
+                        <span
+                          className="flex-1"
+                          style={{
+                            color: isAvoid ? 'var(--danger)' : 'var(--text)',
+                            lineHeight: '1.5',
+                          }}
+                        >
+                          {String(val)}
+                        </span>
                       </div>
-                    );
+                    )
                   })}
               </div>
               {item.explanation && item.explanation.命中条件.length > 0 && (
@@ -129,7 +187,12 @@ export default function RecommendationReport({
                   <button
                     onClick={() => toggleExplain(item.group_id)}
                     className="text-xs flex items-center gap-1"
-                    style={{ color: 'var(--accent)', background: 'transparent', border: 'none', cursor: 'pointer' }}
+                    style={{
+                      color: 'var(--accent)',
+                      background: 'transparent',
+                      border: 'none',
+                      cursor: 'pointer',
+                    }}
                   >
                     <span>{explainOpen[item.group_id] ? '▼' : '▶'}</span>
                     <span>💡 为什么推荐这个?</span>
@@ -138,7 +201,11 @@ export default function RecommendationReport({
                     <div className="mt-2 space-y-1 text-xs" style={{ color: 'var(--muted)' }}>
                       <div>这条推荐命中了以下条件:</div>
                       {item.explanation.命中条件.map((cond, i) => (
-                        <div key={i} className="flex items-center gap-1" style={{ paddingLeft: '12px' }}>
+                        <div
+                          key={i}
+                          className="flex items-center gap-1"
+                          style={{ paddingLeft: '12px' }}
+                        >
                           <span style={{ color: 'var(--accent)' }}>✓</span>
                           <span>{cond}</span>
                         </div>
@@ -150,8 +217,46 @@ export default function RecommendationReport({
                   )}
                 </div>
               )}
+              {/* 反馈:唯一能回答"哪条规则用对了"的信号,兜底推荐没有规则号所以不显示 */}
+              {item.group_id > 0 && (
+                <div
+                  className="mt-2 pt-2 flex items-center gap-2"
+                  style={{ borderTop: '1px dashed var(--line)' }}
+                >
+                  <span className="text-xs" style={{ color: 'var(--muted)' }}>
+                    这条建议准吗？
+                  </span>
+                  {(['useful', 'inaccurate'] as const).map((signal) => (
+                    <button
+                      key={signal}
+                      onClick={() => sendFeedback(item.group_id, signal)}
+                      className="ghost-btn"
+                      style={{
+                        padding: '2px 8px',
+                        fontSize: '11px',
+                        color:
+                          myFeedback[item.group_id] === signal ? 'var(--accent)' : 'var(--muted)',
+                        borderColor:
+                          myFeedback[item.group_id] === signal ? 'var(--accent)' : 'var(--line)',
+                      }}
+                    >
+                      {signal === 'useful' ? '👍 有用' : '👎 不准'}
+                    </button>
+                  ))}
+                  {myFeedback[item.group_id] && (
+                    <span className="text-[10px]" style={{ color: 'var(--good)' }}>
+                      已记录
+                    </span>
+                  )}
+                </div>
+              )}
             </div>
           ))
+        )}
+        {feedbackError && (
+          <div className="text-xs" style={{ color: 'var(--danger)' }}>
+            {feedbackError}
+          </div>
         )}
       </div>
 
@@ -163,11 +268,15 @@ export default function RecommendationReport({
         <div>
           <div className="flex items-center gap-2 mb-2">
             <span className="text-base">📦</span>
-            <h3 className="text-sm font-medium" style={{ color: 'var(--text)' }}>门店库存匹配</h3>
-            <span className="text-[10px]" style={{ color: 'var(--muted)' }}>共 {inventory.length} 件</span>
+            <h3 className="text-sm font-medium" style={{ color: 'var(--text)' }}>
+              门店库存匹配
+            </h3>
+            <span className="text-[10px]" style={{ color: 'var(--muted)' }}>
+              共 {inventory.length} 件
+            </span>
           </div>
           <div className="space-y-2">
-            {inventory.map(prod => (
+            {inventory.map((prod) => (
               <InventoryCard key={prod.id} product={prod} compact={compact} />
             ))}
           </div>
@@ -196,7 +305,11 @@ export default function RecommendationReport({
                 <span className="spinner" style={{ width: '14px', height: '14px' }}></span>
                 同步中...
               </span>
-            ) : synced ? '✓ 已同步门店' : '☁ 同步到门店'}
+            ) : synced ? (
+              '✓ 已同步门店'
+            ) : (
+              '☁ 同步到门店'
+            )}
           </button>
         )}
         {mode === 'store' && sessionId && onDelete && (
@@ -220,5 +333,5 @@ export default function RecommendationReport({
       {/* 虚拟试穿表单 */}
       {tryonOpen && <TryonCard />}
     </div>
-  );
+  )
 }

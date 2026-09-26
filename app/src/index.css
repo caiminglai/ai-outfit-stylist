@@ -28,7 +28,7 @@
   --card-foreground: 213 31% 91%;
   --popover: 215 28% 10%;
   --popover-foreground: 213 31% 91%;
-  --primary: 168 76% 64%;          /* 青绿 #6ee7c7 */
+  --primary: 168 76% 64%; /* 青绿 #6ee7c7 */
   --primary-foreground: 213 29% 7%;
   --secondary: 215 28% 14%;
   --secondary-foreground: 213 31% 91%;
@@ -60,7 +60,13 @@
   }
 
   body {
-    font-family: 'PingFang SC', 'Microsoft YaHei', 'Segoe UI', system-ui, -apple-system, sans-serif;
+    font-family:
+      'PingFang SC',
+      'Microsoft YaHei',
+      'Segoe UI',
+      system-ui,
+      -apple-system,
+      sans-serif;
     background: var(--bg);
     color: var(--text);
     min-height: 100vh;
@@ -117,12 +123,14 @@
      按钮 - 深色科技风(高对比度)
      ════════════════════════════════════════════════ */
   .gradient-btn {
-    background: linear-gradient(135deg, #4B3FE3 0%, #6F6FFF 100%);
+    background: linear-gradient(135deg, #4b3fe3 0%, #6f6fff 100%);
     color: #fff;
     border: none;
     border-radius: 8px;
     font-weight: 600;
-    transition: transform 0.1s, box-shadow 0.15s;
+    transition:
+      transform 0.1s,
+      box-shadow 0.15s;
     letter-spacing: 0.3px;
   }
   .gradient-btn:hover:not(:disabled) {
@@ -144,7 +152,9 @@
     color: var(--text);
     border-radius: 8px;
     font-weight: 500;
-    transition: border-color 0.15s, color 0.15s;
+    transition:
+      border-color 0.15s,
+      color 0.15s;
   }
   .ghost-btn:hover {
     border-color: var(--accent);
@@ -281,7 +291,10 @@
     font-weight: 500;
     cursor: pointer;
     text-align: center;
-    transition: color 0.15s, border-color 0.15s, background 0.15s;
+    transition:
+      color 0.15s,
+      border-color 0.15s,
+      background 0.15s;
   }
   .tab-btn:hover {
     color: var(--text);
@@ -305,7 +318,9 @@
     border-radius: 8px;
     cursor: pointer;
     background: rgba(255, 255, 255, 0.02);
-    transition: border-color 0.15s, background 0.15s;
+    transition:
+      border-color 0.15s,
+      background 0.15s;
   }
   .model-card:hover {
     border-color: var(--accent);
@@ -335,41 +350,74 @@
    动画
    ════════════════════════════════════════════════ */
 @keyframes fadeIn {
-  from { opacity: 0; transform: translateY(4px); }
-  to   { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 .animate-fade-in {
   animation: fadeIn 0.25s ease;
 }
 
 @keyframes fadeInUp {
-  from { opacity: 0; transform: translateY(12px); }
-  to   { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 .animate-fade-in-up {
   animation: fadeInUp 0.4s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 @keyframes slideInRight {
-  from { transform: translateX(100%); opacity: 0; }
-  to { transform: translateX(0); opacity: 1; }
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
 }
 .animate-slide-in-right {
   animation: slideInRight 0.4s ease-out;
 }
 
 @keyframes slideInUp {
-  from { transform: translateY(20px); opacity: 0; }
-  to { transform: translateY(0); opacity: 1; }
+  from {
+    transform: translateY(20px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
 }
 .animate-slide-in-up {
   animation: slideInUp 0.5s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 @keyframes pulseRing {
-  0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(110, 231, 199, 0.4); }
-  70% { transform: scale(1); box-shadow: 0 0 0 12px rgba(110, 231, 199, 0); }
-  100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(110, 231, 199, 0); }
+  0% {
+    transform: scale(0.95);
+    box-shadow: 0 0 0 0 rgba(110, 231, 199, 0.4);
+  }
+  70% {
+    transform: scale(1);
+    box-shadow: 0 0 0 12px rgba(110, 231, 199, 0);
+  }
+  100% {
+    transform: scale(0.95);
+    box-shadow: 0 0 0 0 rgba(110, 231, 199, 0);
+  }
 }
 .pulse-ring {
   animation: pulseRing 2s ease-in-out infinite;
@@ -377,7 +425,9 @@
 
 /* 旋转加载图标 */
 @keyframes spin {
-  to { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
 }
 .spinner {
   width: 16px;
@@ -391,16 +441,15 @@
 
 /* 骨架屏加载效果 */
 @keyframes skeletonShimmer {
-  0% { background-position: -200% 0; }
-  100% { background-position: 200% 0; }
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
 }
 .skeleton {
-  background: linear-gradient(
-    90deg,
-    var(--panel-2) 25%,
-    var(--line) 50%,
-    var(--panel-2) 75%
-  );
+  background: linear-gradient(90deg, var(--panel-2) 25%, var(--line) 50%, var(--panel-2) 75%);
   background-size: 200% 100%;
   animation: skeletonShimmer 1.5s ease-in-out infinite;
   border-radius: 4px;
@@ -408,8 +457,13 @@
 
 /* 呼吸灯效果 */
 @keyframes breathe {
-  0%, 100% { opacity: 0.6; }
-  50% { opacity: 1; }
+  0%,
+  100% {
+    opacity: 0.6;
+  }
+  50% {
+    opacity: 1;
+  }
 }
 .animate-breathe {
   animation: breathe 2s ease-in-out infinite;
@@ -417,9 +471,17 @@
 
 /* 弹跳进入效果 */
 @keyframes bounceIn {
-  0% { transform: scale(0.8); opacity: 0; }
-  50% { transform: scale(1.05); }
-  100% { transform: scale(1); opacity: 1; }
+  0% {
+    transform: scale(0.8);
+    opacity: 0;
+  }
+  50% {
+    transform: scale(1.05);
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
 }
 .animate-bounce-in {
   animation: bounceIn 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
@@ -427,9 +489,16 @@
 
 /* 数字跳动效果 */
 @keyframes numberPop {
-  0% { transform: scale(1); }
-  50% { transform: scale(1.15); color: var(--accent); }
-  100% { transform: scale(1); }
+  0% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.15);
+    color: var(--accent);
+  }
+  100% {
+    transform: scale(1);
+  }
 }
 .number-pop {
   animation: numberPop 0.3s ease;
@@ -437,9 +506,10 @@
 
 /* 卡片悬停提升效果 */
 .card-hover {
-  transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1),
-              box-shadow 0.25s cubic-bezier(0.4, 0, 0.2, 1),
-              border-color 0.25s ease;
+  transition:
+    transform 0.25s cubic-bezier(0.4, 0, 0.2, 1),
+    box-shadow 0.25s cubic-bezier(0.4, 0, 0.2, 1),
+    border-color 0.25s ease;
 }
 .card-hover:hover {
   transform: translateY(-2px);
@@ -461,7 +531,10 @@
   border-radius: 50%;
   background: rgba(255, 255, 255, 0.2);
   transform: translate(-50%, -50%);
-  transition: width 0.4s ease, height 0.4s ease, opacity 0.4s ease;
+  transition:
+    width 0.4s ease,
+    height 0.4s ease,
+    opacity 0.4s ease;
   opacity: 0;
   pointer-events: none;
 }
@@ -474,8 +547,13 @@
 
 /* 进度条渐变动画 */
 @keyframes progressGlow {
-  0%, 100% { filter: brightness(1); }
-  50% { filter: brightness(1.2); }
+  0%,
+  100% {
+    filter: brightness(1);
+  }
+  50% {
+    filter: brightness(1.2);
+  }
 }
 .progress-glow {
   animation: progressGlow 2s ease-in-out infinite;
@@ -483,14 +561,26 @@
 
 /* 文字逐字显现 */
 @keyframes charReveal {
-  from { opacity: 0; transform: translateY(8px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 /* 闪烁光标效果 */
 @keyframes blink {
-  0%, 50% { opacity: 1; }
-  51%, 100% { opacity: 0; }
+  0%,
+  50% {
+    opacity: 1;
+  }
+  51%,
+  100% {
+    opacity: 0;
+  }
 }
 .cursor-blink::after {
   content: '|';

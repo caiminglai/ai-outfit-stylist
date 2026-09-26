@@ -1,6 +1,6 @@
-import { Routes, Route, Navigate } from 'react-router-dom';
-import ExhibitionHall from './pages/ExhibitionHall';
-import ErrorBoundary from './components/ErrorBoundary';
+import { Routes, Route, Navigate } from 'react-router-dom'
+import ExhibitionHall from './pages/ExhibitionHall'
+import ErrorBoundary from './components/ErrorBoundary'
 
 /**
  * 应用根组件
@@ -24,5 +24,5 @@ export default function App() {
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </ErrorBoundary>
-  );
+  )
 }

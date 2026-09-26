@@ -4,125 +4,157 @@
  * 子组件已拆分至 ui/ 和同级业务组件文件
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react'
 import type {
   CustomerProfile,
   CrossCabinetRecommendation,
   SeasonalReminder,
   BrandPreference,
   CabinetHealth,
-} from '../types';
+} from '../types'
 import {
   getCrossCabinetRecommend,
   getSeasonalReminder,
   getBrandPreference,
   getCabinetHealth,
-} from '../api';
-import LoadingSpinner from './ui/LoadingSpinner';
-import ErrorMessage from './ui/ErrorMessage';
-import ErrorBoundary from './ErrorBoundary';
-import CrossCabinetMatch from './CrossCabinetMatch';
-import CrossCabinetSeasonal from './CrossCabinetSeasonal';
-import CrossCabinetBrand from './CrossCabinetBrand';
-import CrossCabinetHealth from './CrossCabinetHealth';
+} from '../api'
+import LoadingSpinner from './ui/LoadingSpinner'
+import ErrorMessage from './ui/ErrorMessage'
+import ErrorBoundary from './ErrorBoundary'
+import CrossCabinetMatch from './CrossCabinetMatch'
+import CrossCabinetSeasonal from './CrossCabinetSeasonal'
+import CrossCabinetBrand from './CrossCabinetBrand'
+import CrossCabinetHealth from './CrossCabinetHealth'
 
 // 常量
 
-const OCCASIONS = [
-  '上班通勤', '约会', '派对', '面试', '日常', '运动', '婚礼',
-] as const;
+const OCCASIONS = ['上班通勤', '约会', '派对', '面试', '日常', '运动', '婚礼'] as const
 
 const TABS = [
   { key: 'occasion', label: '场合推荐', icon: '🎯' },
   { key: 'seasonal', label: '季节提醒', icon: '🌤' },
   { key: 'brand', label: '品牌偏好', icon: '🏷' },
   { key: 'health', label: '健康检查', icon: '🩺' },
-] as const;
+] as const
 
-type TabKey = (typeof TABS)[number]['key'];
+type TabKey = (typeof TABS)[number]['key']
 
 interface CrossCabinetReportProps {
-  profile?: CustomerProfile | null;
-  compact?: boolean;
+  profile?: CustomerProfile | null
+  compact?: boolean
 }
 
 export default function CrossCabinetReport({ profile, compact }: CrossCabinetReportProps) {
-  const [activeTab, setActiveTab] = useState<TabKey>('occasion');
+  const [activeTab, setActiveTab] = useState<TabKey>('occasion')
 
   // 各 Tab 状态
-  const [selectedOccasion, setSelectedOccasion] = useState<string>('');
-  const [crossData, setCrossData] = useState<CrossCabinetRecommendation | null>(null);
-  const [crossLoading, setCrossLoading] = useState(false);
-  const [crossError, setCrossError] = useState<string>('');
+  const [selectedOccasion, setSelectedOccasion] = useState<string>('')
+  const [crossData, setCrossData] = useState<CrossCabinetRecommendation | null>(null)
+  const [crossLoading, setCrossLoading] = useState(false)
+  const [crossError, setCrossError] = useState<string>('')
 
-  const [seasonalData, setSeasonalData] = useState<SeasonalReminder | null>(null);
-  const [seasonalLoading, setSeasonalLoading] = useState(false);
-  const [seasonalError, setSeasonalError] = useState<string>('');
+  const [seasonalData, setSeasonalData] = useState<SeasonalReminder | null>(null)
+  const [seasonalLoading, setSeasonalLoading] = useState(false)
+  const [seasonalError, setSeasonalError] = useState<string>('')
 
-  const [brandData, setBrandData] = useState<BrandPreference | null>(null);
-  const [brandLoading, setBrandLoading] = useState(false);
-  const [brandError, setBrandError] = useState<string>('');
+  const [brandData, setBrandData] = useState<BrandPreference | null>(null)
+  const [brandLoading, setBrandLoading] = useState(false)
+  const [brandError, setBrandError] = useState<string>('')
 
-  const [healthData, setHealthData] = useState<CabinetHealth | null>(null);
-  const [healthLoading, setHealthLoading] = useState(false);
-  const [healthError, setHealthError] = useState<string>('');
+  const [healthData, setHealthData] = useState<CabinetHealth | null>(null)
+  const [healthLoading, setHealthLoading] = useState(false)
+  const [healthError, setHealthError] = useState<string>('')
 
   // ========== 数据获取 ==========
 
-  const fetchCrossRecommend = useCallback(async (occasion: string) => {
-    if (!occasion) return;
-    setCrossLoading(true); setCrossError(''); setCrossData(null);
-    try {
-      const data = await getCrossCabinetRecommend(occasion, profile ?? undefined);
-      setCrossData(data);
-    } catch (e: unknown) {
-      setCrossError(e instanceof Error ? e.message : '获取推荐失败');
-    } finally { setCrossLoading(false); }
-  }, [profile]);
+  const fetchCrossRecommend = useCallback(
+    async (occasion: string) => {
+      if (!occasion) return
+      setCrossLoading(true)
+      setCrossError('')
+      setCrossData(null)
+      try {
+        const data = await getCrossCabinetRecommend(occasion, profile ?? undefined)
+        setCrossData(data)
+      } catch (e: unknown) {
+        setCrossError(e instanceof Error ? e.message : '获取推荐失败')
+      } finally {
+        setCrossLoading(false)
+      }
+    },
+    [profile],
+  )
 
   const handleOccasionSelect = (occ: string) => {
-    setSelectedOccasion(occ);
-    fetchCrossRecommend(occ);
-  };
+    setSelectedOccasion(occ)
+    fetchCrossRecommend(occ)
+  }
 
   const fetchSeasonal = useCallback(async () => {
-    setSeasonalLoading(true); setSeasonalError(''); setSeasonalData(null);
+    setSeasonalLoading(true)
+    setSeasonalError('')
+    setSeasonalData(null)
     try {
-      const data = await getSeasonalReminder();
-      setSeasonalData(data);
+      const data = await getSeasonalReminder()
+      setSeasonalData(data)
     } catch (e: unknown) {
-      setSeasonalError(e instanceof Error ? e.message : '获取季节提醒失败');
-    } finally { setSeasonalLoading(false); }
-  }, [profile]);
+      setSeasonalError(e instanceof Error ? e.message : '获取季节提醒失败')
+    } finally {
+      setSeasonalLoading(false)
+    }
+  }, [profile])
 
   const fetchBrand = useCallback(async () => {
-    setBrandLoading(true); setBrandError(''); setBrandData(null);
+    setBrandLoading(true)
+    setBrandError('')
+    setBrandData(null)
     try {
-      const data = await getBrandPreference();
-      setBrandData(data);
+      const data = await getBrandPreference()
+      setBrandData(data)
     } catch (e: unknown) {
-      setBrandError(e instanceof Error ? e.message : '获取品牌偏好失败');
-    } finally { setBrandLoading(false); }
-  }, []);
+      setBrandError(e instanceof Error ? e.message : '获取品牌偏好失败')
+    } finally {
+      setBrandLoading(false)
+    }
+  }, [])
 
   const fetchHealth = useCallback(async () => {
-    setHealthLoading(true); setHealthError(''); setHealthData(null);
+    setHealthLoading(true)
+    setHealthError('')
+    setHealthData(null)
     try {
-      const data = await getCabinetHealth();
-      setHealthData(data);
+      const data = await getCabinetHealth()
+      setHealthData(data)
     } catch (e: unknown) {
-      setHealthError(e instanceof Error ? e.message : '获取健康检查失败');
-    } finally { setHealthLoading(false); }
-  }, []);
+      setHealthError(e instanceof Error ? e.message : '获取健康检查失败')
+    } finally {
+      setHealthLoading(false)
+    }
+  }, [])
 
   // 切换 Tab 时自动加载数据
   useEffect(() => {
-    if (activeTab === 'seasonal' && !seasonalData && !seasonalLoading && !seasonalError) fetchSeasonal();
-    if (activeTab === 'brand' && !brandData && !brandLoading && !brandError) fetchBrand();
-    if (activeTab === 'health' && !healthData && !healthLoading && !healthError) fetchHealth();
-  }, [activeTab, seasonalData, seasonalLoading, seasonalError, brandData, brandLoading, brandError, healthData, healthLoading, healthError, fetchSeasonal, fetchBrand, fetchHealth]);
+    if (activeTab === 'seasonal' && !seasonalData && !seasonalLoading && !seasonalError)
+      fetchSeasonal()
+    if (activeTab === 'brand' && !brandData && !brandLoading && !brandError) fetchBrand()
+    if (activeTab === 'health' && !healthData && !healthLoading && !healthError) fetchHealth()
+  }, [
+    activeTab,
+    seasonalData,
+    seasonalLoading,
+    seasonalError,
+    brandData,
+    brandLoading,
+    brandError,
+    healthData,
+    healthLoading,
+    healthError,
+    fetchSeasonal,
+    fetchBrand,
+    fetchHealth,
+  ])
 
-  const paddingClass = compact ? 'p-2 space-y-2' : 'p-3 space-y-3';
+  const paddingClass = compact ? 'p-2 space-y-2' : 'p-3 space-y-3'
 
   return (
     <div className={paddingClass}>
@@ -149,11 +181,18 @@ export default function CrossCabinetReport({ profile, compact }: CrossCabinetRep
                 className={`opt-btn ${selectedOccasion === occ ? 'active' : ''}`}
                 onClick={() => handleOccasionSelect(occ)}
                 disabled={crossLoading}
-              >{occ}</button>
+              >
+                {occ}
+              </button>
             ))}
           </div>
           {crossLoading && <LoadingSpinner text="正在分析跨柜搭配..." />}
-          {crossError && <ErrorMessage message={crossError} onRetry={() => fetchCrossRecommend(selectedOccasion)} />}
+          {crossError && (
+            <ErrorMessage
+              message={crossError}
+              onRetry={() => fetchCrossRecommend(selectedOccasion)}
+            />
+          )}
           {crossData && !crossLoading && (
             <ErrorBoundary>
               <CrossCabinetMatch crossData={crossData} />
@@ -207,5 +246,5 @@ export default function CrossCabinetReport({ profile, compact }: CrossCabinetRep
         </div>
       )}
     </div>
-  );
+  )
 }

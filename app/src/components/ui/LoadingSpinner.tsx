@@ -6,7 +6,7 @@
 /** 加载动画 props */
 interface LoadingSpinnerProps {
   /** 加载提示文字，默认"加载中..." */
-  text?: string;
+  text?: string
 }
 
 export default function LoadingSpinner({ text = '加载中...' }: LoadingSpinnerProps) {
@@ -15,5 +15,5 @@ export default function LoadingSpinner({ text = '加载中...' }: LoadingSpinner
       <div className="spinner" />
       <span style={{ color: 'var(--muted)', fontSize: 12 }}>{text}</span>
     </div>
-  );
+  )
 }

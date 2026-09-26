@@ -119,16 +119,9 @@ async function build() {
     <title>AI形象顾问 — 你的私人穿搭助手</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;700&display=swap" rel="stylesheet" />
-    <script type="importmap">
-    {
-      "imports": {
-        "three": "https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js",
-        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/",
-        "@pixiv/three-vrm": "https://cdn.jsdelivr.net/npm/@pixiv/three-vrm@3/lib/three-vrm.module.min.js"
-      }
-    }
-    </script>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;700&display=swap" rel="stylesheet" media="print" onload="this.media='all'" />
+    <!-- three / three-vrm 由上面的 esbuild（bundle:true 且未声明 external）打进 assets/index.js，
+         这里不需要 import map；以前那段 jsdelivr 的 map 从来没被解析过。 -->
     <link rel="stylesheet" href="/assets/index.css" />
   </head>
   <body>

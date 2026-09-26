@@ -9,22 +9,35 @@ node_modules/
 dist/
 app/dist/
 
-# 数据库(主库文件不入库,避免频繁变动和泄露用户数据)
+# 数据库(默认不入库:WAL 伴生文件、备份、以及新建的运行时库)
 *.db-shm
 *.db-wal
 *.sqlite3
+*.db
 *.bak
 *.bak.*
 
+# 例外:styleai.db 纳入 Git——它是手工整理的形象规则库本体,不是可再生的运行时产物。
+# 判据不是"会不会被写",而是"哪一份是权威":本机是唯一写入源,服务器只读它。
+# 2026-09-25 实测支撑:手工成果两端逐表相等(rule_actions 1696 / rule_conditions 862 /
+#   rule_groups 336 / model_configs 32 / inventory_categories 6);
+#   服务器侧 user_accounts 0 行、creator_works 0 行、users 仅 4 条 phone=null 的匿名会话,
+#   即线上还没有一条真实账号数据,Git 这份当权威不丢东西。
+# ⚠ 代价是这台库里 6 条自测账号(手机号+密码哈希)会进仓库,仓库是私有的;
+#   一旦线上开始有真实用户,pull 前必须先跑漂移哨兵(口径见 compose/CONVENTIONS.md 第 4 节):
+#   服务器侧 user_accounts / creator_works / deposits 任一非 0,先把服务器库导出搬回本机
+#   提交再 pull;禁止用 checkout 清脏来"解决"pull 被挡,那等于删掉线上数据。
+!backend/db/styleai.db
+
 # 上传文件
-backend-node/uploads/
+backend/uploads/
 
 # 维护脚本产物
-backend-node/scripts/scan-report.json
+backend/scripts/scan-report.json
 
 # 日志
 *.log
-backend-node/logs/
+backend/logs/
 
 # 模型文件(体积大,不纳入 git,本地存放即可)
 models/

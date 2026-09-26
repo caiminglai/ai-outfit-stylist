@@ -1,0 +1,525 @@
+-- ============================================================
+-- Style AI 数据库 Schema（从 Python SQLAlchemy models.py 翻译）
+-- 表数量以本文件为准（新增表请同步 routes/admin.js 的 TABLE_NAMES 中文名映射）
+-- ============================================================
+
+-- 开启 WAL 模式提升并发读写性能
+PRAGMA journal_mode=WAL;
+PRAGMA synchronous=NORMAL;
+PRAGMA foreign_keys=ON;
+
+-- ============================================================
+-- A. 基础用户表
+-- ============================================================
+
+-- 用户/游客表
+CREATE TABLE IF NOT EXISTS users (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  session_id TEXT UNIQUE NOT NULL,
+  phone TEXT UNIQUE,
+  nickname TEXT,
+  gender TEXT,
+  created_at TEXT DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS ix_users_session_id ON users(session_id);
+
+-- 照片表
+CREATE TABLE IF NOT EXISTS photos (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL REFERENCES users(id),
+  url TEXT,
+  type TEXT DEFAULT 'face',
+  uploaded_at TEXT DEFAULT (datetime('now'))
+);
+
+-- 面容分析结果表
+CREATE TABLE IF NOT EXISTS face_features (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL REFERENCES users(id),
+  photo_id INTEGER NOT NULL REFERENCES photos(id),
+  -- 肤色
+  skin_tone TEXT,
+  skin_undertone TEXT,
+  skin_depth TEXT,
+  skin_type TEXT,
+  -- 五官
+  face_shape TEXT,
+  eye_shape TEXT,
+  eye_spacing TEXT,
+  nose_type TEXT,
+  lip_shape TEXT,
+  eyebrow_type TEXT,
+  -- 比例
+  forehead_width TEXT,
+  jawline_type TEXT,
+  face_ratio TEXT,
+  -- 评分与状态
+  features_json TEXT,
+  status TEXT DEFAULT 'pending',
+  created_at TEXT DEFAULT (datetime('now'))
+);
+
+-- 身体指标表（每用户一条）
+CREATE TABLE IF NOT EXISTS body_metrics (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL UNIQUE REFERENCES users(id),
+  height_cm REAL,
+  weight_kg REAL,
+  body_type TEXT,
+  shoulder_width_cm REAL,
+  waist_cm REAL,
+  hip_cm REAL,
+  leg_length_ratio REAL,
+  bust_cm REAL,
+  neck_length TEXT,
+  leg_length_cm REAL,
+  shoulder_type TEXT,
+  frame_size TEXT,
+  line_quality TEXT,
+  updated_at TEXT DEFAULT (datetime('now'))
+);
+
+-- 手工面容档案表(每人一行;face_features 依赖照片,照片识别未开放时用这张)
+-- 列名一律取规则引擎的条件字段名,入库即命中,不再二次翻译
+CREATE TABLE IF NOT EXISTS face_profiles (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL UNIQUE REFERENCES users(id),
+  -- 肤色与肤质
+  skin_tone TEXT,
+  skin_tone_detail TEXT,
+  color_chroma TEXT,
+  skin_type TEXT,
+  -- 脸型与比例
+  face_shape TEXT,
+  face_ratio TEXT,
+  eye_spacing TEXT,
+  -- 五官(规则引擎在用的三个:eye_size / nose_bridge / lip_thickness)
+  eye_size TEXT,
+  eye_shape TEXT,
+  nose_bridge TEXT,
+  lip_thickness TEXT,
+  updated_at TEXT DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS ix_face_profiles_user_id ON face_profiles(user_id);
+
+-- 形象标签表(每人每标签一行):算完就存,库里查得到"这个人被算成了什么"
+-- 只存算出来的结论;本人填的条件在 body_metrics 与 face_profiles
+-- UNIQUE(user_id, tag_key) 同时充当 upsert 的冲突目标与查询索引
+CREATE TABLE IF NOT EXISTS profile_tags (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL REFERENCES users(id),
+  tag_key TEXT NOT NULL,
+  tag_value TEXT NOT NULL,
+  updated_at TEXT DEFAULT (datetime('now')),
+  UNIQUE(user_id, tag_key)
+);
+
+-- 穿搭推荐记录表
+CREATE TABLE IF NOT EXISTS recommendations (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL REFERENCES users(id),
+  photo_id INTEGER REFERENCES photos(id),
+  scenario TEXT,
+  result_json TEXT,
+  created_at TEXT DEFAULT (datetime('now'))
+);
+
+-- 虚拟试穿结果表
+CREATE TABLE IF NOT EXISTS tryon_results (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER REFERENCES users(id),
+  photo_id INTEGER REFERENCES photos(id),
+  recommendation_id INTEGER,
+  result_url TEXT,
+  status TEXT DEFAULT 'pending',
+  created_at TEXT DEFAULT (datetime('now'))
+);
+
+-- 衣服照片上传记录表
+CREATE TABLE IF NOT EXISTS clothing_items (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  session_id TEXT NOT NULL,
+  filename TEXT NOT NULL,
+  image_url TEXT NOT NULL,
+  category TEXT,
+  color TEXT,
+  style TEXT,
+  season TEXT,
+  usage TEXT,
+  item_name TEXT,
+  created_at TEXT DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS ix_clothing_items_session_id ON clothing_items(session_id);
+
+-- ============================================================
+-- B. 规则引擎表
+-- ============================================================
+
+-- 规则组表
+CREATE TABLE IF NOT EXISTS rule_groups (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  mode TEXT NOT NULL DEFAULT 'store',
+  gender TEXT,
+  category TEXT NOT NULL,
+  scenario TEXT,
+  region TEXT,
+  age_range TEXT,
+  description TEXT,
+  priority INTEGER DEFAULT 0,
+  enabled INTEGER DEFAULT 1,
+  hit_count INTEGER DEFAULT 0,
+  last_hit_at TEXT,
+  feedback_up INTEGER DEFAULT 0,
+  feedback_down INTEGER DEFAULT 0,
+  -- 规则种子的来源标记:增量应用只认这个 key 判断"库里有没有这条"。
+  -- 后台手工建的规则留空(NULL),永远不会被种子覆盖;索引在 db/init.js 补列之后才建
+  source_key TEXT,
+  created_at TEXT DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS ix_rule_groups_mode_enabled_category
+  ON rule_groups(mode, enabled, category);
+
+-- 规则条件表
+CREATE TABLE IF NOT EXISTS rule_conditions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  group_id INTEGER NOT NULL REFERENCES rule_groups(id),
+  field TEXT NOT NULL,
+  operator TEXT NOT NULL DEFAULT 'eq',
+  value TEXT NOT NULL,
+  weight INTEGER DEFAULT 1
+);
+CREATE INDEX IF NOT EXISTS ix_rule_conditions_group_id ON rule_conditions(group_id);
+
+-- 规则动作表
+CREATE TABLE IF NOT EXISTS rule_actions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  group_id INTEGER NOT NULL REFERENCES rule_groups(id),
+  action_type TEXT NOT NULL,
+  content TEXT NOT NULL,
+  sort_order INTEGER DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS ix_rule_actions_group_id ON rule_actions(group_id);
+
+-- ============================================================
+-- C. 库存系统表
+-- ============================================================
+
+-- 商品分类表
+CREATE TABLE IF NOT EXISTS inventory_categories (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  code TEXT UNIQUE NOT NULL,
+  sort_order INTEGER DEFAULT 0
+);
+
+-- 库存商品表
+CREATE TABLE IF NOT EXISTS inventory_products (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  category_id INTEGER NOT NULL REFERENCES inventory_categories(id),
+  name TEXT NOT NULL,
+  sku TEXT,
+  style_tags TEXT,
+  color_tags TEXT,
+  season_tags TEXT,
+  fit_skin_tones TEXT,
+  fit_face_shapes TEXT,
+  stock INTEGER DEFAULT 0,
+  price REAL,
+  image_url TEXT,
+  description TEXT,
+  enabled INTEGER DEFAULT 1,
+  created_at TEXT DEFAULT (datetime('now'))
+);
+
+-- ============================================================
+-- D. 隐私数据表
+-- ============================================================
+
+-- 门店表:同一套系统给任意多家店用,店与店的数据要能分开
+-- 店名由前端带(?store=店名),第一次出现的店名当场自动登记,店数不预设也不封顶
+CREATE TABLE IF NOT EXISTS stores (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL UNIQUE,
+  created_at TEXT DEFAULT (datetime('now'))
+);
+
+-- 顾客临时会话数据表
+CREATE TABLE IF NOT EXISTS customer_sessions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  session_id TEXT UNIQUE NOT NULL,
+  store_id INTEGER REFERENCES stores(id),
+  profile_data TEXT,
+  synced INTEGER DEFAULT 0,
+  synced_at TEXT,
+  created_at TEXT DEFAULT (datetime('now')),
+  expires_at TEXT
+);
+CREATE INDEX IF NOT EXISTS ix_customer_sessions_session_id ON customer_sessions(session_id);
+-- store_id 的索引不在这里建:本文件跑在补列迁移之前,老库此时还没有 store_id 列
+
+-- 建议记录表
+CREATE TABLE IF NOT EXISTS recommendation_logs (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  session_id TEXT NOT NULL,
+  user_id INTEGER REFERENCES users(id),
+  store_id INTEGER REFERENCES stores(id),
+  mode TEXT NOT NULL,
+  input_snapshot TEXT,
+  result TEXT,
+  created_at TEXT DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS ix_recommendation_logs_session_id ON recommendation_logs(session_id);
+-- user_id 的索引不在这里建:本文件跑在补列迁移之前,老库此时还没有 user_id 列
+
+-- 反馈表:记下"这条规则用对了没有",recommendation_logs 只有"用了几次"
+-- 一个人对同一条规则只留最新一次评价,换主意是覆盖不是加一行,好评率不会被重复点击灌大
+CREATE TABLE IF NOT EXISTS feedback_events (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL REFERENCES users(id),
+  group_id INTEGER NOT NULL REFERENCES rule_groups(id),
+  category TEXT,
+  signal TEXT NOT NULL,
+  updated_at TEXT DEFAULT (datetime('now')),
+  UNIQUE(user_id, group_id)
+);
+
+-- ============================================================
+-- E. 个人衣橱表
+-- ============================================================
+
+-- 个人衣橱表
+CREATE TABLE IF NOT EXISTS user_wardrobe (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  session_id TEXT,
+  user_id INTEGER REFERENCES users(id),
+  name TEXT NOT NULL,
+  category TEXT NOT NULL,
+  sub_category TEXT,
+  color TEXT,
+  color_tags TEXT,
+  pattern TEXT,
+  style_tags TEXT,
+  season_tags TEXT,
+  occasion_tags TEXT,
+  fit_body_types TEXT,
+  fit_skin_tones TEXT,
+  condition TEXT DEFAULT '良好',
+  purchase_date TEXT,
+  price REAL,
+  is_favorite INTEGER DEFAULT 0,
+  image_url TEXT,
+  created_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS ix_user_wardrobe_session_id ON user_wardrobe(session_id);
+
+-- 搭配组合表
+CREATE TABLE IF NOT EXISTS wardrobe_outfits (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  session_id TEXT,
+  user_id INTEGER REFERENCES users(id),
+  name TEXT NOT NULL,
+  item_ids TEXT NOT NULL,
+  occasion TEXT,
+  season TEXT,
+  rating INTEGER,
+  notes TEXT,
+  is_favorite INTEGER DEFAULT 0,
+  created_at TEXT DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS ix_wardrobe_outfits_session_id ON wardrobe_outfits(session_id);
+
+-- 购物心愿单
+CREATE TABLE IF NOT EXISTS shopping_wishlist (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  session_id TEXT,
+  user_id INTEGER REFERENCES users(id),
+  item_name TEXT NOT NULL,
+  category TEXT,
+  color TEXT,
+  reason TEXT,
+  priority TEXT DEFAULT 'medium',
+  status TEXT DEFAULT 'pending',
+  gap_type TEXT,
+  created_at TEXT DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS ix_shopping_wishlist_session_id ON shopping_wishlist(session_id);
+
+-- ============================================================
+-- F. 管理员用户表
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS admin_users (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  username TEXT UNIQUE NOT NULL,
+  password_hash TEXT NOT NULL,
+  role TEXT DEFAULT 'admin',
+  is_active INTEGER DEFAULT 1,
+  last_login_at TEXT,
+  created_at TEXT DEFAULT (datetime('now'))
+);
+
+-- ============================================================
+-- G. 个人化妆品柜表
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS user_cosmetics (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  session_id TEXT,
+  user_id INTEGER REFERENCES users(id),
+  name TEXT NOT NULL,
+  brand TEXT,
+  category TEXT NOT NULL,
+  sub_category TEXT,
+  color_name TEXT,
+  color_tone TEXT,
+  color_family TEXT,
+  finish TEXT,
+  skin_tone_fit TEXT,
+  skin_type_fit TEXT,
+  face_shape_fit TEXT,
+  eye_shape_fit TEXT,
+  lip_shape_fit TEXT,
+  occasion_tags TEXT,
+  style_tags TEXT,
+  coverage TEXT,
+  opened_date TEXT,
+  expiry_months INTEGER,
+  remaining INTEGER,
+  condition TEXT DEFAULT '在用',
+  price REAL,
+  image_url TEXT,
+  is_favorite INTEGER DEFAULT 0,
+  notes TEXT,
+  created_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS ix_user_cosmetics_session_id ON user_cosmetics(session_id);
+
+-- ============================================================
+-- H. 个人配饰柜表
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS user_accessories (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  session_id TEXT,
+  user_id INTEGER REFERENCES users(id),
+  name TEXT NOT NULL,
+  brand TEXT,
+  category TEXT NOT NULL,
+  material TEXT,
+  metal_color TEXT,
+  gem_color TEXT,
+  shape TEXT,
+  length TEXT,
+  face_shape_fit TEXT,
+  neck_length_fit TEXT,
+  skin_tone_fit TEXT,
+  allergy_safe INTEGER,
+  allergy_notes TEXT,
+  occasion_tags TEXT,
+  style_tags TEXT,
+  season_tags TEXT,
+  condition TEXT DEFAULT '良好',
+  price REAL,
+  image_url TEXT,
+  is_favorite INTEGER DEFAULT 0,
+  created_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS ix_user_accessories_session_id ON user_accessories(session_id);
+
+-- ============================================================
+-- T. 3D 模型配置表
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS model_configs (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  icon TEXT DEFAULT '🎭',
+  image_preview TEXT DEFAULT '',
+  description TEXT DEFAULT '',
+  folder TEXT NOT NULL,
+  file TEXT NOT NULL,
+  source TEXT DEFAULT '其他',
+  enabled INTEGER DEFAULT 1,
+  exposure REAL DEFAULT 0.3,
+  sort_order INTEGER DEFAULT 0,
+  scale REAL DEFAULT 1.0,
+  pos_x REAL DEFAULT 0.0,
+  pos_y REAL DEFAULT 0.0,
+  pos_z REAL DEFAULT 0.0,
+  rot_x REAL DEFAULT 0.0,
+  rot_y REAL DEFAULT 0.0,
+  rot_z REAL DEFAULT 0.0,
+  camera_distance REAL DEFAULT 5.0,
+  ambient_light REAL DEFAULT 0.6,
+  created_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS ix_model_configs_enabled ON model_configs(enabled);
+
+-- ============================================================
+-- 性能索引（高频查询列）
+-- ============================================================
+CREATE INDEX IF NOT EXISTS ix_photos_user_id ON photos(user_id);
+CREATE INDEX IF NOT EXISTS ix_face_features_user_id ON face_features(user_id);
+CREATE INDEX IF NOT EXISTS ix_face_features_photo_id ON face_features(photo_id);
+CREATE INDEX IF NOT EXISTS ix_recommendations_user_id ON recommendations(user_id);
+CREATE INDEX IF NOT EXISTS ix_tryon_results_user_id ON tryon_results(user_id);
+
+-- ============================================================
+-- 收款凭证（用户上传付款截图 -> 后台人工审核放行）
+-- ============================================================
+CREATE TABLE IF NOT EXISTS deposits (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL REFERENCES users(id),
+  channel TEXT NOT NULL DEFAULT 'wechat',
+  amount REAL NOT NULL DEFAULT 0,
+  proof_url TEXT DEFAULT '',
+  status TEXT NOT NULL DEFAULT 'pending',
+  admin_note TEXT DEFAULT '',
+  created_at TEXT DEFAULT (datetime('now')),
+  approved_at TEXT
+);
+CREATE INDEX IF NOT EXISTS ix_deposits_status_created ON deposits(status, created_at);
+CREATE INDEX IF NOT EXISTS ix_deposits_user_id ON deposits(user_id);
+
+-- ============================================================
+-- 创作者作品（提交 -> 审核 -> 广场曝光 -> 分享链接带流量）
+-- ============================================================
+CREATE TABLE IF NOT EXISTS creator_works (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL REFERENCES users(id),
+  share_code TEXT NOT NULL UNIQUE,
+  type TEXT NOT NULL,
+  title TEXT NOT NULL,
+  summary TEXT DEFAULT '',
+  cover_url TEXT DEFAULT '',
+  payload TEXT DEFAULT '{}',
+  status TEXT NOT NULL DEFAULT 'pending',
+  admin_note TEXT DEFAULT '',
+  featured INTEGER DEFAULT 0,
+  heat INTEGER DEFAULT 0,
+  share_views INTEGER DEFAULT 0,
+  created_at TEXT DEFAULT (datetime('now')),
+  reviewed_at TEXT
+);
+CREATE INDEX IF NOT EXISTS ix_creator_works_status_featured_heat ON creator_works(status, featured, heat);
+CREATE INDEX IF NOT EXISTS ix_creator_works_user_id ON creator_works(user_id);
+CREATE INDEX IF NOT EXISTS ix_creator_works_share_code ON creator_works(share_code);
+
+-- ============================================================
+-- 正式账号（手机号 + 密码）
+-- 身份仍然是 users.session_id，这张表只负责"把这个手机号和那条身份对上"，
+-- 因此不动 users 老表、也不用给老表补列。
+-- ============================================================
+CREATE TABLE IF NOT EXISTS user_accounts (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  phone TEXT NOT NULL UNIQUE,
+  password_hash TEXT NOT NULL,
+  user_id INTEGER NOT NULL UNIQUE REFERENCES users(id),
+  created_at TEXT DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS ix_user_accounts_phone ON user_accounts(phone);
