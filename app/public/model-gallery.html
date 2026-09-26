@@ -131,7 +131,8 @@
     .controls {
       position: fixed;
       right: 14px;
-      bottom: 110px;
+      /* 实测底部栏高 188px(内边距 26 + 筛选行 36 + 卡片轨 ~126),按钮列必须整列抬到它上面 */
+      bottom: 196px;
       z-index: 50;
       display: flex;
       flex-direction: column;
@@ -196,6 +197,80 @@
       border-radius: 2px;
     }
 
+    /* ═══ 筛选栏(搜索 + 来源),放在卡片轨上方 ═══ */
+    .filter-bar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+
+    #model-search {
+      flex-shrink: 0;
+      width: 130px;
+      height: 28px;
+      padding: 0 10px;
+      border-radius: 14px;
+      border: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.04);
+      color: var(--text);
+      font-size: 12px;
+      outline: none;
+    }
+
+    #model-search::placeholder {
+      color: var(--muted);
+    }
+
+    #model-search:focus {
+      border-color: var(--accent);
+    }
+
+    .source-chips {
+      display: flex;
+      flex: 1;
+      gap: 6px;
+      overflow-x: auto;
+      scroll-behavior: smooth;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    .source-chips::-webkit-scrollbar {
+      height: 0;
+    }
+
+    .chip {
+      flex-shrink: 0;
+      height: 28px;
+      padding: 0 11px;
+      border-radius: 14px;
+      border: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.03);
+      color: var(--muted);
+      font-size: 11px;
+      line-height: 26px;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: all 0.2s ease;
+      user-select: none;
+    }
+
+    .chip.active {
+      background: var(--accent-dim);
+      border-color: var(--accent);
+      color: var(--accent);
+      font-weight: 600;
+    }
+
+    #filter-count {
+      flex-shrink: 0;
+      font-size: 11px;
+      color: var(--muted);
+      opacity: 0.75;
+      min-width: 30px;
+      text-align: right;
+    }
+
     .model-card {
       position: relative;
       flex-shrink: 0;
@@ -222,6 +297,16 @@
     .model-card .icon {
       font-size: 26px;
       line-height: 1;
+    }
+
+    .model-card .thumb {
+      display: block;
+      width: 56px;
+      height: 70px;
+      margin: 0 auto;
+      object-fit: contain;
+      pointer-events: none;
+      user-select: none;
     }
 
     .model-card .label {
@@ -455,10 +540,17 @@
     <button class="ctrl-btn active" id="btn-rotate" title="自动旋转">🔄</button>
     <button class="ctrl-btn" id="btn-reset" title="重置视角">🎯</button>
     <button class="ctrl-btn" id="btn-skip" title="切换下一个模型">⏭</button>
+    <button class="ctrl-btn" id="btn-shot" title="截图保存当前模型">📷</button>
   </div>
 
   <!-- 底部模型选择栏 -->
   <div class="model-bar">
+    <div class="filter-bar">
+      <input id="model-search" type="search" placeholder="搜索模型…" autocomplete="off"
+             spellcheck="false" aria-label="按名字或来源搜索模型" />
+      <div class="source-chips" id="source-chips"></div>
+      <div id="filter-count"></div>
+    </div>
     <div class="model-scroll" id="model-scroll"></div>
   </div>
 
@@ -692,8 +784,8 @@
       // Perspective: 2 * dist * tan(fov/2) = visible_height
       const vFov = camera.fov * Math.PI / 180;
       const canvasW = window.innerWidth;
-      // 扣除底部模型选择栏(约 100px)+ 顶部留白(约 30px)后的有效高度
-      const canvasH = Math.max(window.innerHeight - 130, 300);
+      // 扣除底部模型选择栏(筛选行 + 卡片轨,约 168px)+ 顶部留白(约 30px)后的有效高度
+      const canvasH = Math.max(window.innerHeight - 168, 300);
       const aspect = canvasW / canvasH;
 
       // 透视公式: visibleHeight = 2 * dist * tan(fov/2)
@@ -744,14 +836,19 @@
       loadModel(idx);
     }
 
-    // 查找下一个/上一个可用模型
+    // 查找下一个/上一个可用模型:先只在筛选结果里找
     function findNextAvailable(fromIdx, direction) {
       const len = MODELS.length;
       if (len === 0) return -1;
-      // 优先从 fromIdx 方向查找可用
-      for (let i = 1; i <= len; i++) {
-        const idx = ((fromIdx + direction * i) % len + len) % len;
-        if (!MODELS[idx].failed) return idx;
+      // 第二遍放开筛选条件:否则筛选命中 0 个时轮播会永久卡住
+      for (let pass = 0; pass < 2; pass++) {
+        for (let i = 1; i <= len; i++) {
+          const idx = ((fromIdx + direction * i) % len + len) % len;
+          const m = MODELS[idx];
+          if (!m || m.failed) continue;
+          if (pass === 0 && !matchesFilter(m)) continue;
+          return idx;
+        }
       }
       // 全部失效则返回 -1
       return -1;
@@ -879,6 +976,7 @@
         card.classList.add('hidden-failed');
         card.classList.remove('active');
       }
+      applyFilter();   // 让筛选栏的可见数与卡片轨保持一致
     }
 
     // 彻底释放 mesh 及其所有资源(几何体+材质+纹理)
@@ -1087,20 +1185,35 @@
         card.className = 'model-card' + (idx === 0 ? ' active' : '');
         card.dataset.index = idx;
         if (m.failed) card.classList.add('hidden-failed');
-        const srcShort = m.source ? m.source.replace(/\[.*\]/, '') : '';
         // 使用 DOM API 避免 XSS(数据来自管理员输入,不可信)
+        const makeIcon = () => {
+          const el = document.createElement('div');
+          el.className = 'icon';
+          el.textContent = m.icon;
+          return el;
+        };
         const errorDot = document.createElement('span');
         errorDot.className = 'error-dot';
-        const iconDiv = document.createElement('div');
-        iconDiv.className = 'icon';
-        iconDiv.textContent = m.icon;
+        let visual;
+        if (typeof m.preview === 'string' && m.preview.startsWith('/')) {
+          const img = document.createElement('img');
+          img.className = 'thumb';
+          img.loading = 'lazy';
+          img.decoding = 'async';
+          img.alt = m.name;
+          img.onerror = () => img.replaceWith(makeIcon());
+          img.src = m.preview;
+          visual = img;
+        } else {
+          visual = makeIcon();
+        }
         const labelDiv = document.createElement('div');
         labelDiv.className = 'label';
         labelDiv.textContent = m.name;
         const subDiv = document.createElement('div');
         subDiv.className = 'sublabel';
         subDiv.textContent = m.source || '';
-        card.append(errorDot, iconDiv, labelDiv, subDiv);
+        card.append(errorDot, visual, labelDiv, subDiv);
         card.addEventListener('click', () => {
           const modelIdx = parseInt(card.dataset.index, 10);
           if (currentModelIndex === modelIdx) return;
@@ -1111,6 +1224,83 @@
         });
         scroll.appendChild(card);
       });
+    }
+
+    // ======================== 筛选(搜索 + 来源)========================
+    // 只隐藏卡片、不重建列表:dataset.index 必须始终等于 MODELS 下标,
+    // 一旦重排,loadModel / nextModel / active 高亮会全部错位。
+    const FILTER = { q: '', source: '' };
+
+    function matchesFilter(m) {
+      if (FILTER.source && (m.source || '未分类') !== FILTER.source) return false;
+      if (!FILTER.q) return true;
+      return [m.name, m.source, m.desc].some(
+        (v) => typeof v === 'string' && v.toLowerCase().includes(FILTER.q)
+      );
+    }
+
+    // 来源名来自管理员输入,一律走 DOM API 赋值,不用 innerHTML
+    function buildSourceChips() {
+      const box = document.getElementById('source-chips');
+      box.innerHTML = '';
+      const makeChip = (label, value) => {
+        const chip = document.createElement('button');
+        chip.type = 'button';
+        chip.className = 'chip';
+        chip.dataset.source = value;
+        chip.textContent = label;
+        chip.addEventListener('click', () => {
+          FILTER.source = value;
+          applyFilter();
+        });
+        return chip;
+      };
+      const counts = new Map();
+      MODELS.forEach((m) => {
+        const key = m.source || '未分类';
+        counts.set(key, (counts.get(key) || 0) + 1);
+      });
+      box.appendChild(makeChip('全部', ''));
+      // 模型数多的排前面,常用的来源不用横向滚
+      [...counts.entries()]
+        .sort((a, b) => b[1] - a[1])
+        .forEach(([source, n]) => box.appendChild(makeChip(`${source} ${n}`, source)));
+    }
+
+    function applyFilter() {
+      let visible = 0;
+      document.querySelectorAll('.model-card').forEach((card) => {
+        const m = MODELS[parseInt(card.dataset.index, 10)];
+        const ok = !!m && !m.failed && matchesFilter(m);
+        card.style.display = ok ? '' : 'none';
+        if (ok) visible++;
+      });
+      document.getElementById('filter-count').textContent = `${visible}/${MODELS.length}`;
+      document.querySelectorAll('#source-chips .chip').forEach((chip) => {
+        chip.classList.toggle('active', chip.dataset.source === FILTER.source);
+      });
+      // 当前模型被筛掉时只撤高亮、不换画面:正在看的东西被自动跳走更让人困惑
+      const activeCard = document.querySelector(`.model-card[data-index="${currentModelIndex}"]`);
+      if (activeCard && activeCard.style.display === 'none') activeCard.classList.remove('active');
+    }
+
+    // ======================== 截图保存 ========================
+    // 开 preserveDrawingBuffer 会让每帧多留一份 GPU 拷贝,不值:
+    // 先补渲染一帧、再在同一轮 JS 里读回,buffer 还没被合成器清掉。
+    function captureShot() {
+      if (!renderer || !scene || !camera) return;
+      renderer.render(scene, camera);
+      const m = MODELS[currentModelIndex];
+      const name = (m && m.name ? m.name : 'model').replace(/[\\/:*?"<>|]/g, '');
+      const link = document.createElement('a');
+      const url = renderer.domElement.toDataURL('image/png');
+      link.href = url;
+      link.download = `${name}-${new Date().toISOString().slice(0, 10)}.png`;
+      link.click();
+      const btn = document.getElementById('btn-shot');
+      btn.textContent = '✅';
+      setTimeout(() => { btn.textContent = '📷'; }, 900);
+      return url;
     }
 
     // ======================== 按钮事件 ========================
@@ -1128,8 +1318,25 @@
       nextModel();
     });
 
+    document.getElementById('btn-shot').addEventListener('click', captureShot);
+
+    const searchInput = document.getElementById('model-search');
+    searchInput.addEventListener('input', () => {
+      FILTER.q = searchInput.value.trim().toLowerCase();
+      applyFilter();
+    });
+
     // 键盘快捷键:→ 切换下一个模型,← 切换上一个(两种模式通用)
     document.addEventListener('keydown', (e) => {
+      // 焦点在搜索框时 ← → 是移动光标,不能顺手翻模型
+      if (e.target === searchInput) {
+        if (e.key === 'Escape') {
+          searchInput.value = '';
+          FILTER.q = '';
+          applyFilter();
+        }
+        return;
+      }
       if (e.key === 'ArrowRight') {
         nextModel();
       } else if (e.key === 'ArrowLeft') {
@@ -1198,14 +1405,16 @@
       await loadModelsFromAPI();
       if (MODELS.length > 0) {
         buildModelBar();
+        buildSourceChips();
+        applyFilter();
         loadModel(0);
       }
       animate();
     }
     startApp();
 
-    // ★ 调试接口:暴露到 window,便于浏览器工具诊断
-    window.__debug = {
+    // ★ 调试接口:构建为局部变量,默认不暴露到 window（见下方 ?debug=1 门控）
+    const __debugApi = {
       getState() {
         const pivotInfo = pivot ? {
           childrenCount: pivot.children.length,
@@ -1261,7 +1470,13 @@
           threeCacheEnabled: THREE.Cache.enabled,
           autoRotate,
           carouselActive: !!carouselTimer,
+          filter: { q: FILTER.q, source: FILTER.source },
         };
+      },
+
+      // 截图(返回 PNG data URL,同时触发下载)
+      capture() {
+        return captureShot();
       },
 
       // 强制清理所有 mesh(测试用)
@@ -1286,7 +1501,11 @@
         return lines.join('\n');
       },
     };
-    console.log('[__debug] 调试接口已挂载到 window.__debug');
+    // 默认不挂载；打开 /gallery?debug=1 才暴露，供渲染/纹理排查时在浏览器里调
+    if (new URLSearchParams(location.search).get('debug') === '1') {
+      window.__debug = __debugApi;
+      console.log('[__debug] 调试接口已挂载到 window.__debug');
+    }
 
     // 点击模型区域进入服务流程
     const canvasEl = document.getElementById('canvas-container');

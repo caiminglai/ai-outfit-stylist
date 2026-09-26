@@ -3,20 +3,20 @@
  * 展示当季衣橱/化妆品/配饰的建议和统计
  */
 
-import type { SeasonalReminder } from '../types';
+import type { SeasonalReminder } from '../types'
 
 /** 季节提醒面板 props */
 interface CrossCabinetSeasonalProps {
   /** 季节提醒数据 */
-  seasonalData: SeasonalReminder;
+  seasonalData: SeasonalReminder
 }
 
 /** 根据季节返回对应图标 */
 function getSeasonIcon(season: string): string {
-  if (season === '春') return '🌸';
-  if (season === '夏') return '☀️';
-  if (season === '秋') return '🍂';
-  return '❄️';
+  if (season === '春') return '🌸'
+  if (season === '夏') return '☀️'
+  if (season === '秋') return '🍂'
+  return '❄️'
 }
 
 /**
@@ -24,26 +24,25 @@ function getSeasonIcon(season: string): string {
  * 兼容后端未重启时返回旧格式数据的情况
  */
 function normalizeData(raw: SeasonalReminder | Record<string, unknown>): SeasonalReminder {
-  const src = raw as Record<string, unknown>;
+  const src = raw as Record<string, unknown>
   // 如果已经是新格式（有 wardrobe 字段），直接用
   if (src.wardrobe && src.tips) {
-    return raw as SeasonalReminder;
+    return raw as SeasonalReminder
   }
 
   // 旧格式兼容：从 reminders 数组中提取信息
-  const reminders = (src.reminders as Record<string, unknown>[]) || [];
-  const summary = (src.summary as Record<string, number>) || {};
+  const reminders = (src.reminders as Record<string, unknown>[]) || []
+  const summary = (src.summary as Record<string, number>) || {}
 
-  const findReminder = (cabinet: string) =>
-    reminders.find((r) => r.cabinet === cabinet);
+  const findReminder = (cabinet: string) => reminders.find((r) => r.cabinet === cabinet)
 
-  const wardrobeReminder = findReminder('wardrobe');
-  const cosmeticReminder = findReminder('cosmetic');
-  const accessoryReminder = findReminder('accessory');
+  const wardrobeReminder = findReminder('wardrobe')
+  const cosmeticReminder = findReminder('cosmetic')
+  const accessoryReminder = findReminder('accessory')
 
-  const wardrobeTotal = summary.wardrobe_count ?? 0;
-  const cosmeticTotal = summary.cosmetic_count ?? 0;
-  const accessoryTotal = summary.accessory_count ?? 0;
+  const wardrobeTotal = summary.wardrobe_count ?? 0
+  const cosmeticTotal = summary.cosmetic_count ?? 0
+  const accessoryTotal = summary.accessory_count ?? 0
 
   return {
     current_season: (raw.current_season as string) || '未知',
@@ -66,13 +65,13 @@ function normalizeData(raw: SeasonalReminder | Record<string, unknown>): Seasona
       season_items: accessoryTotal,
       need_attention: !!accessoryReminder,
     },
-  };
+  }
 }
 
 /** 季节提醒面板 */
 export default function CrossCabinetSeasonal({ seasonalData }: CrossCabinetSeasonalProps) {
   // 规范化数据，兼容旧格式
-  const data = normalizeData(seasonalData);
+  const data = normalizeData(seasonalData)
 
   return (
     <>
@@ -91,7 +90,10 @@ export default function CrossCabinetSeasonal({ seasonalData }: CrossCabinetSeaso
         <div className="flex items-center justify-between mb-2">
           <span style={{ fontSize: 14, fontWeight: 600 }}>👗 衣橱建议</span>
           {data.wardrobe?.need_attention && (
-            <span className="pill-tag" style={{ color: 'var(--warning)', borderColor: 'var(--warning)' }}>
+            <span
+              className="pill-tag"
+              style={{ color: 'var(--warning)', borderColor: 'var(--warning)' }}
+            >
               ⚠ 需关注
             </span>
           )}
@@ -128,7 +130,10 @@ export default function CrossCabinetSeasonal({ seasonalData }: CrossCabinetSeaso
         <div className="flex items-center justify-between mb-2">
           <span style={{ fontSize: 14, fontWeight: 600 }}>💎 配饰建议</span>
           {data.accessory?.need_attention && (
-            <span className="pill-tag" style={{ color: 'var(--warning)', borderColor: 'var(--warning)' }}>
+            <span
+              className="pill-tag"
+              style={{ color: 'var(--warning)', borderColor: 'var(--warning)' }}
+            >
               ⚠ 需关注
             </span>
           )}
@@ -144,5 +149,5 @@ export default function CrossCabinetSeasonal({ seasonalData }: CrossCabinetSeaso
         </div>
       </div>
     </>
-  );
+  )
 }

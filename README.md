@@ -12,10 +12,10 @@
 | 3D 渲染 | Three.js + MMDLoader(PMX/MMD) | 卡渲材质、自动旋转、模型轮播 |
 | 前端构建 | Vite(容器内生产 + 开发 HMR)、esbuild(本机中文路径备选) | 本机路径含中文时 Vite 在 TRAE VFS 下会崩,故留 `build-esbuild.cjs` 作本机备选;容器内路径为 ASCII,Dockerfile 用 `npx vite build`;`app/dist` 不进 Git,每次构建镜像时在容器内重新生成 |
 | 后端 | Node.js ≥18 + Express 4 + better-sqlite3 | 同步 API,单服务提供 API + 静态文件 |
-| 数据库 | SQLite(WAL 模式,27 张表) | 零配置,首次启动自动建表 + 导入种子数据 |
+| 数据库 | SQLite(WAL 模式,28 张表) | 零配置,首次启动自动建表 + 导入种子数据 |
 | 规则引擎 | 三表结构(规则组/条件/动作) | 预筛 4 字段(性别/场景/模式/类别)+ 31 类条件字段(本机 `DISTINCT field` 实测) |
 | 外部服务 | 阿里云 DashScope(仅虚拟试穿调用) | 可选,缺 Key 时原样返回人物图并标记为降级;面容分析不调外部服务,直接返回 501 让顾客在表单里选;星座文案为本地模板 |
-| 部署 | Docker Compose + Caddy | 本机与服务器共用一份 `docker-compose.yml`(服务名 `style-ai`);服务器 Debian 12 + Docker 已于 2026-09-20 上线,Caddy 自动申请/续期 Let's Encrypt 证书;旧栈 Nginx + PM2 已作废.三站共用的服务器口径见仓库上一级的 `SERVER-OPS.md` |
+| 部署 | Docker Compose + Caddy | 本机与服务器共用一份 `docker-compose.yml`(服务名 `style-ai`);服务器 Debian 12 + Docker 已于 2026-09-20 上线,Caddy 自动申请/续期 Let's Encrypt 证书;旧栈 Nginx + PM2 已作废.三站共用的服务器口径见编排仓库的 `SERVER-OPS.md`（站外，本机 `E:\website\compose\SERVER-OPS.md`） |
 
 ---
 
@@ -53,20 +53,24 @@
 │   ├── build-esbuild.cjs             # 生产构建脚本(esbuild)
 │   ├── vite.config.ts                # 开发配置(HMR + API 代理到 :5000)
 │   └── package.json
-├── backend-node/                     # 后端
-│   ├── routes/                       # 路由(18 个模块)
+├── backend/                     # 后端
+│   ├── routes/                       # 路由(20 个模块)
 │   │   ├── auth.js / admin.js        # 认证 + 管理后台
 │   │   ├── customer.js               # 顾客临时会话(隐私优先)
 │   │   ├── recommend.js / rules.js   # 规则引擎推荐 + 规则 CRUD
 │   │   ├── inventory.js              # 库存管理
 │   │   ├── wardrobe.js / cosmetic.js / accessory.js  # 个人三柜
 │   │   ├── crossCabinet.js           # 跨柜联动(场合/季节/品牌/健康)
+│   │   ├── creator.js                # 创作者投稿(搭配/化妆/规则三类,表 creator_works)
+│   │   ├── payment.js                # 收款码展示 + 保证金凭证上传 + 管理员审核(静态码方案,非微信支付)
 │   │   ├── models.js                 # 3D 模型列表/文件服务(读 model_configs 表;后台「扫描模型」才入库)
 │   │   ├── photos.js / analysis.js / tryon.js        # 上传/面容/试穿
 │   │   ├── clothing.js / weather.js / horoscope.js   # 服装识别/天气/星座
 │   │   └── history.js
-│   ├── services/                     # 服务层
+│   ├── services/                     # 服务层(9 个)
 │   │   ├── recommendEngine.js        # 推荐引擎(规则匹配 + 旧版兼容)
+│   │   ├── ruleExplainer.js          # 把规则条件翻成中文(可解释性)
+│   │   ├── ruleFeedback.js           # 用户对规则的评好/差评计数
 │   │   ├── profileEnricher.js        # 档案增强(BMI/体型/腰臀比算法)
 │   │   ├── profileArchive.js         # 长期档案读写(身体/面容入库、算出的结论标签、计算前合并)
 │   │   ├── fullLookAdvisor.js        # 「今天这身」(三柜候选拼一套 + 冷暖皮定金属色)
@@ -77,32 +81,35 @@
 │   │   ├── auth.js / logger.js / upload.js
 │   │   ├── rateLimit.js              # 未被引用(限流实际用 npm 包 express-rate-limit,见 server.js)
 │   ├── db/
-│   │   ├── styleai.db                # SQLite 库文件(整目录挂载,勿单文件挂载)
+│   │   ├── styleai.db                # SQLite 库文件(容器运行期会写它 ⇒ 已移出 Git 跟踪、*.db 已 gitignore;整目录挂载,勿单文件挂载)
 │   │   ├── init.js                   # 自动建表 + 种子数据 + 管理员 + 清理过期会话
-│   │   ├── schema.sql                # 表结构(27 张表)
+│   │   ├── schema.sql                # 表结构(28 个 CREATE TABLE)⚠️不等于线上表结构:库是增量演进的,新列别写这里
 │   │   ├── seed.js                   # 种子数据导入(读 seed/ 下两份 JSON)
 │   │   ├── seed/rules.json           # 规则组/条件/动作数据源
 │   │   ├── seed/inventory.json       # 库存分类/商品数据源
 │   │   ├── add-rules.js              # 历史规则批量导入脚本(现以 seed/rules.json 为准)
 │   │   └── migrate_cn_category.js    # 中文分类迁移脚本
-│   ├── utils/                        # common.js / model-utils.js / response.js
+│   ├── utils/                        # common.js / logger.js / model-utils.js / response.js
 │   ├── templates/                    # 管理后台 HTML(admin.html / admin-login.html)
 │   ├── static/                       # 管理后台 CSS/JS
 │   ├── uploads/                      # 用户上传(gitignore)
+│   ├── test/                         # 单元测试 5 个文件(node --test,非 vitest):推荐引擎/审美规则/今天这身/档案增强
 │   ├── scripts/                      # 一次性维护脚本(非运行时必需)
 │   │   ├── flatten-textures.js       # 纹理文件扁平化
 │   │   ├── rebuild-db.js             # 重建数据库 + 更新模型字段
 │   │   ├── restructure-models.js     # 模型目录结构重组 + 命名统一
 │   │   └── scan-models.js            # 扫描乱码文件名 + 纹理缺失
+│   ├── eslint.config.js              # ESLint 扁平配置(与 prettier 通过 eslint-config-prettier 共存)
 │   ├── .prettierrc.json              # Prettier 配置(与前端统一:无分号/单引号/2 空格)
 │   ├── .prettierignore               # Prettier 忽略(node_modules/db/上传等)
 │   ├── server.js                     # 后端入口
 │   ├── .env / .env.example           # 环境变量(.env 已 gitignore)
-│   └── package.json                  # 含 npm run format 一键格式化
+│   └── package.json                  # 脚本:start / dev / seed / format(:check) / lint(:fix) / test
 ├── docs/                             # 设计与路线文档
 │   └── 形象设计模型-现状与路线.md      # 数字形象目标 / 实测缺口 / 7 步实施路线(活文档)
-├── models/                           # 3D 角色模型库(38 个顶层文件夹 / 44 个 .pmx;model_configs 启用 42 个 = 展厅实际数量)
-│   └── 角色名+IP来源/                # 命名规则:`优菈+原神`、`雷电将军+原神`
+├── models/                           # 3D 角色模型库(实测:顶层 30 个角色目录 / 含子目录共 72 个 / 416 个文件 / 32 个 .pmx)
+│   │                                 # ⚠️三个数字别混:磁盘 30 个目录 ≠ model_configs 登记 32 行 ≠ 展厅 28 张卡片(enabled=1)
+│   └── 角色名+IP来源/                # 命名规则:`优菈+原神`、`雷电将军+原神`;folder 是可嵌套相对路径,比对先按 split('/')[0]
 ├── Dockerfile                        # 生产镜像(前端 npx vite build + 后端代码 COPY 进镜像)
 ├── .dockerignore                     # 排除 node_modules/models/uploads/dev.bat/*.md 等
 ├── dev.bat                           # 本机开发(前端 Vite HMR :5173 + 后端 :5000)
@@ -125,11 +132,11 @@
 
 ```bash
 cd app && npm install --registry=https://registry.npmmirror.com
-cd ../backend-node && npm install --registry=https://registry.npmmirror.com
+cd ../backend && npm install --registry=https://registry.npmmirror.com
 ```
 
 ### 2. 配置环境变量
-复制 `backend-node/.env.example` 为 `backend-node/.env`,按需填写:
+复制 `backend/.env.example` 为 `backend/.env`,按需填写:
 
 | 变量 | 必填 | 说明 |
 |------|------|------|
@@ -141,7 +148,7 @@ cd ../backend-node && npm install --registry=https://registry.npmmirror.com
 | `DASHSCOPE_API_KEY` | 否 | 只影响虚拟试穿:留空时原样返回你上传的人物图并标记 `degraded`;面容分析不读它(接口直接返回 501) |
 | `CUSTOMER_DATA_TTL` | 否 | 顾客临时会话过期秒数,默认 7200(2 小时) |
 
-> 只有虚拟试穿会调 DashScope,不存在独立的第三方试穿服务变量;面容分析接口不碰它,固定返回 501;星座文案是本地模板,代码未接 LLM(`package.json` 里的 `openai` 依赖 `backend-node/**/*.js` 零引用,实测结论)。
+> 只有虚拟试穿会调 DashScope,不存在独立的第三方试穿服务变量;面容分析接口不碰它,固定返回 501;星座文案是本地模板,代码未接 LLM(`package.json` 里的 `openai` 依赖 `backend/**/*.js` 零引用,实测结论)。
 > `openai` 这条依赖**没顺手删**:后端镜像用 `npm ci --omit=dev`,只改 `package.json` 而不同步 `package-lock.json` 会让构建当场失败;本机 `node_modules` 已按决定删掉不重装,锁文件只能单独重解,故列为待办而不是随手改一行。
 
 ### 3. 启动
@@ -153,7 +160,7 @@ cd /e/website                       # 服务器上是 compose 仓库所在目录
 docker compose up -d --build style-ai
 ```
 
-**改完代码必须带 `--build`**:Dockerfile 把 `backend-node/` 和 `app/` 的**源码** COPY 进镜像,在容器内自己装依赖并构建前端(宿主机 `node_modules`、`dist` 都被 `.dockerignore` 排除),`docker compose restart` 只会重启旧镜像里的旧代码,等于没改.
+**改完代码必须带 `--build`**:Dockerfile 把 `backend/` 和 `app/` 的**源码** COPY 进镜像,在容器内自己装依赖并构建前端(宿主机 `node_modules`、`dist` 都被 `.dockerignore` 排除),`docker compose restart` 只会重启旧镜像里的旧代码,等于没改.
 
 **访问地址**:本机 `http://127.0.0.1:5000`(compose 只把端口绑在回环上,公网不直连). 服务器已由 Caddy 反代 `https://style.sparklove.cn`,证书自动申请与续期;在服务器上自查只能 `curl 127.0.0.1:5000`,公网访问一律走域名.
 
@@ -162,7 +169,7 @@ docker compose up -d --build style-ai
 ```bash
 # 手动启动(PowerShell)
 cd app; node --require ../npm-patch.js build-esbuild.cjs
-cd ../backend-node; node --require ../npm-patch.js server.js
+cd ../backend; node --require ../npm-patch.js server.js
 ```
 
 **开发模式(前端 HMR 热更新,不构建 dist)**:双击 `dev.bat`,前端 `:5173`(Vite)+ 后端 `:5000` 双进程,前端 API 请求代理到后端.
@@ -297,7 +304,7 @@ cd ../backend-node; node --require ../npm-patch.js server.js
 cd app && npm run format
 
 # 后端格式化
-cd backend-node && npm run format
+cd backend && npm run format
 
 # 检查未格式化文件(CI 用)
 npm run format:check
@@ -307,4 +314,4 @@ npm run format:check
 - 前端组件:`PascalCase.tsx`(如 `WardrobeTab.tsx`)
 - 前端工具/hooks:`camelCase.ts`(如 `useResponsive.ts`)
 - 后端路由/服务/中间件:`camelCase.js`(如 `crossCabinet.js`、`recommendEngine.js`)
-- 一次性脚本:放 `backend-node/scripts/`,不参与运行时
+- 一次性脚本:放 `backend/scripts/`,不参与运行时

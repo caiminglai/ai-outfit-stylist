@@ -6,13 +6,13 @@
 /** 提示列表 props */
 interface TipListProps {
   /** 提示内容数组 */
-  tips: string[];
+  tips: string[]
   /** 可选标题 */
-  title?: string;
+  title?: string
 }
 
 export default function TipList({ tips, title }: TipListProps) {
-  if (!tips || tips.length === 0) return null;
+  if (!tips || tips.length === 0) return null
   return (
     <div className="animate-fade-in">
       {title && <div className="section-title">{title}</div>}
@@ -33,5 +33,5 @@ export default function TipList({ tips, title }: TipListProps) {
         ))}
       </div>
     </div>
-  );
+  )
 }

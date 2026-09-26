@@ -6,14 +6,17 @@
 /** 错误提示 props */
 interface ErrorMessageProps {
   /** 错误信息 */
-  message: string;
+  message: string
   /** 重试回调 */
-  onRetry?: () => void;
+  onRetry?: () => void
 }
 
 export default function ErrorMessage({ message, onRetry }: ErrorMessageProps) {
   return (
-    <div className="glass-card p-4 text-center animate-fade-in" style={{ borderColor: 'var(--danger)' }}>
+    <div
+      className="glass-card p-4 text-center animate-fade-in"
+      style={{ borderColor: 'var(--danger)' }}
+    >
       <p style={{ color: 'var(--danger)', fontSize: 13, marginBottom: 8 }}>{message}</p>
       {onRetry && (
         <button className="ghost-btn px-4 py-1.5 text-xs" onClick={onRetry}>
@@ -21,5 +24,5 @@ export default function ErrorMessage({ message, onRetry }: ErrorMessageProps) {
         </button>
       )}
     </div>
-  );
+  )
 }

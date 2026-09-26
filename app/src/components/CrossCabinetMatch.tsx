@@ -3,8 +3,8 @@
  * 包含 MatchResultCard / FullLookCard 组件和场合推荐的整体渲染
  */
 
-import type { CrossCabinetRecommendation, CabinetMatchResult, FullLook } from '../types';
-import TipList from './ui/TipList';
+import type { CrossCabinetRecommendation, CabinetMatchResult, FullLook } from '../types'
+import TipList from './ui/TipList'
 
 // ============================================================
 // 数据规范化 —— 兼容后端旧格式返回
@@ -14,22 +14,22 @@ import TipList from './ui/TipList';
 function normalizeData(raw: Record<string, unknown>): CrossCabinetRecommendation {
   // 如果已经是新格式（有 outfit_advice 字段），直接用
   if (raw.outfit_advice && raw.cosmetic_advice && raw.accessory_advice) {
-    return raw as unknown as CrossCabinetRecommendation;
+    return raw as unknown as CrossCabinetRecommendation
   }
 
   // 旧格式兼容：outfit/makeup/accessory 是扁平数组
   const toAdvice = (items: unknown, style?: string): CabinetMatchResult => {
-    const arr = Array.isArray(items) ? items : [];
+    const arr = Array.isArray(items) ? items : []
     return {
       style: style || '',
       matched: arr.map((item) => {
-        const obj = item as Record<string, unknown>;
-        return { name: (obj.name as string) || '未命名', score: obj.score as number | undefined };
+        const obj = item as Record<string, unknown>
+        return { name: (obj.name as string) || '未命名', score: obj.score as number | undefined }
       }),
       missing: [],
       suggestion: arr.length > 0 ? '已匹配以下单品' : '暂无匹配单品',
-    };
-  };
+    }
+  }
 
   return {
     occasion: (raw.occasion as string) || '日常',
@@ -37,13 +37,13 @@ function normalizeData(raw: Record<string, unknown>): CrossCabinetRecommendation
     outfit_advice: toAdvice(raw.outfit, raw.occasion_style as string),
     cosmetic_advice: toAdvice(raw.makeup),
     accessory_advice: toAdvice(raw.accessory),
-    cross_tips: Array.isArray(raw.cross_tips) ? raw.cross_tips as string[] : [],
+    cross_tips: Array.isArray(raw.cross_tips) ? (raw.cross_tips as string[]) : [],
     summary: {
       wardrobe_count: (raw.summary as Record<string, number>)?.wardrobe_count ?? 0,
       cosmetic_count: (raw.summary as Record<string, number>)?.cosmetic_count ?? 0,
       accessory_count: (raw.summary as Record<string, number>)?.accessory_count ?? 0,
     },
-  };
+  }
 }
 
 // ============================================================
@@ -52,25 +52,25 @@ function normalizeData(raw: Record<string, unknown>): CrossCabinetRecommendation
 
 /** 匹配项 */
 interface MatchedItem {
-  name: string;
-  score?: number;
-  reasons?: string[];
+  name: string
+  score?: number
+  reasons?: string[]
 }
 
 /** 匹配结果卡片 props */
 interface MatchResultCardProps {
   /** 图标 */
-  icon: string;
+  icon: string
   /** 标题 */
-  title: string;
+  title: string
   /** 风格标签 */
-  style?: string;
+  style?: string
   /** 已匹配项列表 */
-  matched: MatchedItem[];
+  matched: MatchedItem[]
   /** 缺失项列表 */
-  missing: string[];
+  missing: string[]
   /** 建议文本 */
-  suggestion: string;
+  suggestion: string
 }
 
 /** 匹配结果卡片：展示已匹配/缺失/建议 */
@@ -86,11 +86,17 @@ export function MatchResultCard({
     <div className="glass-card p-3 animate-fade-in">
       <div className="flex items-center gap-2 mb-2">
         <span style={{ fontSize: 16 }}>{icon}</span>
-        <span className="section-title" style={{ marginBottom: 0, borderLeft: 'none', paddingLeft: 0 }}>
+        <span
+          className="section-title"
+          style={{ marginBottom: 0, borderLeft: 'none', paddingLeft: 0 }}
+        >
           {title}
         </span>
         {style && (
-          <span className="pill-tag" style={{ color: 'var(--accent)', borderColor: 'var(--accent)' }}>
+          <span
+            className="pill-tag"
+            style={{ color: 'var(--accent)', borderColor: 'var(--accent)' }}
+          >
             {style}
           </span>
         )}
@@ -111,9 +117,7 @@ export function MatchResultCard({
                 title={m.reasons?.length ? `得分依据：${m.reasons.join('、')}` : undefined}
               >
                 {m.name}
-                {m.score != null && (
-                  <span style={{ marginLeft: 4, opacity: 0.7 }}>{m.score}%</span>
-                )}
+                {m.score != null && <span style={{ marginLeft: 4, opacity: 0.7 }}>{m.score}%</span>}
               </span>
             ))}
           </div>
@@ -133,7 +137,11 @@ export function MatchResultCard({
           </span>
           <div className="flex flex-wrap gap-1.5 mt-1">
             {missing.map((m, i) => (
-              <span key={i} className="pill-tag" style={{ color: 'var(--danger)', borderColor: 'var(--danger)' }}>
+              <span
+                key={i}
+                className="pill-tag"
+                style={{ color: 'var(--danger)', borderColor: 'var(--danger)' }}
+              >
                 {m}
               </span>
             ))}
@@ -149,7 +157,7 @@ export function MatchResultCard({
         </div>
       )}
     </div>
-  );
+  )
 }
 
 // ============================================================
@@ -159,7 +167,7 @@ export function MatchResultCard({
 /** 完整一套卡片 props */
 interface FullLookCardProps {
   /** 三柜拼出来的一套 */
-  look: FullLook;
+  look: FullLook
 }
 
 /** 今天这身：衣服 + 妆容 + 配饰拼成一套，缺哪一类直接点名 */
@@ -168,7 +176,10 @@ function FullLookCard({ look }: FullLookCardProps) {
     <div className="glass-card p-3 animate-fade-in">
       <div className="flex items-center gap-2 mb-2">
         <span style={{ fontSize: 16 }}>🧩</span>
-        <span className="section-title" style={{ marginBottom: 0, borderLeft: 'none', paddingLeft: 0 }}>
+        <span
+          className="section-title"
+          style={{ marginBottom: 0, borderLeft: 'none', paddingLeft: 0 }}
+        >
           今天这身
         </span>
         <span
@@ -211,9 +222,16 @@ function FullLookCard({ look }: FullLookCardProps) {
       )}
 
       {look.missing_parts.length > 0 && (
-        <div className="flex flex-wrap gap-1.5" style={{ marginTop: look.pieces.length > 0 ? 8 : 0 }}>
+        <div
+          className="flex flex-wrap gap-1.5"
+          style={{ marginTop: look.pieces.length > 0 ? 8 : 0 }}
+        >
           {look.missing_parts.map((m, i) => (
-            <span key={i} className="pill-tag" style={{ color: 'var(--warning)', borderColor: 'var(--warning)' }}>
+            <span
+              key={i}
+              className="pill-tag"
+              style={{ color: 'var(--warning)', borderColor: 'var(--warning)' }}
+            >
               缺 {m}
             </span>
           ))}
@@ -221,10 +239,12 @@ function FullLookCard({ look }: FullLookCardProps) {
       )}
 
       {look.note && (
-        <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 8, lineHeight: 1.5 }}>{look.note}</div>
+        <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 8, lineHeight: 1.5 }}>
+          {look.note}
+        </div>
       )}
     </div>
-  );
+  )
 }
 
 // ============================================================
@@ -234,29 +254,34 @@ function FullLookCard({ look }: FullLookCardProps) {
 /** 场合推荐面板 props */
 interface CrossCabinetMatchProps {
   /** 跨柜推荐数据 */
-  crossData: CrossCabinetRecommendation;
+  crossData: CrossCabinetRecommendation
 }
 
 /** 场合推荐面板：三柜搭配卡片 + 跨柜建议 + 底部统计 */
 export default function CrossCabinetMatch({ crossData }: CrossCabinetMatchProps) {
   // 规范化数据，兼容旧格式
-  const data = normalizeData(crossData as unknown as Record<string, unknown>);
+  const data = normalizeData(crossData as unknown as Record<string, unknown>)
 
-  const outfit = data.outfit_advice ?? { style: '', matched: [], missing: [], suggestion: '' };
-  const cosmetic = data.cosmetic_advice ?? { style: '', matched: [], missing: [], suggestion: '' };
-  const accessory = data.accessory_advice ?? { style: '', matched: [], missing: [], suggestion: '' };
-  const summary = data.summary ?? { wardrobe_count: 0, cosmetic_count: 0, accessory_count: 0 };
+  const outfit = data.outfit_advice ?? { style: '', matched: [], missing: [], suggestion: '' }
+  const cosmetic = data.cosmetic_advice ?? { style: '', matched: [], missing: [], suggestion: '' }
+  const accessory = data.accessory_advice ?? { style: '', matched: [], missing: [], suggestion: '' }
+  const summary = data.summary ?? { wardrobe_count: 0, cosmetic_count: 0, accessory_count: 0 }
 
   return (
     <div className="space-y-3 animate-fade-in">
       {/* 场合标题 */}
       <div className="flex items-center gap-2">
-        <span className="section-title" style={{ marginBottom: 0 }}>🎯</span>
+        <span className="section-title" style={{ marginBottom: 0 }}>
+          🎯
+        </span>
         <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--accent)' }}>
           {data.occasion}
         </span>
         {data.occasion_style && (
-          <span className="pill-tag" style={{ color: 'var(--accent)', borderColor: 'var(--accent)' }}>
+          <span
+            className="pill-tag"
+            style={{ color: 'var(--accent)', borderColor: 'var(--accent)' }}
+          >
             {data.occasion_style}
           </span>
         )}
@@ -327,5 +352,5 @@ export default function CrossCabinetMatch({ crossData }: CrossCabinetMatchProps)
         </div>
       </div>
     </div>
-  );
+  )
 }

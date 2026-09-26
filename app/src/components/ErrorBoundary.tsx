@@ -1,13 +1,13 @@
-import React from 'react';
+import React from 'react'
 
 interface Props {
-  children: React.ReactNode;
-  fallback?: React.ReactNode;
+  children: React.ReactNode
+  fallback?: React.ReactNode
 }
 
 interface State {
-  hasError: boolean;
-  error?: Error;
+  hasError: boolean
+  error?: Error
 }
 
 /**
@@ -21,41 +21,45 @@ interface State {
  */
 export class ErrorBoundary extends React.Component<Props, State> {
   constructor(props: Props) {
-    super(props);
-    this.state = { hasError: false };
+    super(props)
+    this.state = { hasError: false }
   }
 
   static getDerivedStateFromError(error: Error): State {
-    return { hasError: true, error };
+    return { hasError: true, error }
   }
 
   componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
     // 可以在这里上报错误日志
-    console.error('[ErrorBoundary] 组件渲染错误:', error, errorInfo);
+    console.error('[ErrorBoundary] 组件渲染错误:', error, errorInfo)
   }
 
   handleRetry = () => {
-    this.setState({ hasError: false, error: undefined });
-  };
+    this.setState({ hasError: false, error: undefined })
+  }
 
   render() {
     if (this.state.hasError) {
       if (this.props.fallback) {
-        return this.props.fallback;
+        return this.props.fallback
       }
 
       return (
-        <div style={{
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          justifyContent: 'center',
-          padding: '40px 20px',
-          color: 'var(--muted)',
-          textAlign: 'center',
-        }}>
+        <div
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '40px 20px',
+            color: 'var(--muted)',
+            textAlign: 'center',
+          }}
+        >
           <div style={{ fontSize: '32px', marginBottom: '12px' }}>⚠️</div>
-          <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text)', marginBottom: '6px' }}>
+          <div
+            style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text)', marginBottom: '6px' }}
+          >
             组件加载异常
           </div>
           <div style={{ fontSize: '12px', marginBottom: '16px', maxWidth: '280px' }}>
@@ -76,11 +80,11 @@ export class ErrorBoundary extends React.Component<Props, State> {
             重试
           </button>
         </div>
-      );
+      )
     }
 
-    return this.props.children;
+    return this.props.children
   }
 }
 
-export default ErrorBoundary;
+export default ErrorBoundary

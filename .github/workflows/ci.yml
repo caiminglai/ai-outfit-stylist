@@ -1,0 +1,77 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+jobs:
+  frontend:
+    name: Frontend (app)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: app
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          # 与 Dockerfile 的运行时对齐（node:24-slim），CI 测一个线上不用的版本没意义
+          node-version: 24
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      # 放最前面：格式不合规几秒就能判，不必等类型和测试跑完才红
+      - name: Format check
+        run: npm run format:check
+
+      - name: Type check
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Build
+        run: npm run build
+
+  backend:
+    name: Backend
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      # 放最前面：格式不合规几秒就能判，不必等测试跑完才红
+      - name: Format check
+        run: npm run format:check
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Unit test
+        run: npm test
+
+      # 两个 job 都只跑本机已实测通过的门禁：
+      #   app  typecheck 0 错 / lint 0 error 8 warning / build 通过
+      #   backend  lint 0 error 105 warning / node --test 78 全过（已用 git archive 出一份
+      #          干净 checkout 复验过，测试只读仓库里被跟踪的 styleai.db）
+      # format:check 本轮已随两侧落格式一起清零（前端 45 文件 / 后端 37 文件，
+      # 两份 .prettierrc.json 的 endOfLine 从 lf 改成 auto），所以从"暂不挂"改成挂上。

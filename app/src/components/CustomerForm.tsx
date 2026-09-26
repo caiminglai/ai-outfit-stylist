@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import type { CustomerProfile } from '../types';
+import { useState } from 'react'
+import type { CustomerProfile } from '../types'
 
 /**
  * 顾客数据收集表单 - 深色科技风
@@ -11,13 +11,13 @@ import type { CustomerProfile } from '../types';
 const GENDER_OPTIONS = [
   { value: '女', label: '女', icon: '👩' },
   { value: '男', label: '男', icon: '👨' },
-] as const;
+] as const
 
 const SKIN_TONE_OPTIONS = [
   { value: '暖皮', label: '暖皮', desc: '偏黄暖色调' },
   { value: '冷皮', label: '冷皮', desc: '偏粉冷色调' },
   { value: '自然', label: '自然', desc: '中性肤色' },
-] as const;
+] as const
 
 /** 深浅档:与个人表单 SKIN_TONE_DETAIL_OPTIONS 同一套值,冷暖+深浅合起来才能算色彩四季型 */
 const SKIN_TONE_DETAIL_OPTIONS = [
@@ -26,14 +26,14 @@ const SKIN_TONE_DETAIL_OPTIONS = [
   { value: '偏黄', label: '偏黄' },
   { value: '小麦色', label: '小麦色' },
   { value: '古铜色', label: '古铜色' },
-] as const;
+] as const
 
 /** 纯度档:值与后端 CHROMA_LEVEL 一字一样,冷暖+深浅定出四季后再用这根轴细分到十二型 */
 const COLOR_CHROMA_OPTIONS = [
   { value: '净亮', label: '净亮' },
   { value: '柔雾', label: '柔雾' },
   { value: '中间', label: '中间' },
-] as const;
+] as const
 
 const FACE_SHAPE_OPTIONS = [
   { value: '圆脸', label: '圆脸', icon: '⭕' },
@@ -41,7 +41,7 @@ const FACE_SHAPE_OPTIONS = [
   { value: '心形脸', label: '心形脸', icon: '❤️' },
   { value: '椭圆脸', label: '椭圆脸', icon: '🥚' },
   { value: '长脸', label: '长脸', icon: '▯' },
-] as const;
+] as const
 
 const BODY_TYPE_OPTIONS = [
   { value: '标准', label: '标准' },
@@ -49,34 +49,34 @@ const BODY_TYPE_OPTIONS = [
   { value: '偏胖', label: '偏胖' },
   { value: '梨形', label: '梨形' },
   { value: '苹果形', label: '苹果形' },
-] as const;
+] as const
 
 /** 骨架量感:值与后端 FRAME_LEVEL 一字一样,与线条倾向合起来才判得出风格型 */
 const FRAME_SIZE_OPTIONS = [
   { value: '小巧', label: '小巧' },
   { value: '适中', label: '适中' },
   { value: '大气', label: '大气' },
-] as const;
+] as const
 
 /** 线条倾向:值与后端 LINE_LEVEL 一字一样 */
 const LINE_QUALITY_OPTIONS = [
   { value: '偏直线', label: '偏直线' },
   { value: '均衡', label: '均衡' },
   { value: '偏曲线', label: '偏曲线' },
-] as const;
+] as const
 
 const AGE_RANGE_OPTIONS = [
   { value: '18-25', label: '18-25' },
   { value: '26-35', label: '26-35' },
   { value: '36-45', label: '36-45' },
   { value: '46+', label: '46+' },
-] as const;
+] as const
 
 /** 值与规则库 region 条件取值一一对应(门店规则 6 组按南北分档) */
 const REGION_OPTIONS = [
   { value: '北方', label: '北方', desc: '干冷、层级穿搭多' },
   { value: '南方', label: '南方', desc: '湿润、轻薄通透' },
-] as const;
+] as const
 
 const SCENARIO_OPTIONS = [
   { value: '通勤', label: '通勤', icon: '💼' },
@@ -84,16 +84,21 @@ const SCENARIO_OPTIONS = [
   { value: '面试', label: '面试', icon: '📋' },
   { value: '休闲', label: '休闲', icon: '☕' },
   { value: '聚会', label: '聚会', icon: '🎉' },
-] as const;
+] as const
 
 interface CustomerFormProps {
-  initial?: Partial<CustomerProfile>;
-  onSubmit: (profile: CustomerProfile) => void;
-  submitting?: boolean;
-  compact?: boolean;
+  initial?: Partial<CustomerProfile>
+  onSubmit: (profile: CustomerProfile) => void
+  submitting?: boolean
+  compact?: boolean
 }
 
-export default function CustomerForm({ initial, onSubmit, submitting, compact }: CustomerFormProps) {
+export default function CustomerForm({
+  initial,
+  onSubmit,
+  submitting,
+  compact,
+}: CustomerFormProps) {
   const [profile, setProfile] = useState<CustomerProfile>({
     nickname: initial?.nickname || '',
     gender: initial?.gender,
@@ -109,19 +114,19 @@ export default function CustomerForm({ initial, onSubmit, submitting, compact }:
     frame_size: initial?.frame_size,
     line_quality: initial?.line_quality,
     scenario: initial?.scenario || '通勤',
-  });
+  })
 
   const update = (key: keyof CustomerProfile, value: CustomerProfile[keyof CustomerProfile]) => {
-    setProfile(prev => ({ ...prev, [key]: value }));
-  };
+    setProfile((prev) => ({ ...prev, [key]: value }))
+  }
 
   const handleSubmit = () => {
-    if (!profile.gender) return;
-    onSubmit(profile);
-  };
+    if (!profile.gender) return
+    onSubmit(profile)
+  }
 
-  const gap = compact ? 'gap-2' : 'gap-3';
-  const sectionClass = compact ? 'mb-4' : 'mb-5';
+  const gap = compact ? 'gap-2' : 'gap-3'
+  const sectionClass = compact ? 'mb-4' : 'mb-5'
 
   /** 选填的分类轴:一行标签 + 一句怎么自判的提示 + 三个按钮 */
   const renderTriRow = (
@@ -132,10 +137,14 @@ export default function CustomerForm({ initial, onSubmit, submitting, compact }:
     onPick: (value: string) => void,
   ) => (
     <>
-      <div className="text-xs mt-3 mb-2" style={{ opacity: 0.7 }}>{label}</div>
-      <div className="text-[10px] mb-2" style={{ color: 'var(--muted)' }}>{hint}</div>
+      <div className="text-xs mt-3 mb-2" style={{ opacity: 0.7 }}>
+        {label}
+      </div>
+      <div className="text-[10px] mb-2" style={{ color: 'var(--muted)' }}>
+        {hint}
+      </div>
       <div className={`grid grid-cols-3 ${gap}`}>
-        {options.map(opt => (
+        {options.map((opt) => (
           <button
             key={opt.value}
             onClick={() => onPick(opt.value)}
@@ -147,12 +156,19 @@ export default function CustomerForm({ initial, onSubmit, submitting, compact }:
         ))}
       </div>
     </>
-  );
+  )
 
   return (
     <div className="space-y-1">
       {/* 昵称 */}
-      <section className={sectionClass} style={{ borderBottom: '1px solid var(--line)', paddingBottom: '14px', marginBottom: '14px' }}>
+      <section
+        className={sectionClass}
+        style={{
+          borderBottom: '1px solid var(--line)',
+          paddingBottom: '14px',
+          marginBottom: '14px',
+        }}
+      >
         <div className="section-title">昵称</div>
         <input
           type="text"
@@ -160,32 +176,54 @@ export default function CustomerForm({ initial, onSubmit, submitting, compact }:
           onChange={(e) => update('nickname', e.target.value)}
           placeholder="请输入您的昵称"
           className="opt-btn w-full"
-          style={{ padding: '8px 12px', background: 'var(--panel)', border: '1px solid var(--line)', color: 'var(--text)', borderRadius: '8px', fontSize: '13px' }}
+          style={{
+            padding: '8px 12px',
+            background: 'var(--panel)',
+            border: '1px solid var(--line)',
+            color: 'var(--text)',
+            borderRadius: '8px',
+            fontSize: '13px',
+          }}
         />
       </section>
 
       {/* 性别 */}
-      <section className={sectionClass} style={{ borderBottom: '1px solid var(--line)', paddingBottom: '14px', marginBottom: '14px' }}>
+      <section
+        className={sectionClass}
+        style={{
+          borderBottom: '1px solid var(--line)',
+          paddingBottom: '14px',
+          marginBottom: '14px',
+        }}
+      >
         <div className="section-title">性别</div>
         <div className={`flex ${gap}`}>
-          {GENDER_OPTIONS.map(opt => (
+          {GENDER_OPTIONS.map((opt) => (
             <button
               key={opt.value}
               onClick={() => update('gender', opt.value)}
               className={`opt-btn flex-1 ${profile.gender === opt.value ? 'active' : ''}`}
               style={{ padding: '8px 10px' }}
             >
-              <span className="mr-1">{opt.icon}</span>{opt.label}
+              <span className="mr-1">{opt.icon}</span>
+              {opt.label}
             </button>
           ))}
         </div>
       </section>
 
       {/* 年龄段 */}
-      <section className={sectionClass} style={{ borderBottom: '1px solid var(--line)', paddingBottom: '14px', marginBottom: '14px' }}>
+      <section
+        className={sectionClass}
+        style={{
+          borderBottom: '1px solid var(--line)',
+          paddingBottom: '14px',
+          marginBottom: '14px',
+        }}
+      >
         <div className="section-title">年龄段</div>
         <div className={`grid grid-cols-4 ${gap}`}>
-          {AGE_RANGE_OPTIONS.map(opt => (
+          {AGE_RANGE_OPTIONS.map((opt) => (
             <button
               key={opt.value}
               onClick={() => update('age_range', opt.value)}
@@ -199,10 +237,17 @@ export default function CustomerForm({ initial, onSubmit, submitting, compact }:
       </section>
 
       {/* 地区 */}
-      <section className={sectionClass} style={{ borderBottom: '1px solid var(--line)', paddingBottom: '14px', marginBottom: '14px' }}>
+      <section
+        className={sectionClass}
+        style={{
+          borderBottom: '1px solid var(--line)',
+          paddingBottom: '14px',
+          marginBottom: '14px',
+        }}
+      >
         <div className="section-title">常居地区</div>
         <div className={`flex ${gap}`}>
-          {REGION_OPTIONS.map(opt => (
+          {REGION_OPTIONS.map((opt) => (
             <button
               key={opt.value}
               onClick={() => update('region', opt.value)}
@@ -210,17 +255,28 @@ export default function CustomerForm({ initial, onSubmit, submitting, compact }:
               style={{ textAlign: 'center' }}
             >
               <div className="text-xs font-medium">{opt.label}</div>
-              {!compact && <div className="text-[10px] mt-0.5" style={{ opacity: 0.7 }}>{opt.desc}</div>}
+              {!compact && (
+                <div className="text-[10px] mt-0.5" style={{ opacity: 0.7 }}>
+                  {opt.desc}
+                </div>
+              )}
             </button>
           ))}
         </div>
       </section>
 
       {/* 肤色 */}
-      <section className={sectionClass} style={{ borderBottom: '1px solid var(--line)', paddingBottom: '14px', marginBottom: '14px' }}>
+      <section
+        className={sectionClass}
+        style={{
+          borderBottom: '1px solid var(--line)',
+          paddingBottom: '14px',
+          marginBottom: '14px',
+        }}
+      >
         <div className="section-title">肤色冷暖</div>
         <div className={`flex ${gap}`}>
-          {SKIN_TONE_OPTIONS.map(opt => (
+          {SKIN_TONE_OPTIONS.map((opt) => (
             <button
               key={opt.value}
               onClick={() => update('skin_tone', opt.value)}
@@ -228,7 +284,11 @@ export default function CustomerForm({ initial, onSubmit, submitting, compact }:
               style={{ textAlign: 'center' }}
             >
               <div className="text-xs font-medium">{opt.label}</div>
-              {!compact && <div className="text-[10px] mt-0.5" style={{ opacity: 0.7 }}>{opt.desc}</div>}
+              {!compact && (
+                <div className="text-[10px] mt-0.5" style={{ opacity: 0.7 }}>
+                  {opt.desc}
+                </div>
+              )}
             </button>
           ))}
         </div>
@@ -236,7 +296,7 @@ export default function CustomerForm({ initial, onSubmit, submitting, compact }:
           深浅（选填，与冷暖一起判定色彩四季型）
         </div>
         <div className={`grid grid-cols-5 ${gap}`}>
-          {SKIN_TONE_DETAIL_OPTIONS.map(opt => (
+          {SKIN_TONE_DETAIL_OPTIONS.map((opt) => (
             <button
               key={opt.value}
               onClick={() => update('skin_tone_detail', opt.value)}
@@ -257,10 +317,17 @@ export default function CustomerForm({ initial, onSubmit, submitting, compact }:
       </section>
 
       {/* 脸型 */}
-      <section className={sectionClass} style={{ borderBottom: '1px solid var(--line)', paddingBottom: '14px', marginBottom: '14px' }}>
+      <section
+        className={sectionClass}
+        style={{
+          borderBottom: '1px solid var(--line)',
+          paddingBottom: '14px',
+          marginBottom: '14px',
+        }}
+      >
         <div className="section-title">脸型</div>
         <div className={`grid grid-cols-5 ${gap}`}>
-          {FACE_SHAPE_OPTIONS.map(opt => (
+          {FACE_SHAPE_OPTIONS.map((opt) => (
             <button
               key={opt.value}
               onClick={() => update('face_shape', opt.value)}
@@ -275,10 +342,17 @@ export default function CustomerForm({ initial, onSubmit, submitting, compact }:
       </section>
 
       {/* 体型 */}
-      <section className={sectionClass} style={{ borderBottom: '1px solid var(--line)', paddingBottom: '14px', marginBottom: '14px' }}>
+      <section
+        className={sectionClass}
+        style={{
+          borderBottom: '1px solid var(--line)',
+          paddingBottom: '14px',
+          marginBottom: '14px',
+        }}
+      >
         <div className="section-title">体型</div>
         <div className={`grid grid-cols-5 ${gap}`}>
-          {BODY_TYPE_OPTIONS.map(opt => (
+          {BODY_TYPE_OPTIONS.map((opt) => (
             <button
               key={opt.value}
               onClick={() => update('body_type', opt.value)}
@@ -306,37 +380,59 @@ export default function CustomerForm({ initial, onSubmit, submitting, compact }:
       </section>
 
       {/* 身高体重(选填,填了才有 BMI/体型数字) */}
-      <section className={sectionClass} style={{ borderBottom: '1px solid var(--line)', paddingBottom: '14px', marginBottom: '14px' }}>
+      <section
+        className={sectionClass}
+        style={{
+          borderBottom: '1px solid var(--line)',
+          paddingBottom: '14px',
+          marginBottom: '14px',
+        }}
+      >
         <div className="section-title">身高体重（选填）</div>
         <div className="flex gap-3">
           <div className="flex-1 min-w-0">
-            <div className="text-xs mb-2" style={{ color: 'var(--muted)' }}>身高</div>
+            <div className="text-xs mb-2" style={{ color: 'var(--muted)' }}>
+              身高
+            </div>
             <input
               type="number"
               placeholder="cm，如 165"
               className="form-input"
               value={profile.height ?? ''}
-              onChange={(e) => update('height', e.target.value ? Number(e.target.value) : undefined)}
+              onChange={(e) =>
+                update('height', e.target.value ? Number(e.target.value) : undefined)
+              }
             />
           </div>
           <div className="flex-1 min-w-0">
-            <div className="text-xs mb-2" style={{ color: 'var(--muted)' }}>体重</div>
+            <div className="text-xs mb-2" style={{ color: 'var(--muted)' }}>
+              体重
+            </div>
             <input
               type="number"
               placeholder="kg，如 55"
               className="form-input"
               value={profile.weight ?? ''}
-              onChange={(e) => update('weight', e.target.value ? Number(e.target.value) : undefined)}
+              onChange={(e) =>
+                update('weight', e.target.value ? Number(e.target.value) : undefined)
+              }
             />
           </div>
         </div>
       </section>
 
       {/* 场景 */}
-      <section className={sectionClass} style={{ borderBottom: '1px solid var(--line)', paddingBottom: '14px', marginBottom: '14px' }}>
+      <section
+        className={sectionClass}
+        style={{
+          borderBottom: '1px solid var(--line)',
+          paddingBottom: '14px',
+          marginBottom: '14px',
+        }}
+      >
         <div className="section-title">穿着场景</div>
         <div className={`grid grid-cols-5 ${gap}`}>
-          {SCENARIO_OPTIONS.map(opt => (
+          {SCENARIO_OPTIONS.map((opt) => (
             <button
               key={opt.value}
               onClick={() => update('scenario', opt.value)}
@@ -362,9 +458,11 @@ export default function CustomerForm({ initial, onSubmit, submitting, compact }:
               <span className="spinner" style={{ width: '14px', height: '14px' }}></span>
               生成中...
             </span>
-          ) : '✨ 生成形象建议'}
+          ) : (
+            '✨ 生成形象建议'
+          )}
         </button>
       </section>
     </div>
-  );
+  )
 }

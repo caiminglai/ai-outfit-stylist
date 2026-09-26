@@ -10,7 +10,7 @@
     "lint": "eslint .",
     "typecheck": "tsc -b --force",
     "format": "prettier --write \"src/**/*.{ts,tsx,css,json}\" \"*.{ts,js,json}\"",
-    "format:check": "prettier --check \"src/**/*.{ts,tsx,css,json}\""
+    "format:check": "prettier --check \"src/**/*.{ts,tsx,css,json}\" \"*.{ts,js,json}\""
   },
   "dependencies": {
     "@radix-ui/react-dialog": "^1.1.15",

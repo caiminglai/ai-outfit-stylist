@@ -6,29 +6,32 @@
 /** 环形进度条 props */
 interface RingProgressProps {
   /** 分数（0-100） */
-  score: number;
+  score: number
   /** 圆环直径，默认 80 */
-  size?: number;
+  size?: number
   /** 描边宽度，默认 6 */
-  strokeWidth?: number;
+  strokeWidth?: number
 }
 
 function getScoreColor(score: number): string {
-  if (score >= 80) return 'var(--good)';
-  if (score >= 60) return 'var(--accent)';
-  if (score >= 40) return 'var(--warning)';
-  return 'var(--danger)';
+  if (score >= 80) return 'var(--good)'
+  if (score >= 60) return 'var(--accent)'
+  if (score >= 40) return 'var(--warning)'
+  return 'var(--danger)'
 }
 
 export default function RingProgress({ score, size = 80, strokeWidth = 6 }: RingProgressProps) {
-  const safeScore = typeof score === 'number' && !isNaN(score) ? score : 0;
-  const radius = (size - strokeWidth) / 2;
-  const circumference = 2 * Math.PI * radius;
-  const offset = circumference - (safeScore / 100) * circumference;
-  const color = getScoreColor(safeScore);
+  const safeScore = typeof score === 'number' && !isNaN(score) ? score : 0
+  const radius = (size - strokeWidth) / 2
+  const circumference = 2 * Math.PI * radius
+  const offset = circumference - (safeScore / 100) * circumference
+  const color = getScoreColor(safeScore)
 
   return (
-    <div className="flex items-center justify-center" style={{ position: 'relative', width: size, height: size }}>
+    <div
+      className="flex items-center justify-center"
+      style={{ position: 'relative', width: size, height: size }}
+    >
       <svg width={size} height={size} style={{ transform: 'rotate(-90deg)' }}>
         <circle
           cx={size / 2}
@@ -51,14 +54,16 @@ export default function RingProgress({ score, size = 80, strokeWidth = 6 }: Ring
           style={{ transition: 'stroke-dashoffset 0.8s ease, stroke 0.5s ease' }}
         />
       </svg>
-      <span style={{
-        position: 'absolute',
-        fontSize: size * 0.3,
-        fontWeight: 700,
-        color: color,
-      }}>
+      <span
+        style={{
+          position: 'absolute',
+          fontSize: size * 0.3,
+          fontWeight: 700,
+          color: color,
+        }}
+      >
         {safeScore}
       </span>
     </div>
-  );
+  )
 }
