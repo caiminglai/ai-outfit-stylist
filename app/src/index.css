@@ -12,8 +12,8 @@
   --line: #232c38;
   --text: #e6edf3;
   --muted: #8b98a5;
-  --accent: #6ee7c7;
-  --accent-dim: rgba(110, 231, 199, 0.12);
+  --accent: #f5834c;
+  --accent-dim: rgba(245, 131, 76, 0.12);
   --accent-2: #79b8ff;
   --good: #6ee7c7;
   --warning: #f0b46a;
@@ -28,29 +28,30 @@
   --card-foreground: 213 31% 91%;
   --popover: 215 28% 10%;
   --popover-foreground: 213 31% 91%;
-  --primary: 168 76% 64%; /* 青绿 #6ee7c7 */
+  --primary: 20 89% 63%; /* 红橙 #f5834c */
   --primary-foreground: 213 29% 7%;
   --secondary: 215 28% 14%;
   --secondary-foreground: 213 31% 91%;
   --muted: 215 28% 14%;
   --muted-foreground: 215 16% 57%;
-  --accent: 168 76% 64%;
+  /* shadcn 的 accent 是 HSL 三元组，与上面第 15 行那个颜色值同名会互相覆盖，故独立命名 */
+  --shadcn-accent: 20 89% 63%;
   --accent-foreground: 213 29% 7%;
   --destructive: 0 80% 70%;
   --destructive-foreground: 213 29% 7%;
   --border: 215 22% 18%;
   --input: 215 28% 14%;
-  --ring: 168 76% 64%;
+  --ring: 20 89% 63%;
   --radius: 0.625rem;
   /* sidebar 系列 */
   --sidebar-background: 213 29% 9%;
   --sidebar-foreground: 213 31% 91%;
-  --sidebar-primary: 168 76% 64%;
+  --sidebar-primary: 20 89% 63%;
   --sidebar-primary-foreground: 213 29% 7%;
   --sidebar-accent: 215 28% 14%;
   --sidebar-accent-foreground: 213 31% 91%;
   --sidebar-border: 215 22% 18%;
-  --sidebar-ring: 168 76% 64%;
+  --sidebar-ring: 20 89% 63%;
 }
 
 @layer base {
@@ -260,7 +261,7 @@
     background: var(--accent-dim);
     border-color: var(--accent);
     color: var(--accent);
-    box-shadow: 0 0 8px rgba(110, 231, 199, 0.15);
+    box-shadow: 0 0 8px rgba(245, 131, 76, 0.15);
   }
 
   /* ════════════════════════════════════════════════
@@ -324,11 +325,11 @@
   }
   .model-card:hover {
     border-color: var(--accent);
-    background: rgba(110, 231, 199, 0.05);
+    background: rgba(245, 131, 76, 0.05);
   }
   .model-card.active {
     border-color: var(--accent);
-    background: rgba(110, 231, 199, 0.1);
+    background: rgba(245, 131, 76, 0.1);
   }
 }
 
@@ -408,15 +409,15 @@
 @keyframes pulseRing {
   0% {
     transform: scale(0.95);
-    box-shadow: 0 0 0 0 rgba(110, 231, 199, 0.4);
+    box-shadow: 0 0 0 0 rgba(245, 131, 76, 0.4);
   }
   70% {
     transform: scale(1);
-    box-shadow: 0 0 0 12px rgba(110, 231, 199, 0);
+    box-shadow: 0 0 0 12px rgba(245, 131, 76, 0);
   }
   100% {
     transform: scale(0.95);
-    box-shadow: 0 0 0 0 rgba(110, 231, 199, 0);
+    box-shadow: 0 0 0 0 rgba(245, 131, 76, 0);
   }
 }
 .pulse-ring {
@@ -432,7 +433,7 @@
 .spinner {
   width: 16px;
   height: 16px;
-  border: 2px solid rgba(110, 231, 199, 0.2);
+  border: 2px solid rgba(245, 131, 76, 0.2);
   border-top-color: var(--accent);
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
@@ -608,7 +609,7 @@ html {
 
 /* 选中文字颜色 */
 ::selection {
-  background: rgba(110, 231, 199, 0.3);
+  background: rgba(245, 131, 76, 0.3);
   color: var(--text);
 }
 

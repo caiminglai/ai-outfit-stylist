@@ -43,6 +43,39 @@ function payloadText(p) {
 document.getElementById('deposit-refresh').addEventListener('click', loadDeposits);
 document.getElementById('deposit-filter').addEventListener('change', loadDeposits);
 
+/* ── 收款金额 ── */
+document.getElementById('price-save').addEventListener('click', savePrice);
+
+function loadPrice() {
+  fetchJSON(PAY_API + '/admin/price').then(function(res) {
+    if (!res.success) throw new Error(apiErr(res));
+    var p = res.data;
+    document.getElementById('price-now').textContent = '¥' + p.amount.toFixed(2);
+    document.getElementById('price-input').placeholder = '新金额，如 ' + p.default_amount;
+    document.getElementById('price-tip').textContent = p.source === 'db'
+      ? '上次改动：' + (p.updated_at || '—')
+      : '现在用的是代码默认值，后台还没改过';
+  }).catch(function(e) {
+    showToast('读取收款金额失败: ' + e.message, 'error');
+  });
+}
+
+function savePrice() {
+  var input = document.getElementById('price-input');
+  var v = (input.value || '').trim();
+  if (!/^\d+(\.\d{1,2})?$/.test(v)) { showToast('金额最多两位小数，例如 99 或 59.9', 'error'); return; }
+  if (!confirm('把收款金额改成 ¥' + v + '？只影响之后新建的订单。')) return;
+
+  apiCall(PAY_API + '/admin/price', 'PUT', { amount: v }).then(function(res) {
+    if (!res.success) throw new Error(apiErr(res));
+    showToast('收款金额已改成 ¥' + res.data.amount.toFixed(2), 'success');
+    input.value = '';
+    loadPrice();
+  }).catch(function(e) {
+    showToast(e.message, 'error');
+  });
+}
+
 function loadDeposits() {
   var container = document.getElementById('deposit-container');
   container.className = 'loading';
@@ -77,7 +110,7 @@ function renderDeposits(rows) {
       : '';
     return '<div class="inv-product-card">' +
       '<div class="inv-product-info">' +
-        '<div class="inv-product-name">¥' + escapeHtml(d.amount) + ' · ' +
+        '<div class="inv-product-name">¥' + Number(d.amount).toFixed(2) + ' · ' +
           escapeHtml(d.channel === 'alipay' ? '支付宝' : '微信') + ' ' +
           badge(DEPOSIT_CN, DEPOSIT_BADGE, d.status) + '</div>' +
         '<div class="inv-product-meta">' +

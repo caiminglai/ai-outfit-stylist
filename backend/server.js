@@ -82,7 +82,16 @@ const HOST = process.env.HOST || '127.0.0.1'
 
 // ===== 中间件 =====
 app.use(compression())
-app.use(express.json({ limit: '10mb' }))
+app.use(
+  express.json({
+    limit: '10mb',
+    // 微信支付回调要用原始字节验签：JSON.parse 之后再 stringify 无法逐字节还原。
+    // 只在回调路径上留这份副本，免得每次 10MB 上传都多占一份内存。
+    verify: (req, _res, buf) => {
+      if (req.originalUrl.startsWith('/api/payment/notify')) req.rawBody = buf.toString('utf8')
+    },
+  }),
+)
 app.use(express.urlencoded({ extended: true, limit: '10mb' }))
 
 // HTTP 安全头(helmet)
@@ -102,7 +111,12 @@ const apiLimiter = rateLimit({
   legacyHeaders: false, // 禁用 X-RateLimit-* 头
   // 展厅加载一个角色要拉 .pmx + 多张贴图，走的是同一个 /api 前缀；
   // 不豁免的话浏览几个模型就吃掉 100 次额度，前端表现为"无法加载人物模型"白屏。
-  skip: (req) => req.originalUrl.startsWith('/api/models/file/'),
+  // 回调由微信服务器推送、查单是前端几秒一次的轮询，都不该被总闸掐掉（429 会让微信
+  // 按失败重推）；这两条在 payment 路由内有各自的限流或本就靠验签把关。
+  skip: (req) =>
+    req.originalUrl.startsWith('/api/models/file/') ||
+    req.originalUrl.startsWith('/api/payment/notify') ||
+    req.originalUrl.startsWith('/api/payment/order/'),
   message: {
     success: false,
     error: { code: 'TOO_MANY_REQUESTS', message: '请求过于频繁,请 15 分钟后再试' },
@@ -149,23 +163,6 @@ app.get('/api/health', (req, res) => {
     success: true,
     data: { status: '正常', service: 'Style AI 形象定制后端' },
   })
-})
-
-// ===== 优雅关闭端点(仅本机访问,用于脚本化关闭)=====
-// 用法:curl -X POST http://127.0.0.1:5000/api/shutdown
-// 安全保障:仅允许 127.0.0.1 调用,避免远程触发
-app.post('/api/shutdown', (req, res) => {
-  const clientIp = req.ip || req.socket.remoteAddress || ''
-  // 仅允许本机调用(IPv4 / IPv6 本机回环)
-  if (!clientIp.includes('127.0.0.1') && !clientIp.includes('::1')) {
-    return res.status(403).json({
-      success: false,
-      error: { code: 'FORBIDDEN', message: '仅允许本机调用' },
-    })
-  }
-  res.json({ success: true, data: { message: '服务将在 200ms 后优雅关闭' } })
-  logMsg('[关闭] 收到 /api/shutdown 请求,200ms 后触发优雅关闭')
-  setTimeout(() => gracefulShutdown('HTTP_SHUTDOWN'), 200)
 })
 
 // ===== 静态文件服务(管理后台 CSS/JS)=====

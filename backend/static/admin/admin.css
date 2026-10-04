@@ -480,14 +480,6 @@ pre.code::-webkit-scrollbar-thumb { background: var(--line); border-radius: 4px;
   margin-bottom: 4px;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-.model-params-summary {
-  display: flex; gap: 10px; flex-wrap: wrap;
-  font-size: 10px; color: var(--muted);
-  font-family: "SF Mono", Consolas, monospace;
-}
-.model-params-summary span {
-  white-space: nowrap;
-}
 
 .model-card-right {
   flex: 0 0 auto;

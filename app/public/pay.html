@@ -35,13 +35,14 @@
     .msg.err { color: #ff9ba1; }
     .msg.ok { color: #7ddba3; }
     .note { font-size: 12px; color: #6f7789; line-height: 1.7; }
+    .alt { font-size: 12px; color: #8ab4f8; margin-top: 8px; cursor: pointer; }
     a { color: #8ab4f8; }
   </style>
 </head>
 <body>
 <div class="wrap">
   <h1>付款与凭证提交</h1>
-  <p class="sub">扫码付款后把付款截图传上来，我们看到截图后人工确认并放行服务。</p>
+  <p class="sub">点「一键付款」在线支付，付完本页会自动确认到账并放行服务。备用收款码默认收起，需要扫码转账时点「显示备用收款码」，再上传付款截图由我们人工确认。</p>
 
   <div class="card">
     <div class="price" id="price">—<small id="price-title"></small></div>
@@ -49,8 +50,19 @@
       <div class="tab on" data-ch="wechat">微信支付</div>
       <div class="tab" data-ch="alipay">支付宝</div>
     </div>
-    <div class="qr on" id="qr-wechat"><img alt="微信收款码" src="/wechat-qr.png"><p>长按识别或截图后在微信里扫码</p></div>
-    <div class="qr" id="qr-alipay"><img alt="支付宝收款码" src="/alipay-qr.png"><p>长按识别或截图后在支付宝里扫码</p></div>
+    <div class="qr on" id="qr-wechat">
+      <button class="act" id="wechat-pay" style="display:none">微信扫码付款</button>
+      <div class="msg" id="wechat-msg"></div>
+      <div id="wechat-qr"></div>
+      <div id="wechat-fallback"><img alt="微信收款码" src="/wechat-qr.png"><p>扫这个码付款，付完需在下面上传付款截图，我们人工核对后放行服务</p></div>
+      <p class="alt" id="wechat-alt" style="display:none">显示备用收款码</p>
+    </div>
+    <div class="qr" id="qr-alipay">
+      <button class="act" id="alipay-pay" style="display:none">支付宝一键付款</button>
+      <div class="msg" id="alipay-msg"></div>
+      <div id="alipay-fallback"><img alt="支付宝收款码" src="/alipay-qr.png"><p>扫这个码付款，付完需在下面上传付款截图，我们人工核对后放行服务</p></div>
+      <p class="alt" id="alipay-alt" style="display:none">显示备用收款码</p>
+    </div>
   </div>
 
   <div class="card">
@@ -67,10 +79,11 @@
     <div class="row"><span>备注</span><span id="my-note">—</span></div>
   </div>
 
-  <p class="note">本页只登记付款凭证，不直接扣款；实际收款走商户号通道后会换成一键支付。</p>
+  <p class="note">两枚按钮都走商户号，付完本页自动确认到账。如果点了按钮没出现付款页，说明这一路收款还没开通——点上面的「显示备用收款码」扫码转账，再用下面的「提交凭证」由我们人工确认。</p>
   <p class="note"><a href="/">返回展厅</a></p>
 </div>
 
+<script src="/qrcode.js"></script>
 <script>
 /* 游客身份单独存一份，不和展厅 SPA 共用 key：
    SPA 那边写进 localStorage 的 id 是浏览器自己拼的，服务端没有登记，
@@ -123,17 +136,142 @@ function showMine(row) {
   var map = { pending: ['待确认', 'b-pending'], approved: ['已确认', 'b-approved'], rejected: ['未通过', 'b-rejected'] };
   var st = map[row.status] || [row.status, 'b-pending'];
   document.getElementById('my-status').innerHTML = '<span class="badge ' + st[1] + '">' + esc(st[0]) + '</span>';
-  document.getElementById('my-amount').textContent = '¥' + row.amount;
+  document.getElementById('my-amount').textContent = '¥' + Number(row.amount).toFixed(2);
   document.getElementById('my-time').textContent = row.created_at || '—';
   document.getElementById('my-note').textContent = row.admin_note || '—';
 }
 
+/* 在线付款：后端把密钥配齐才通电（cfg.alipay_web / cfg.wechat_native）。
+   没通电时这两枚按钮一直 display:none，本页行为跟接商户号之前一字不差。 */
+var CHANNELS = {
+  alipay: { orderEp: '/api/payment/alipay/order', urlKey: 'pay_url', again: '重新打开支付宝付款页' },
+  wechat: { orderEp: '/api/payment/order', urlKey: 'code_url', again: '重新显示微信收款码' },
+};
+var orders = { alipay: { no: '', url: '', timer: null, tries: 0 }, wechat: { no: '', url: '', timer: null, tries: 0 } };
+
+function setOnlineMsg(ch, html, cls) {
+  var el = document.getElementById(ch + '-msg');
+  el.innerHTML = html;
+  el.className = 'msg' + (cls ? ' ' + cls : '');
+}
+
+function stopPoll(ch) {
+  var o = orders[ch];
+  if (o.timer) {
+    clearInterval(o.timer);
+    o.timer = null;
+  }
+}
+
+/* 支付宝跳收银台，微信在本页出码；重复点按钮都回到同一笔订单，不再建第二单 */
+function showPayPage(ch) {
+  var o = orders[ch];
+  if (ch === 'wechat') {
+    drawWxQr(o.url);
+    setOnlineMsg(ch, '用微信「扫一扫」扫上面的码付款，付完这页会自动确认到账。');
+    return;
+  }
+  var win = window.open(o.url, '_blank');
+  setOnlineMsg(
+    ch,
+    win
+      ? '已在新窗口打开支付宝收银台，付完这页会自动确认到账。'
+      : '浏览器拦住了新窗口，请手动点：<a href="' + esc(o.url) + '" target="_blank" rel="noopener">打开支付宝付款</a>',
+  );
+}
+
+/* 查单接口内部会再向渠道兜底问一次，所以回调万一丢了也不影响这里确认到账 */
+function pollOrder(ch) {
+  var o = orders[ch];
+  if (o.timer) return;
+  o.timer = setInterval(async function () {
+    if (!o.no) return;
+    if (++o.tries > 60) {
+      stopPoll(ch);
+      setOnlineMsg(ch, '还没查到到账。确实付成功的话，稍后刷新本页即可；也可以先用下面的「提交凭证」。');
+      return;
+    }
+    try {
+      var d = await api('/api/payment/order/' + encodeURIComponent(o.no));
+      if (d.success && d.data.status === 'paid') {
+        stopPoll(ch);
+        setOnlineMsg(ch, '已到账 ¥' + esc(Number(d.data.amount).toFixed(2)) + '，服务已放行。', 'ok');
+        await loadMine();
+      }
+    } catch (e) {
+      /* 查单偶发失败就下一轮再试，别把按钮和提示打断 */
+    }
+  }, 3000);
+}
+
+/* code_url 是纯 ASCII（weixin://wxpay/bizpayurl?pr=xxx），用 vendor 进来的 qrcode-generator 现场画 */
+function drawWxQr(codeUrl) {
+  var qr = qrcode(0, 'M');
+  qr.addData(codeUrl);
+  qr.make();
+  // 只传 cellSize：第二参是像素边距，缺省 cellSize*4 才够二维码标准要求的 4 模块静区
+  document.getElementById('wechat-qr').innerHTML =
+    '<img alt="微信支付二维码" src="' + qr.createDataURL(8) + '"><p>这是商户号收款码，扫一扫即可付款</p>';
+  document.getElementById('wechat-fallback').style.display = 'none';
+}
+
+function bindPayButton(ch) {
+  document.getElementById(ch + '-pay').addEventListener('click', async function () {
+    var btn = this;
+    var o = orders[ch];
+    if (o.url) {
+      showPayPage(ch);
+      return;
+    }
+    btn.disabled = true;
+    setOnlineMsg(ch, '正在创建订单…');
+    try {
+      var d = await api(CHANNELS[ch].orderEp, { method: 'POST' });
+      if (!d.success) throw new Error((d.error && d.error.message) || '下单失败');
+      o.no = d.data.out_trade_no;
+      o.url = d.data[CHANNELS[ch].urlKey];
+      btn.textContent = CHANNELS[ch].again;
+      showPayPage(ch);
+      pollOrder(ch);
+    } catch (e) {
+      setOnlineMsg(ch, esc(e.message || '下单失败'), 'err');
+    } finally {
+      btn.disabled = false;
+    }
+  });
+}
+
+function revealPay(ch, label, amount) {
+  var btn = document.getElementById(ch + '-pay');
+  btn.textContent = label + ' ¥' + Number(amount).toFixed(2);
+  btn.style.display = 'block';
+  // 在线路通电了就把个人收款码收起，免得同屏两张码让人不知道该扫哪个
+  document.getElementById(ch + '-fallback').style.display = 'none';
+  document.getElementById(ch + '-alt').style.display = 'block';
+}
+
+['wechat', 'alipay'].forEach(function (ch) {
+  document.getElementById(ch + '-alt').addEventListener('click', function () {
+    document.getElementById(ch + '-fallback').style.display = 'block';
+    this.style.display = 'none';
+  });
+});
+
+bindPayButton('alipay');
+bindPayButton('wechat');
+
+function activateTab(ch) {
+  document.querySelectorAll('.tab').forEach(function (t) {
+    t.classList.toggle('on', t.dataset.ch === ch);
+  });
+  document.querySelectorAll('.qr').forEach(function (q) {
+    q.classList.toggle('on', q.id === 'qr-' + ch);
+  });
+}
+
 document.querySelectorAll('.tab').forEach(function (tab) {
   tab.addEventListener('click', function () {
-    document.querySelectorAll('.tab').forEach(function (t) { t.classList.remove('on'); });
-    document.querySelectorAll('.qr').forEach(function (q) { q.classList.remove('on'); });
-    tab.classList.add('on');
-    document.getElementById('qr-' + tab.dataset.ch).classList.add('on');
+    activateTab(tab.dataset.ch);
   });
 });
 
@@ -170,8 +308,13 @@ async function loadMine() {
   try {
     var cfg = await (await fetch('/api/payment/qrcodes')).json();
     if (cfg.success) {
-      document.getElementById('price').firstChild.nodeValue = '¥' + cfg.data.amount;
+      document.getElementById('price').firstChild.nodeValue = '¥' + Number(cfg.data.amount).toFixed(2);
       document.getElementById('price-title').textContent = cfg.data.title;
+      if (cfg.data.alipay_web) revealPay('alipay', '支付宝一键付款', cfg.data.amount);
+      if (cfg.data.wechat_native) revealPay('wechat', '微信扫码付款', cfg.data.amount);
+      // 默认停在真正能付的那一档，别让访客一进来就落在没开通的渠道上
+      var live = cfg.data.wechat_native ? 'wechat' : cfg.data.alipay_web ? 'alipay' : '';
+      if (live) activateTab(live);
     }
     await loadMine();
   } catch (e) {

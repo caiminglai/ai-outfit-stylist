@@ -62,7 +62,7 @@
 │   │   ├── wardrobe.js / cosmetic.js / accessory.js  # 个人三柜
 │   │   ├── crossCabinet.js           # 跨柜联动(场合/季节/品牌/健康)
 │   │   ├── creator.js                # 创作者投稿(搭配/化妆/规则三类,表 creator_works)
-│   │   ├── payment.js                # 收款码展示 + 保证金凭证上传 + 管理员审核(静态码方案,非微信支付)
+│   │   ├── payment.js                # 收款码展示 + 付款凭证上传 + 管理员审核 + 商户号在线收款(微信 Native / 支付宝电脑网站)
 │   │   ├── models.js                 # 3D 模型列表/文件服务(读 model_configs 表;后台「扫描模型」才入库)
 │   │   ├── photos.js / analysis.js / tryon.js        # 上传/面容/试穿
 │   │   ├── clothing.js / weather.js / horoscope.js   # 服装识别/天气/星座
@@ -242,13 +242,13 @@ cd ../backend; node --require ../npm-patch.js server.js
 | 天气 | `/api/weather` | 天气查询 | 公开 |
 | 星座 | `/api/horoscope` | 星座运势(本地模板文案) | 公开 |
 | 历史 | `/api/history` | 推荐历史 | 需 `X-Session-Id` |
-| 支付 | `/api/payment` | 收款码列表 + 保证金凭证上传 + 我的记录 + 管理员审核 | 码表公开;提交与查询需登录态;审核需管理员 Token |
+| 支付 | `/api/payment` | 收款码列表 + 付款凭证上传 + 我的记录 + 管理员审核;在线收款:`POST /order`(微信 Native 出码)、`POST /alipay/order`(支付宝电脑网站支付,返回 pay_url)、`GET /order/:outTradeNo`(查单,按单号前缀 `S3`/`A3` 分渠道)、`POST /notify`(微信回调)、`POST /notify/alipay`(支付宝回调);收款金额:`GET /admin/price` 读、`PUT /admin/price` 改(微信与支付宝共用这一个数) | 码表公开;下单与查单需 `X-Session-Id`;两个回调免登录但逐条验签+核对金额,只在配置齐全的商户号下通电;配置不全时下单回 503,前端自动回落到"静态码 + 上传凭证";审核与改价需管理员 Token。对外标价取自 `app_settings`,后台没改过时回落到 `routes/payment.js` 里的 `PRICE.amount`;每笔订单在下单那一刻把 `amount_fen` 写死在自己那行,改价不影响正在付的单子 |
 | 创作者 | `/api/creator` | 作品列表/详情/提交 + 封面上传 + 我的作品 + 管理员审核与加精 | 读公开;提交需登录态;审核需管理员 Token |
-| 管理后台 | `/admin` | 后台页面 + 数据库浏览(顾客会话/推荐日志可按门店筛,归属门店列显示店名) | 管理员 Token |
+| 管理后台 | `/admin` | 后台页面 + 数据库浏览(顾客会话/推荐日志可按门店筛,归属门店列显示店名) + 源码查看(`GET /admin/api/source/<相对路径>`,注:admin 路由整段挂在 `/admin` 下,`routes/admin.js` 里写的 `/api/source` 实际 URL 带 `/admin` 前缀)。敏感清单命中直接 403:目录 `node_modules`/`.git`/`uploads`,后缀 `.db`/`.sqlite`/`.env`/`.pem`/`.key`/`.p12`/`.pfx`(2026-10-02 补的后四个——容器里 `backendRoot=/app`,商户私钥就挂在 `/app/certs*` 之下,少一条等于后台能把签约私钥整份读走) | 管理员 Token |
 
-身份有三类:游客走 `X-Session-Id` 请求头(前端 `api.ts` 自动带,本地生成、2 小时换一次;门店模式下顾客建档时由 `/api/customer` 下发,TTL 到期即失效);正式账号走 `POST /api/auth/register` / `POST /api/auth/login`(手机号 + bcrypt 密码),注册即分配一条固定的服务端 `session_id`,前端存进 `localStorage.style_ai_account` 并**覆盖**游客那条的 2 小时轮换,所以登录后衣橱/历史/作品都跟着手机号走,换浏览器只要重新登录就能找回;账号与身份的对应关系记在 `user_accounts` 表(不往 `users` 老表加列);管理员走 `Authorization: Bearer <token>`(HMAC-SHA256 签名,24 小时有效),对应中间件 `loginRequired` 与 `adminLoginRequired`,均在 `middleware/auth.js`.
+身份有三类:游客走 `X-Session-Id` 请求头(前端 `api.ts` 自动带,本地生成、2 小时换一次;门店模式下顾客建档时由 `/api/customer` 下发,TTL 到期即失效);正式账号走 `POST /api/auth/register` / `POST /api/auth/login`(手机号 + bcrypt 密码),注册即分配一条固定的服务端 `session_id`,前端存进 `localStorage.style_ai_account` 并**覆盖**游客那条的 2 小时轮换,所以登录后衣橱/历史/作品都跟着手机号走,换浏览器只要重新登录就能找回;账号与身份的对应关系记在 `user_accounts` 表(不往 `users` 老表加列);管理员走 `Authorization: Bearer <token>`(HMAC-SHA256 签名,24 小时有效;2026-10-02 起签名通过后还要**回库确认账号仍在且 `is_active=1`**——签名只证明"持密钥方签过",不证明这个账号还在,删号或禁用后旧 token 当场失效,不再干等 24 小时自然过期;同日补齐另一半:`admin_users` 多一列 `password_changed_at`(epoch 秒),`initAdminUser` 发现 `ADMIN_PASSWORD` 与库里哈希不同时,同一条 UPDATE 顺手把这一列盖成当前秒数,`verifyAdminToken` 再拒掉签发时间早于这个戳的 token ⇒ 改了密码旧 token 一律作废。戳是秒粒度,**同一秒内签发的 token 逃得过这一刀**(实测 `ts=戳-1` 拒、`ts=戳` 放);老库靠 `db/init.js` 的 `MISSING_COLUMNS` 启动时自动补列,值为 NULL 表示从没改过密码,不会把已登录的后台踢下线),对应中间件 `loginRequired` 与 `adminLoginRequired`,均在 `middleware/auth.js`;`GET /api/auth/admin/verify` 走同一个函数,不会出现"页面校验过了、接口还放行"的分叉.
 
-注册/登录那一刻,游客身份名下攒的数据会**自动过户**到账号身份(三柜与心愿单/搭配、体型与面容档案、结论标签、规则反馈、推荐样本与记录、照片、试穿结果、保证金凭证、投稿作品一并跟着走;带唯一约束的表若账号那边已有同名项,以账号已有的为准并丢弃游客那条,`merged.dropped` 会回报丢了几条);**已经绑定过手机号的身份不会被并进来**,所以登录第二个账号不会把第一个账号的数据抽走。忘记密码走后台:管理员在「会员账号」一节按手机号代重置新密码,档案/衣橱/作品都不受影响(短信与邮箱自助找回未做,那需要外部通道)。门店模式靠链接上的 `?store=店名` 区分是哪家店(前端记进 `localStorage.style_ai_store`,建档时随请求带上),店名第一次出现就当场登记进 `stores` 表 ⇒ 店数不预设也不封顶,一家店一份数据。
+注册/登录那一刻,游客身份名下攒的数据会**自动过户**到账号身份(三柜与心愿单/搭配、体型与面容档案、结论标签、规则反馈、推荐样本与记录、照片、试穿结果、付款凭证、投稿作品一并跟着走;带唯一约束的表若账号那边已有同名项,以账号已有的为准并丢弃游客那条,`merged.dropped` 会回报丢了几条);**已经绑定过手机号的身份不会被并进来**,所以登录第二个账号不会把第一个账号的数据抽走。忘记密码走后台:管理员在「会员账号」一节按手机号代重置新密码,档案/衣橱/作品都不受影响(短信与邮箱自助找回未做,那需要外部通道)。门店模式靠链接上的 `?store=店名` 区分是哪家店(前端记进 `localStorage.style_ai_store`,建档时随请求带上),店名第一次出现就当场登记进 `stores` 表 ⇒ 店数不预设也不封顶,一家店一份数据。
 
 响应统一格式:`{ success: boolean, data?: any, error?: { code, message } }`
 
@@ -258,7 +258,7 @@ cd ../backend; node --require ../npm-patch.js server.js
 
 | 表名 | 说明 |
 |------|------|
-| users / admin_users | 用户 / 管理员 |
+| users / admin_users | 用户 / 管理员(`admin_users.password_changed_at` = 改密码时刻的 epoch 秒,是"改密码即吊销旧管理员 Token"的锚点,NULL 表示从没改过;老库由 `db/init.js` 的 `MISSING_COLUMNS` 启动时自动补列) |
 | user_accounts | 正式账号(手机号 + bcrypt 密码)与身份的对应关系 |
 | stores | 门店表(`name` UNIQUE,店名第一次出现时自动登记);`customer_sessions` 与 `recommendation_logs` 各带一个 `store_id` 指向它,同一套系统给任意多家店用时数据按店分开 |
 | photos / face_features / body_metrics | 照片 / 人脸特征 / 体型指标(试穿上传的人物图与服装图也会各登记一条 `photos`,`type='tryon'`) |
@@ -275,7 +275,8 @@ cd ../backend; node --require ../npm-patch.js server.js
 | wardrobe_outfits / shopping_wishlist | 搭配组合 / 心愿单 |
 | model_configs | 3D 模型启用配置 |
 | creator_works | 创作者投稿(搭配/化妆/推荐规则三类,带审核与加精状态) |
-| deposits | 保证金凭证与审核状态 |
+| deposits | 付款凭证与审核状态（表名沿用 deposits，钱不退） |
+| app_settings | 后台可改的键值设置(当前只有 `payment_amount_fen` 收款金额,单位分) |
 
 ---
 

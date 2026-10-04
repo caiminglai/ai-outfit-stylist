@@ -36,6 +36,24 @@ export interface CustomerProfile {
   hip?: number
   /** 腿长(cm,选填):档案表列名 leg_length_cm */
   leg_length?: number
+  /** 出生日期(选填,YYYY-MM-DD):八字五行的输入;空串=主动撤销这条依据(undefined 序列化后会整个消失,带不了这个信号) */
+  birth_date?: string
+  /** 出生时辰(选填):档位取中点、不做真太阳时校正;选"不清楚"降级为三柱;空串=主动撤销 */
+  birth_hour?:
+    | '子时'
+    | '丑时'
+    | '寅时'
+    | '卯时'
+    | '辰时'
+    | '巳时'
+    | '午时'
+    | '未时'
+    | '申时'
+    | '酉时'
+    | '戌时'
+    | '亥时'
+    | '不清楚'
+    | ''
 
   // 门店模式字段
   skin_tone?: '暖皮' | '冷皮' | '自然'
@@ -169,13 +187,60 @@ export interface EngineRecommendation {
   }
   // 个人模式扩展
   algorithm_analysis?: AlgorithmAnalysis
+  /** 后端算出的派生字段(档案里没有的值);命理两块从这里取 */
+  _computed?: {
+    bazi?: BaziAnalysis
+    bazi_today?: BaziDay
+    favorable_element?: string
+    unfavorable_element?: string
+    [key: string]: unknown
+  }
   wardrobe_gaps?: WardrobeGapResult
   wishlist?: ShoppingWishlistItem[]
 }
 
+/** 八字五行分析(排盘来自 vendor/lunar,喜用神由本仓库算法推算) */
+export interface BaziAnalysis {
+  birthDate: string
+  birthHour: string
+  /** 四柱(填了时辰) / 三柱(时辰不清楚) */
+  precision: '四柱' | '三柱'
+  pillars: string[]
+  day_master: string
+  day_master_element: string
+  strength: '身强' | '身弱' | '中和'
+  strength_ratio: number
+  /** 冬月取火、夏月取水;为 null 表示本月不调候 */
+  seasonal: string | null
+  seasonal_applied: boolean
+  scores: Record<string, number>
+  missing: string[]
+  strongest: string
+  favorable: string[]
+  unfavorable: string
+  favorable_element: string
+  unfavorable_element: string
+  favorable_direction: string
+  favorable_colors: string
+  summary: string
+}
+
+/** 当日流日与个人喜用的关系 */
+export interface BaziDay {
+  date: string
+  ganzhi: string
+  element: string
+  branch: string
+  term: string
+  tone: '顺' | '平' | '忌'
+  note: string
+  reason?: string
+  colors?: string
+}
+
 /** 算法分析结果 */
 export interface AlgorithmAnalysis {
-  /** 分析板块:体型/脸型/肤色/体态,每个板块是一句话建议列表 */
+  /** 分析板块:体型/脸型/肤色/体态/八字五行/今日参考,每个板块是一句话建议列表 */
   sections: { title: string; advices: string[] }[]
   /** 数字摘要,如 "BMI 21.5(正常)"、"体型 沙漏型" */
   metrics: string[]

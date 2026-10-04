@@ -1,0 +1,16 @@
+vendored 第三方库：lunar（公历/农历/干支/八字排盘）
+  来源  : npm 包 lunar-javascript
+  版本  : 1.7.7
+  仓库  : https://github.com/6tail/lunar-javascript
+  许可  : MIT（同目录 LICENSE 原文随包保留，请勿删）
+  体积  : lunar.js 435,942 字节，零依赖
+
+为什么是拷进来而不是 npm install：
+  后端镜像 build 走 npm ci，多一个依赖就多一次 registry 拉包（服务器 2G 内存、build 必须串行）。
+  这个库是单文件 UMD、零依赖、纯计算，拷进来 require 即用，锁文件一字不动。
+
+我们只用到它的排盘部分（Solar/Lunar/EightChar：节气定月柱、立春定年柱、日柱、藏干、大运）。
+喜用神/忌神与五行力量判定它没有（源码里"用神""旺衰""身强"等关键词命中 0 次），由 services/baziWuxing.js 自写。
+
+升级方式：npm pack lunar-javascript@<新版> 解包，用新的 lunar.js 覆盖本目录同名文件，
+再跑 backend/test/baziWuxing.test.js（含与独立儒略日公式交叉对日柱的用例）。

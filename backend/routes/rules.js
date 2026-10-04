@@ -36,6 +36,31 @@ function splitList(value) {
 }
 
 /**
+ * 规则来源体系：种子文件给每条规则带了 source_key（wuxing_mu_outfit / kibbe-gamine-outfit），
+ * 后台手工新建的没有。分隔符两种混用，取首个 _ 或 - 之前的那一段。
+ */
+const TAG_EXPR = `CASE WHEN source_key IS NULL OR source_key = '' THEN '' ELSE substr(source_key, 1, CASE
+    WHEN instr(source_key, '_') > 0 AND instr(source_key, '-') > 0 THEN MIN(instr(source_key, '_'), instr(source_key, '-')) - 1
+    WHEN instr(source_key, '_') > 0 THEN instr(source_key, '_') - 1
+    WHEN instr(source_key, '-') > 0 THEN instr(source_key, '-') - 1
+    ELSE length(source_key)
+  END) END`
+
+/** 「后台自建」这一档在查询串里的取值（空串要被当成"未选"，不能当选项值） */
+const TAG_NONE = 'none'
+
+const TAG_LABELS = {
+  wuxing: '八字五行',
+  color12: '十二季型色彩',
+  color: '四季色彩',
+  kibbe: 'Kibbe 风格型',
+  proportion: '身材比例',
+  dresscode: '场合着装',
+  metal: '金属色适配',
+  [TAG_NONE]: '后台自建',
+}
+
+/**
  * 校验并归一化一条条件
  * @returns {{ok: true, row: object} | {ok: false, error: string}}
  */
@@ -155,6 +180,28 @@ router.get('/schema', adminLoginRequired, (req, res) => {
       .all()
       .map((r) => r.scenario)
 
+    // 来源体系：只报现库真有的，条数为 0 的不进下拉；「后台自建」固定排最后
+    const tagRows = db
+      .prepare(`SELECT ${TAG_EXPR} AS value, COUNT(*) AS count FROM rule_groups GROUP BY value`)
+      .all()
+    const tags = tagRows
+      .filter((t) => t.value !== '')
+      .sort((a, b) => b.count - a.count)
+      .concat(tagRows.filter((t) => t.value === ''))
+      .map((t) => ({
+        value: t.value === '' ? TAG_NONE : t.value,
+        label: TAG_LABELS[t.value === '' ? TAG_NONE : t.value] || t.value,
+        count: t.count,
+      }))
+
+    // 部位/结论类型：动作表里在用的 action_type，中文名直接取可解释性那张标签表
+    const parts = db
+      .prepare(
+        'SELECT action_type AS value, COUNT(*) AS count FROM rule_actions GROUP BY value ORDER BY count DESC',
+      )
+      .all()
+      .map((p) => ({ value: p.value, label: ACTION_LABELS[p.value] || p.value, count: p.count }))
+
     return sendSuccess(res, {
       fields: CONDITION_FIELDS.map((f) => ({ value: f, label: FIELD_LABELS[f] })),
       operators: CONDITION_OPERATORS.map((o) => ({
@@ -164,6 +211,8 @@ router.get('/schema', adminLoginRequired, (req, res) => {
       actionTypes: Object.entries(ACTION_LABELS).map(([value, label]) => ({ value, label })),
       categories,
       scenarios,
+      tags,
+      parts,
     })
   } catch (err) {
     return sendError(res, '获取失败', 500)
@@ -173,8 +222,8 @@ router.get('/schema', adminLoginRequired, (req, res) => {
 /** 获取规则组列表(管理员) */
 router.get('/groups', adminLoginRequired, (req, res) => {
   try {
-    const { mode, category, enabled, hit } = req.query
-    let sql = 'SELECT * FROM rule_groups WHERE 1=1'
+    const { mode, category, enabled, hit, gender, scenario, tag, part } = req.query
+    let sql = `SELECT *, ${TAG_EXPR} AS tag FROM rule_groups WHERE 1=1`
     const params = []
 
     if (mode) {
@@ -184,6 +233,25 @@ router.get('/groups', adminLoginRequired, (req, res) => {
     if (category) {
       sql += ' AND category = ?'
       params.push(category)
+    }
+    if (gender) {
+      sql += ' AND gender = ?'
+      params.push(gender)
+    }
+    if (scenario) {
+      sql += ' AND scenario = ?'
+      params.push(scenario)
+    }
+    if (tag === TAG_NONE) {
+      sql += " AND (source_key IS NULL OR source_key = '')"
+    } else if (tag) {
+      sql += ` AND ${TAG_EXPR} = ?`
+      params.push(tag)
+    }
+    if (part) {
+      sql +=
+        ' AND EXISTS (SELECT 1 FROM rule_actions ra WHERE ra.group_id = rule_groups.id AND ra.action_type = ?)'
+      params.push(part)
     }
     if (enabled !== undefined) {
       sql += ' AND enabled = ?'

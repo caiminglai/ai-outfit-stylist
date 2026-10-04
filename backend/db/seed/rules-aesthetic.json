@@ -583,13 +583,13 @@
       "scenario": "面试",
       "priority": 20,
       "enabled": 1,
-      "description": "着装场合规范(dress code):面试的评分项是可靠感,不是个性。",
+      "description": "着装场合规范:面试的评分项是可靠感,不是个性。",
       "conditions": [{ "field": "scenario", "operator": "eq", "value": "面试", "weight": 3 }],
       "actions": [
         { "type": "top_style", "content": "女:素色衬衫或针织衫;男:浅色衬衫或polo" },
         { "type": "bottom_style", "content": "女:及膝直筒裙或西裤;男:深色西裤" },
         { "type": "shoe_style", "content": "包脚、干净、无磨损" },
-        { "type": "avoid", "content": "高饱和色、大面积logo、短裤凉拖、浓香水" },
+        { "type": "avoid", "content": "高饱和色、大面积标识、短裤凉拖、浓香水" },
         { "type": "reason", "content": "中性色加合身剪裁最不容易出错,把风格留到入职以后" }
       ]
     },

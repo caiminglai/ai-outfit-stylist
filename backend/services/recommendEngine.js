@@ -463,6 +463,11 @@ function buildRecommendation(profile, mode = 'store', incrementHitCount = true) 
   if (enriched.kibbe_type) {
     result._computed.kibbe_type = enriched.kibbe_type
   }
+  // 八字五行(第二条判定依据);没填出生日期时整块缺席
+  if (enriched.bazi) {
+    result._computed.bazi = enriched.bazi
+    result._computed.bazi_today = enriched.bazi_today
+  }
 
   // 3. 填充 algorithm_analysis(个人模式的深度分析报告)
   if (mode === 'personal') {
@@ -470,6 +475,8 @@ function buildRecommendation(profile, mode = 'store', incrementHitCount = true) 
     const metrics = []
 
     // 数字摘要:身高+体重才有 BMI,三围才有体型/腰臀比
+    if (Number.isInteger(enriched.age))
+      metrics.push(`年龄 ${enriched.age}${enriched.age_range ? `(${enriched.age_range})` : ''}`)
     if (enriched.bmi) metrics.push(`BMI ${enriched.bmi}(${enriched.bmi_level})`)
     if (enriched.body_shape) metrics.push(`体型 ${enriched.body_shape}`)
     if (enriched.wh_ratio) metrics.push(`腰臀比 ${enriched.wh_ratio}`)
@@ -478,6 +485,10 @@ function buildRecommendation(profile, mode = 'store', incrementHitCount = true) 
     if (enriched.color_season) metrics.push(`色彩 ${enriched.color_season}`)
     if (enriched.color_season_12) metrics.push(`十二型 ${enriched.color_season_12}`)
     if (enriched.kibbe_type) metrics.push(`风格型 ${enriched.kibbe_type}`)
+    if (enriched.bazi)
+      metrics.push(
+        `日主${enriched.bazi.day_master_element}·喜用${enriched.bazi.favorable.join('')}`,
+      )
 
     // 体型分析
     if (enriched.body_shape_key) {
@@ -534,6 +545,40 @@ function buildRecommendation(profile, mode = 'store', incrementHitCount = true) 
       sections.push({
         title: '体态建议',
         advices: [enriched.posture_advice],
+      })
+    }
+
+    // 八字五行(第二条判定依据;没填出生日期时整块缺席)
+    if (enriched.bazi) {
+      const b = enriched.bazi
+      let missingLine = ''
+      if (b.missing.length) {
+        const gap = b.missing.filter((e) => b.favorable.includes(e))
+        missingLine =
+          `命局所缺:${b.missing.join('、')}` +
+          (gap.length
+            ? `（其中${gap.join('、')}正是你的喜用，宜补）`
+            : '（缺的不一定是喜用，补的是喜用）')
+      }
+      sections.push({
+        title: `八字五行:日主${b.day_master}${b.day_master_element}(${b.strength})`,
+        advices: [
+          `四柱 ${b.pillars.join(' ')}（${b.precision}${b.precision === '三柱' ? '，未填时辰' : ''}）`,
+          b.summary,
+          `宜用颜色:${b.favorable_colors}`,
+          `宜用方位:${b.favorable_direction}`,
+          // 两条依据会打架(喜用色与肤色适配色不一定同),这里给出取舍口径
+          '两条依据冲突时:大面积的外衣跟肤色与体型走,喜用色放在内搭、配饰、唇色、鞋袜这些小块面积上',
+          missingLine,
+        ].filter(Boolean),
+      })
+    }
+
+    // 今日参考(日期依据:当日干支与个人喜用的生克)
+    if (enriched.bazi_today) {
+      sections.push({
+        title: `今日参考:${enriched.bazi_today.ganzhi}日(${enriched.bazi_today.tone})`,
+        advices: [enriched.bazi_today.note],
       })
     }
 

@@ -218,11 +218,30 @@ const SKIN_TYPE_OPTIONS = [
   { value: '敏感', label: '敏感' },
 ] as const
 
+/** 时辰档位:value 必须与后端 SHICHEN 键一致,区间只写在 label 上 */
+const BIRTH_HOUR_OPTIONS = [
+  { value: '子时', label: '子时 23-1' },
+  { value: '丑时', label: '丑时 1-3' },
+  { value: '寅时', label: '寅时 3-5' },
+  { value: '卯时', label: '卯时 5-7' },
+  { value: '辰时', label: '辰时 7-9' },
+  { value: '巳时', label: '巳时 9-11' },
+  { value: '午时', label: '午时 11-13' },
+  { value: '未时', label: '未时 13-15' },
+  { value: '申时', label: '申时 15-17' },
+  { value: '酉时', label: '酉时 17-19' },
+  { value: '戌时', label: '戌时 19-21' },
+  { value: '亥时', label: '亥时 21-23' },
+  { value: '不清楚', label: '不清楚' },
+] as const
+
 /* ── Props ── */
 
 interface PersonalProfileFormProps {
   initial?: Partial<CustomerProfile>
   onSubmit: (profile: CustomerProfile) => void
+  /** 每改一项就回调整份当前值,上层拿它防抖存草稿 */
+  onChange?: (profile: CustomerProfile) => void
   submitting?: boolean
   compact?: boolean
 }
@@ -232,6 +251,7 @@ interface PersonalProfileFormProps {
 export default function PersonalProfileForm({
   initial,
   onSubmit,
+  onChange,
   submitting,
   compact,
 }: PersonalProfileFormProps) {
@@ -273,10 +293,13 @@ export default function PersonalProfileForm({
     budget: initial?.budget,
     skin_type: initial?.skin_type,
     allergy_metal: initial?.allergy_metal,
+    birth_date: initial?.birth_date,
+    birth_hour: initial?.birth_hour,
   })
 
   const update = (key: keyof CustomerProfile, value: unknown) => {
     setProfile((prev) => ({ ...prev, [key]: value }))
+    onChange?.({ ...profile, [key]: value })
   }
 
   const handleSubmit = () => {
@@ -382,10 +405,60 @@ export default function PersonalProfileForm({
           ))}
         </div>
 
-        <div className="text-xs mb-2" style={{ color: 'var(--muted)' }}>
-          年龄段
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-xs" style={{ color: 'var(--muted)' }}>
+            出生日期（选填）
+          </span>
+          {profile.birth_date && (
+            <button
+              onClick={() => {
+                const next: CustomerProfile = { ...profile, birth_date: '', birth_hour: '' }
+                setProfile(next)
+                onChange?.(next)
+              }}
+              className="text-xs"
+              style={{ color: 'var(--danger)' }}
+            >
+              填错了？清除
+            </button>
+          )}
         </div>
-        {renderOptBtns(AGE_RANGE_OPTIONS, 'age_range', 'grid-cols-4')}
+        <div className="flex gap-3">
+          <input
+            type="date"
+            className="form-input flex-1"
+            value={profile.birth_date ?? ''}
+            onChange={(e) => update('birth_date', e.target.value || '')}
+          />
+          <select
+            className="form-select flex-1"
+            style={{ paddingRight: '26px' }}
+            value={profile.birth_hour ?? ''}
+            disabled={!profile.birth_date}
+            onChange={(e) => update('birth_hour', e.target.value || '')}
+          >
+            <option value="">{profile.birth_date ? '出生时辰' : '时辰（先填日期）'}</option>
+            {BIRTH_HOUR_OPTIONS.map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="text-xs mt-2" style={{ color: 'var(--muted)' }}>
+          填了才按你的喜用五行调整颜色、搭配与妆容；不填只按身体条件给建议。
+        </div>
+
+        <div className="text-xs mb-2 mt-4" style={{ color: 'var(--muted)' }}>
+          年龄段{profile.birth_date ? '（已按出生日期算，不用再选）' : ''}
+        </div>
+        {profile.birth_date ? (
+          <div className="opt-btn active text-center" style={{ ...optBtnPad, cursor: 'default' }}>
+            按生日自动计算
+          </div>
+        ) : (
+          renderOptBtns(AGE_RANGE_OPTIONS, 'age_range', 'grid-cols-4')
+        )}
 
         <div className="text-xs mb-2 mt-4" style={{ color: 'var(--muted)' }}>
           身高范围

@@ -61,6 +61,10 @@ const FIELD_LABELS = {
   leg_proportion: '腿身比（算出）',
   shoulder_frame: '肩宽比（算出）',
   waist_definition: '腰线（算出）',
+  // ↓ 第三批：八字五行(由出生日期+时辰算出,是"自身条件"之外的第二条判定依据)
+  day_master_element: '日主五行（算出）',
+  favorable_element: '喜用五行（算出）',
+  unfavorable_element: '忌用五行（算出）',
 }
 
 /**

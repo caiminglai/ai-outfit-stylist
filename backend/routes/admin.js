@@ -71,6 +71,9 @@ const TABLE_NAMES = {
   user_accessories: '配饰柜表',
   model_configs: '3D模型配置表',
   deposits: '收款凭证表',
+  app_settings: '键值设置表',
+  profile_drafts: '档案草稿表',
+  payment_orders: '在线收款订单表',
   creator_works: '创作者作品表',
 }
 
@@ -215,6 +218,7 @@ router.get('/api/data/:tableName', adminLoginRequired, (req, res) => {
       'features_json',
       'content_json',
       'result_json',
+      'form_json',
       'profile_data',
       'input_snapshot',
       'result',
@@ -357,7 +361,9 @@ router.get(['/api/source', '/api/source/*'], adminLoginRequired, (req, res) => {
     // 敏感文件禁止访问（路径分隔符标准化后精确匹配）
     const normalizedPath = filePath.replace(/\\/g, '/')
     const blockedDirs = ['node_modules', '.git', 'uploads']
-    const blockedExtensions = ['.db', '.sqlite', '.env']
+    // .pem/.key 必须在这里：容器里 backendRoot=/app，商户私钥就挂在 /app/certs* 之下，
+    // 少这一条，后台源码查看器等于能把签约用的私钥整份读走
+    const blockedExtensions = ['.db', '.sqlite', '.env', '.pem', '.key', '.p12', '.pfx']
     const blockedFiles = ['package-lock.json', 'styleai.db', 'styleai.db-wal', 'styleai.db-shm']
     const pathParts = normalizedPath.split('/')
     const fileName = pathParts[pathParts.length - 1] || ''

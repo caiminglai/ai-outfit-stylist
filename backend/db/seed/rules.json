@@ -2874,7 +2874,7 @@
       "scenario": "通勤",
       "region": null,
       "age_range": null,
-      "description": "苹果形体型通勤穿搭:V领empire线拉长躯干",
+      "description": "苹果形体型通勤穿搭:V领高腰线拉长躯干",
       "priority": 5,
       "enabled": 1,
       "hit_count": 0,
@@ -10799,7 +10799,7 @@
       "id": 89,
       "group_id": 16,
       "action_type": "发型",
-      "content": "法式优雅卷短发（lob头）",
+      "content": "法式优雅卷短发（中短发）",
       "sort_order": 0
     },
     {
@@ -10834,7 +10834,7 @@
       "id": 94,
       "group_id": 16,
       "action_type": "reason",
-      "content": "暖皮搭配栗棕色最显白显气质，法式lob头精致又不失温柔",
+      "content": "暖皮搭配栗棕色最显白显气质，法式中短发精致又不失温柔",
       "sort_order": 5
     },
     {
@@ -12003,14 +12003,14 @@
       "id": 261,
       "group_id": 48,
       "action_type": "top_style",
-      "content": "运动内衣 + 运动外套 / Oversize卫衣",
+      "content": "运动内衣 + 运动外套 / 宽松卫衣",
       "sort_order": 0
     },
     {
       "id": 262,
       "group_id": 48,
       "action_type": "bottom_style",
-      "content": "Legging / 运动短裤 / 束脚裤",
+      "content": "打底裤 / 运动短裤 / 束脚裤",
       "sort_order": 1
     },
     {
@@ -12031,7 +12031,7 @@
       "id": 265,
       "group_id": 48,
       "action_type": "reason",
-      "content": "运动风以功能性和舒适度优先，Legging+卫衣是经典组合",
+      "content": "运动风以功能性和舒适度优先，打底裤+卫衣是经典组合",
       "sort_order": 4
     },
     {
@@ -12325,7 +12325,7 @@
       "id": 307,
       "group_id": 57,
       "action_type": "发型",
-      "content": "柔和波浪卷/层次中长发/不对称 bob",
+      "content": "柔和波浪卷/层次中长发/不对称波波头",
       "sort_order": 0
     },
     {
@@ -12353,7 +12353,7 @@
       "id": 311,
       "group_id": 58,
       "action_type": "发型",
-      "content": "下巴长度 bob/中长直发/微卷",
+      "content": "下巴长度波波头/中长直发/微卷",
       "sort_order": 0
     },
     {
@@ -12409,7 +12409,7 @@
       "id": 319,
       "group_id": 60,
       "action_type": "发型",
-      "content": "蓬松短发/齐肩 wavy/带刘海的中长发",
+      "content": "蓬松短发/齐肩微卷/带刘海的中长发",
       "sort_order": 0
     },
     {
@@ -12437,7 +12437,7 @@
       "id": 323,
       "group_id": 61,
       "action_type": "发型",
-      "content": "undercut/飞机头/侧背头",
+      "content": "底层削薄/飞机头/侧背头",
       "sort_order": 0
     },
     {
@@ -12899,7 +12899,7 @@
       "id": 389,
       "group_id": 78,
       "action_type": "top_style",
-      "content": "Oversize T恤 / 印花卫衣",
+      "content": "宽松T恤 / 印花卫衣",
       "sort_order": 0
     },
     {
@@ -12927,7 +12927,7 @@
       "id": 393,
       "group_id": 78,
       "action_type": "reason",
-      "content": "街头风以Oversize和工装元素为主，马丁靴是灵魂单品",
+      "content": "街头风以宽松和工装元素为主，马丁靴是灵魂单品",
       "sort_order": 4
     },
     {
@@ -13235,7 +13235,7 @@
       "id": 442,
       "group_id": 87,
       "action_type": "lip_color",
-      "content": "水光唇釉（珊瑚粉/草莓红），光泽感up",
+      "content": "水光唇釉（珊瑚粉/草莓红），光泽感提升",
       "sort_order": 2
     },
     {
@@ -13424,7 +13424,7 @@
       "id": 469,
       "group_id": 91,
       "action_type": "reason",
-      "content": "派对配饰以夸张闪耀为主，BlingBling元素是派对灵魂，小包轻便又吸睛",
+      "content": "派对配饰以夸张闪耀为主，闪钻元素是派对灵魂，小包轻便又吸睛",
       "sort_order": 5
     },
     {
@@ -13536,7 +13536,7 @@
       "id": 485,
       "group_id": 94,
       "action_type": "necklace_avoid",
-      "content": "短款项链 / choker",
+      "content": "短款项链 / 颈链",
       "sort_order": 3
     },
     {
@@ -15524,7 +15524,7 @@
       "id": 786,
       "group_id": 148,
       "action_type": "bottom_style",
-      "content": "高弹力运动legging / 运动短裤",
+      "content": "高弹力运动打底裤 / 运动短裤",
       "sort_order": 1
     },
     {
@@ -15552,7 +15552,7 @@
       "id": 790,
       "group_id": 148,
       "action_type": "reason",
-      "content": "运动生理学建议：速干面料减少体表湿度，弹性面料提供运动自由度（ACSM 运动服装指南）",
+      "content": "运动生理学建议：速干面料减少体表湿度，弹性面料提供运动自由度（运动服装指南）",
       "sort_order": 5
     },
     {
@@ -15629,7 +15629,7 @@
       "id": 801,
       "group_id": 150,
       "action_type": "reason",
-      "content": "热调节理论：浅色反射阳光，棉麻透气率比化纤高40%（Textile Research Journal）",
+      "content": "热调节理论：浅色反射阳光，棉麻透气率比化纤高40%",
       "sort_order": 4
     },
     {
@@ -15706,7 +15706,7 @@
       "id": 812,
       "group_id": 152,
       "action_type": "reason",
-      "content": "热调节理论：三层穿衣法（base+mid+shell），深色吸热效率高（ASCI 低温着装研究）",
+      "content": "热调节理论：三层穿衣法（内层+中层+外层），深色吸热效率高（低温着装研究）",
       "sort_order": 5
     },
     {
@@ -15748,7 +15748,7 @@
       "id": 818,
       "group_id": 153,
       "action_type": "reason",
-      "content": "热调节理论：三层穿衣法，男性冬季需保证core区域（躯干）保暖优先",
+      "content": "热调节理论：三层穿衣法，男性冬季需保证核心区域（躯干）保暖优先",
       "sort_order": 5
     },
     {
@@ -15825,7 +15825,7 @@
       "id": 829,
       "group_id": 155,
       "action_type": "reason",
-      "content": "正常BMI（18.5-22.9）体型穿搭自由度最高，可灵活驾驭各种风格（亚洲BMI标准 WHO WPR 2000）",
+      "content": "正常BMI（18.5-22.9）体型穿搭自由度最高，可灵活驾驭各种风格（亚洲体型标准）",
       "sort_order": 4
     },
     {
@@ -15993,7 +15993,7 @@
       "id": 853,
       "group_id": 159,
       "action_type": "reason",
-      "content": "皮肤科学：干皮角质层含水量<10%，需选择含透明质酸/甘油的保湿型底妆，避免粉状产品加重干燥（Journal of Cosmetic Dermatology）",
+      "content": "皮肤科学：干皮角质层含水量<10%，需选择含透明质酸/甘油的保湿型底妆，避免粉状产品加重干燥",
       "sort_order": 5
     },
     {
@@ -16035,7 +16035,7 @@
       "id": 859,
       "group_id": 160,
       "action_type": "reason",
-      "content": "皮肤科学：油皮皮脂分泌旺盛，需选择控油配方和哑光妆效产品，粉状质地优于液态（American Academy of Dermatology）",
+      "content": "皮肤科学：油皮皮脂分泌旺盛，需选择控油配方和哑光妆效产品，粉状质地优于液态",
       "sort_order": 5
     },
     {
@@ -16070,7 +16070,7 @@
       "id": 864,
       "group_id": 161,
       "action_type": "reason",
-      "content": "皮肤科学：敏感肌屏障受损，需选择无香精/无酒精/无paraben的产品，矿物彩妆致敏率最低（Contact Dermatitis Journal）",
+      "content": "皮肤科学：敏感肌屏障受损，需选择无香精/无酒精/无羟苯酯类防腐剂的产品，矿物彩妆致敏率最低",
       "sort_order": 4
     },
     {
@@ -16112,7 +16112,7 @@
       "id": 870,
       "group_id": 162,
       "action_type": "reason",
-      "content": "皮肤科学：混合皮T区油U区干，需分区使用不同质地产品（International Journal of Cosmetic Science）",
+      "content": "皮肤科学：混合皮T区油U区干，需分区使用不同质地产品",
       "sort_order": 4
     },
     {
@@ -16147,7 +16147,7 @@
       "id": 875,
       "group_id": 163,
       "action_type": "reason",
-      "content": "视觉比例理论：黄金比例1:1.618，矮个子（<160cm）应提高腰线至肋骨下缘，上下同色系拉长视觉线条（Fashion Design Theory）",
+      "content": "视觉比例理论：黄金比例1:1.618，矮个子（<160cm）应提高腰线至肋骨下缘，上下同色系拉长视觉线条",
       "sort_order": 4
     },
     {
@@ -16161,7 +16161,7 @@
       "id": 877,
       "group_id": 164,
       "action_type": "top_style",
-      "content": "oversized上衣 / 长款大衣 / 宽松衬衫",
+      "content": "宽松上衣 / 长款大衣 / 宽松衬衫",
       "sort_order": 0
     },
     {
@@ -16189,7 +16189,7 @@
       "id": 881,
       "group_id": 164,
       "action_type": "reason",
-      "content": "视觉比例理论：高个子（>170cm）穿搭自由度高，可驾驭长款和oversized，上下分色不影响整体比例",
+      "content": "视觉比例理论：高个子（>170cm）穿搭自由度高，可驾驭长款和宽松廓形，上下分色不影响整体比例",
       "sort_order": 4
     },
     {
@@ -16224,7 +16224,7 @@
       "id": 886,
       "group_id": 165,
       "action_type": "reason",
-      "content": "视觉比例理论：男性身高160-170cm应选择合身剪裁和高腰线，同色系搭配拉长视觉（Menswear Design Theory）",
+      "content": "视觉比例理论：男性身高160-170cm应选择合身剪裁和高腰线，同色系搭配拉长视觉",
       "sort_order": 4
     },
     {
@@ -16266,7 +16266,7 @@
       "id": 892,
       "group_id": 166,
       "action_type": "reason",
-      "content": "消费心理学：平价预算应投资基础款（胶囊衣橱理论），60%基础款+30%流行款+10%个性款（Wardrobe Economics）",
+      "content": "消费心理学：平价预算应投资基础款（胶囊衣橱理论），60%基础款+30%流行款+10%个性款",
       "sort_order": 4
     },
     {
@@ -16301,7 +16301,7 @@
       "id": 897,
       "group_id": 167,
       "action_type": "reason",
-      "content": "消费心理学：高端预算应注重面料质感和剪裁工艺，投资天然纤维和经典款式（Luxury Fashion Theory）",
+      "content": "消费心理学：高端预算应注重面料质感和剪裁工艺，投资天然纤维和经典款式",
       "sort_order": 4
     },
     {
@@ -16336,14 +16336,14 @@
       "id": 902,
       "group_id": 168,
       "action_type": "reason",
-      "content": "消费心理学：平价预算男性应投资合身的基础款，比花哨款式更耐穿且显品味（Minimalist Menswear）",
+      "content": "消费心理学：平价预算男性应投资合身的基础款，比花哨款式更耐穿且显品味",
       "sort_order": 4
     },
     {
       "id": 903,
       "group_id": 169,
       "action_type": "top_style",
-      "content": "oversized卫衣 / crop top / 碎花衬衫",
+      "content": "宽松卫衣 / 短款上衣 / 碎花衬衫",
       "sort_order": 0
     },
     {
@@ -16371,7 +16371,7 @@
       "id": 907,
       "group_id": 169,
       "action_type": "reason",
-      "content": "年龄心理学：18-25岁年轻人审美接受度高，可尝试前卫色彩和潮流款式（Youth Fashion Psychology）",
+      "content": "年龄心理学：18-25岁年轻人审美接受度高，可尝试前卫色彩和潮流款式",
       "sort_order": 4
     },
     {
@@ -16406,14 +16406,14 @@
       "id": 912,
       "group_id": 170,
       "action_type": "reason",
-      "content": "年龄心理学：26-35岁轻熟女性注重质感和得体，从活力转向知性优雅（Adult Development Theory）",
+      "content": "年龄心理学：26-35岁轻熟女性注重质感和得体，从活力转向知性优雅",
       "sort_order": 4
     },
     {
       "id": 913,
       "group_id": 171,
       "action_type": "top_style",
-      "content": "oversized卫衣 / 潮牌T恤 / 棒球夹克",
+      "content": "宽松卫衣 / 潮牌T恤 / 棒球夹克",
       "sort_order": 0
     },
     {
@@ -16441,7 +16441,7 @@
       "id": 917,
       "group_id": 171,
       "action_type": "reason",
-      "content": "年龄心理学：18-25岁男性偏好街头潮流和运动风格，注重品牌认同感（Youth Consumer Behavior）",
+      "content": "年龄心理学：18-25岁男性偏好街头潮流和运动风格，注重品牌认同感",
       "sort_order": 4
     },
     {
@@ -16476,7 +16476,7 @@
       "id": 922,
       "group_id": 172,
       "action_type": "reason",
-      "content": "年龄心理学：26-35岁男性从潮流转向质感，注重面料和剪裁（Adult Development Theory）",
+      "content": "年龄心理学：26-35岁男性从潮流转向质感，注重面料和剪裁",
       "sort_order": 4
     },
     {
@@ -16511,7 +16511,7 @@
       "id": 927,
       "group_id": 173,
       "action_type": "reason",
-      "content": "人体比例美学：短颈宽肩应使用V领拉长颈部，下半身膨胀平衡肩宽比例（Proportion Theory）",
+      "content": "人体比例美学：短颈宽肩应使用V领拉长颈部，下半身膨胀平衡肩宽比例",
       "sort_order": 4
     },
     {
@@ -16553,7 +16553,7 @@
       "id": 933,
       "group_id": 174,
       "action_type": "reason",
-      "content": "人体比例美学：长颈窄肩应使用高领和垫肩增加肩部体积，平衡长颈比例（Proportion Theory）",
+      "content": "人体比例美学：长颈窄肩应使用高领和垫肩增加肩部体积，平衡长颈比例",
       "sort_order": 4
     },
     {
@@ -16574,7 +16574,7 @@
       "id": 936,
       "group_id": 175,
       "action_type": "reason",
-      "content": "四季色彩分析：暖白皮属于春季型，适合温暖明亮的清色系（Carole Jackson 1987）",
+      "content": "四季色彩分析：暖白皮属于春季型，适合温暖明亮的清色系",
       "sort_order": 2
     },
     {
@@ -16602,7 +16602,7 @@
       "id": 940,
       "group_id": 176,
       "action_type": "reason",
-      "content": "四季色彩分析：暖黄皮属于秋季型，适合浓郁的大地色系（Carole Jackson 1987）",
+      "content": "四季色彩分析：暖黄皮属于秋季型，适合浓郁的大地色系",
       "sort_order": 2
     },
     {
@@ -16630,7 +16630,7 @@
       "id": 944,
       "group_id": 177,
       "action_type": "reason",
-      "content": "四季色彩分析：冷白皮属于夏季型，适合柔和的冷色系（Carole Jackson 1987）",
+      "content": "四季色彩分析：冷白皮属于夏季型，适合柔和的冷色系",
       "sort_order": 2
     },
     {
@@ -16658,7 +16658,7 @@
       "id": 948,
       "group_id": 178,
       "action_type": "reason",
-      "content": "四季色彩分析：冷深皮属于冬季型，适合高饱和高对比的纯色系（Carole Jackson 1987）",
+      "content": "四季色彩分析：冷深皮属于冬季型，适合高饱和高对比的纯色系",
       "sort_order": 2
     },
     {
@@ -16707,7 +16707,7 @@
       "id": 955,
       "group_id": 179,
       "action_type": "reason",
-      "content": "着装规范理论：婚礼宾客应避免白色系，选择正式感礼服，尊重场合文化（Dress Code Etiquette）",
+      "content": "着装规范理论：婚礼宾客应避免白色系，选择正式感礼服，尊重场合文化",
       "sort_order": 5
     },
     {
@@ -16749,7 +16749,7 @@
       "id": 961,
       "group_id": 180,
       "action_type": "reason",
-      "content": "着装规范理论：男性参加婚礼需着正装或礼服，领结配色需根据婚礼主题调整（Black Tie Dress Code）",
+      "content": "着装规范理论：男性参加婚礼需着正装或礼服，领结配色需根据婚礼主题调整",
       "sort_order": 5
     },
     {
@@ -16784,7 +16784,7 @@
       "id": 966,
       "group_id": 181,
       "action_type": "reason",
-      "content": "色彩学冷暖理论：暖皮（含黄色素多）搭配暖色调金色系配饰，视觉和谐度最高（Color Theory, Johannes Itten）",
+      "content": "色彩学冷暖理论：暖皮（含黄色素多）搭配暖色调金色系配饰，视觉和谐度最高",
       "sort_order": 4
     },
     {
@@ -16819,7 +16819,7 @@
       "id": 971,
       "group_id": 182,
       "action_type": "reason",
-      "content": "色彩学冷暖理论：冷皮（含蓝色素多）搭配冷色调银色系配饰，提升皮肤通透感（Color Theory）",
+      "content": "色彩学冷暖理论：冷皮（含蓝色素多）搭配冷色调银色系配饰，提升皮肤通透感",
       "sort_order": 4
     },
     {
@@ -16847,7 +16847,7 @@
       "id": 975,
       "group_id": 183,
       "action_type": "reason",
-      "content": "色彩学冷暖理论：暖皮男性适合金色系和棕色调配饰，整体和谐有质感（Menswear Color Theory）",
+      "content": "色彩学冷暖理论：暖皮男性适合金色系和棕色调配饰，整体和谐有质感",
       "sort_order": 3
     },
     {
@@ -16875,7 +16875,7 @@
       "id": 979,
       "group_id": 184,
       "action_type": "reason",
-      "content": "色彩学冷暖理论：冷皮男性适合银色系和黑色调配饰，干净利落显气质（Menswear Color Theory）",
+      "content": "色彩学冷暖理论：冷皮男性适合银色系和黑色调配饰，干净利落显气质",
       "sort_order": 3
     },
     {
@@ -16903,7 +16903,7 @@
       "id": 983,
       "group_id": 185,
       "action_type": "reason",
-      "content": "接触性皮炎研究：金属过敏（镍过敏最常见）患者应选择钛钢/医疗不锈钢/铂金材质，致敏率<1%（Contact Dermatitis Journal）",
+      "content": "接触性皮炎研究：金属过敏（镍过敏最常见）患者应选择钛钢/医疗不锈钢/铂金材质，致敏率<1%",
       "sort_order": 3
     },
     {
@@ -16917,7 +16917,7 @@
       "id": 985,
       "group_id": 186,
       "action_type": "发型",
-      "content": "中长直发 / 高马尾 / 侧分长bob",
+      "content": "中长直发 / 高马尾 / 侧分长波波头",
       "sort_order": 0
     },
     {
@@ -16938,14 +16938,14 @@
       "id": 988,
       "group_id": 186,
       "action_type": "reason",
-      "content": "面部比例美学：圆脸（宽=长）需纵向拉伸，选择有高度感的发型和侧分线条（Facial Proportion Theory）",
+      "content": "面部比例美学：圆脸（宽=长）需纵向拉伸，选择有高度感的发型和侧分线条",
       "sort_order": 3
     },
     {
       "id": 989,
       "group_id": 186,
       "action_type": "avoid",
-      "content": "齐刘海 / 短bob / 蓬松卷发会显脸更圆",
+      "content": "齐刘海 / 短波波头 / 蓬松卷发会显脸更圆",
       "sort_order": 4
     },
     {
@@ -16973,7 +16973,7 @@
       "id": 993,
       "group_id": 187,
       "action_type": "reason",
-      "content": "面部比例美学：方脸（下颌角突出）需柔和曲线发型弱化棱角（Facial Proportion Theory）",
+      "content": "面部比例美学：方脸（下颌角突出）需柔和曲线发型弱化棱角",
       "sort_order": 3
     },
     {
@@ -16987,7 +16987,7 @@
       "id": 995,
       "group_id": 188,
       "action_type": "发型",
-      "content": "下巴长度bob / 中长卷发 / 蓬松中长发",
+      "content": "下巴长度波波头 / 中长卷发 / 蓬松中长发",
       "sort_order": 0
     },
     {
@@ -17008,7 +17008,7 @@
       "id": 998,
       "group_id": 188,
       "action_type": "reason",
-      "content": "面部比例美学：心形脸（宽额窄下巴）需在下半部分增加体积平衡（Facial Proportion Theory）",
+      "content": "面部比例美学：心形脸（宽额窄下巴）需在下半部分增加体积平衡",
       "sort_order": 3
     },
     {
@@ -17036,7 +17036,7 @@
       "id": 1002,
       "group_id": 189,
       "action_type": "reason",
-      "content": "面部比例美学：长脸（长>宽）需横向丰满和刘海缩短视觉长度（Facial Proportion Theory）",
+      "content": "面部比例美学：长脸（长>宽）需横向丰满和刘海缩短视觉长度",
       "sort_order": 3
     },
     {
@@ -17085,7 +17085,7 @@
       "id": 1009,
       "group_id": 190,
       "action_type": "reason",
-      "content": "职场着装心理学：上班通勤应保持干练形象，中性色系传达专业感（Workplace Psychology, Heilman 2018）",
+      "content": "职场着装心理学：上班通勤应保持干练形象，中性色系传达专业感",
       "sort_order": 5
     },
     {
@@ -17127,7 +17127,7 @@
       "id": 1015,
       "group_id": 191,
       "action_type": "reason",
-      "content": "职场着装心理学：男性商务休闲(Smart Casual)平衡专业与亲和力（Workplace Psychology）",
+      "content": "职场着装心理学：男性商务休闲平衡专业与亲和力",
       "sort_order": 5
     },
     {
@@ -17162,7 +17162,7 @@
       "id": 1020,
       "group_id": 192,
       "action_type": "reason",
-      "content": "舒适心理学：居家应选择天然棉质宽松面料，柔和色调促进放松（Environmental Psychology）",
+      "content": "舒适心理学：居家应选择天然棉质宽松面料，柔和色调促进放松",
       "sort_order": 4
     },
     {
@@ -17197,7 +17197,7 @@
       "id": 1025,
       "group_id": 193,
       "action_type": "reason",
-      "content": "舒适心理学：男性居家同样需要舒适面料，低饱和色调有助于精神放松（Environmental Psychology）",
+      "content": "舒适心理学：男性居家同样需要舒适面料，低饱和色调有助于精神放松",
       "sort_order": 4
     },
     {
@@ -17232,7 +17232,7 @@
       "id": 1030,
       "group_id": 194,
       "action_type": "reason",
-      "content": "社交印象管理：约会聚会应展现女性魅力，浪漫色系和适度露肤提升吸引力（Impression Management Theory, Goffman 1959）",
+      "content": "社交印象管理：约会聚会应展现女性魅力，浪漫色系和适度露肤提升吸引力",
       "sort_order": 4
     },
     {
@@ -17267,7 +17267,7 @@
       "id": 1035,
       "group_id": 195,
       "action_type": "reason",
-      "content": "社交印象管理：男性约会应展现品味而非炫耀，修身合体+有质感的搭配提升好感度（Impression Management）",
+      "content": "社交印象管理：男性约会应展现品味而非炫耀，修身合体+有质感的搭配提升好感度",
       "sort_order": 4
     },
     {
@@ -17344,7 +17344,7 @@
       "id": 1046,
       "group_id": 198,
       "action_type": "top_style",
-      "content": "中长款oversized卫衣/衬衫",
+      "content": "中长款宽松卫衣/衬衫",
       "sort_order": 1
     },
     {
@@ -17379,7 +17379,7 @@
       "id": 1051,
       "group_id": 199,
       "action_type": "top_style",
-      "content": "V领empire线连衣裙/深色V领上衣",
+      "content": "V领高腰线连衣裙/深色V领上衣",
       "sort_order": 1
     },
     {
@@ -17407,7 +17407,7 @@
       "id": 1055,
       "group_id": 199,
       "action_type": "reason",
-      "content": "苹果形体型腰腹丰满,V领拉长颈部empire线提高腰位避开腰腹,深色收缩视觉,露出纤细双腿",
+      "content": "苹果形体型腰腹丰满,V领拉长颈部高腰线提高腰位避开腰腹,深色收缩视觉,露出纤细双腿",
       "sort_order": 5
     },
     {
@@ -17666,7 +17666,7 @@
       "id": 1092,
       "group_id": 207,
       "action_type": "bottom_style",
-      "content": "legging/紧身牛仔裤",
+      "content": "打底裤/紧身牛仔裤",
       "sort_order": 2
     },
     {
@@ -17722,7 +17722,7 @@
       "id": 1100,
       "group_id": 208,
       "action_type": "reason",
-      "content": "偏胖体型宜深色收缩+竖条纹纵向拉长,合体剪裁避免oversize显胖,直筒裤修饰腿型",
+      "content": "偏胖体型宜深色收缩+竖条纹纵向拉长,合体剪裁避免宽松显胖,直筒裤修饰腿型",
       "sort_order": 5
     },
     {
@@ -19647,7 +19647,7 @@
       "id": 1375,
       "group_id": 263,
       "action_type": "necklace_type",
-      "content": "短项链/choker(横向截断拉长)",
+      "content": "短项链/颈链(横向截断拉长)",
       "sort_order": 2
     },
     {

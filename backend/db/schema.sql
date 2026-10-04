@@ -76,6 +76,9 @@ CREATE TABLE IF NOT EXISTS body_metrics (
   shoulder_type TEXT,
   frame_size TEXT,
   line_quality TEXT,
+  -- 八字五行的输入(选填):不填则整条命理依据缺席
+  birth_date TEXT,
+  birth_hour TEXT,
   updated_at TEXT DEFAULT (datetime('now'))
 );
 
@@ -112,6 +115,15 @@ CREATE TABLE IF NOT EXISTS profile_tags (
   tag_value TEXT NOT NULL,
   updated_at TEXT DEFAULT (datetime('now')),
   UNIQUE(user_id, tag_key)
+);
+
+-- 表单草稿表(每人一行):存"填了一半还没点生成"的整份表单
+-- 身体与面容有各自的档案列,场合/预算/主要目标这类只属于表单、没有列可落,所以整份存 JSON;
+-- 点过生成的样本在 recommendation_logs,那张按次累积,这张永远只有最新一份
+CREATE TABLE IF NOT EXISTS profile_drafts (
+  user_id INTEGER PRIMARY KEY REFERENCES users(id),
+  form_json TEXT NOT NULL,
+  updated_at TEXT DEFAULT (datetime('now'))
 );
 
 -- 穿搭推荐记录表
@@ -357,6 +369,8 @@ CREATE TABLE IF NOT EXISTS admin_users (
   role TEXT DEFAULT 'admin',
   is_active INTEGER DEFAULT 1,
   last_login_at TEXT,
+  -- epoch 秒，与 Token 里的签发时间同单位：比 TEXT 的 datetime('now') 省掉时区换算这道坑
+  password_changed_at INTEGER,
   created_at TEXT DEFAULT (datetime('now'))
 );
 
@@ -487,6 +501,27 @@ CREATE INDEX IF NOT EXISTS ix_deposits_status_created ON deposits(status, create
 CREATE INDEX IF NOT EXISTS ix_deposits_user_id ON deposits(user_id);
 
 -- ============================================================
+-- 微信支付 APIv3 订单（Native 下单 -> 回调 / 轮询确认到账）
+-- ============================================================
+CREATE TABLE IF NOT EXISTS payment_orders (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  out_trade_no TEXT NOT NULL UNIQUE,
+  user_id INTEGER NOT NULL REFERENCES users(id),
+  description TEXT NOT NULL DEFAULT '',
+  -- 一律以分为单位存，避免 REAL 存元带来的浮点误差与对账歧义
+  amount_fen INTEGER NOT NULL,
+  -- created(已下单) | paid(已到账) | closed(已关闭)
+  status TEXT NOT NULL DEFAULT 'created',
+  transaction_id TEXT,
+  code_url TEXT DEFAULT '',
+  paid_at TEXT,
+  notify_raw TEXT,
+  created_at TEXT DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS ix_payment_orders_user_id ON payment_orders(user_id);
+CREATE INDEX IF NOT EXISTS ix_payment_orders_status ON payment_orders(status);
+
+-- ============================================================
 -- 创作者作品（提交 -> 审核 -> 广场曝光 -> 分享链接带流量）
 -- ============================================================
 CREATE TABLE IF NOT EXISTS creator_works (
@@ -523,3 +558,15 @@ CREATE TABLE IF NOT EXISTS user_accounts (
   created_at TEXT DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS ix_user_accounts_phone ON user_accounts(phone);
+
+-- ============================================================
+-- 后台可改的键值设置
+-- 目前只有一项 payment_amount_fen = 收款金额（单位：分）。
+-- 金额一律存整数分，不用浮点存钱；routes/payment.js 里的 PRICE.amount
+-- 只是这张表还没有那条记录时的兜底默认值。
+-- ============================================================
+CREATE TABLE IF NOT EXISTS app_settings (
+  key TEXT PRIMARY KEY,
+  value TEXT NOT NULL,
+  updated_at TEXT DEFAULT (datetime('now'))
+);

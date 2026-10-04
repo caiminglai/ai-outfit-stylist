@@ -7,7 +7,7 @@
    ══════════════════════════════════════════════════════════════ */
 
 /* ── 筛选事件绑定 ── */
-['filter-mode', 'filter-gender', 'filter-category', 'filter-scenario', 'filter-enabled', 'filter-hit'].forEach(function(id) {
+['filter-mode', 'filter-gender', 'filter-category', 'filter-scenario', 'filter-tag', 'filter-part', 'filter-enabled', 'filter-hit'].forEach(function(id) {
   document.getElementById(id).addEventListener('change', loadRules);
 });
 document.getElementById('rules-refresh').addEventListener('click', loadRules);
@@ -18,6 +18,8 @@ document.getElementById('rules-preview-btn').addEventListener('click', openPrevi
 var RULE_SCHEMA = null;
 var FIELD_LABEL_MAP = {};
 var ACTION_LABEL_MAP = {};
+var TAG_LABEL_MAP = {};
+var PART_LABEL_MAP = {};
 /** 试算渲染时要跳过的非动作字段(引擎附带的分组元信息) */
 var PREVIEW_META_KEYS = { group_id: 1, group_name: 1, priority: 1, score: 1, explanation: 1 };
 
@@ -33,6 +35,8 @@ function ensureSchema(done) {
     VALUE_LABELS['rule_actions.action_type'] = Object.assign({}, VALUE_LABELS['rule_actions.action_type'], ACTION_LABEL_MAP);
     fillOptions('filter-category', RULE_SCHEMA.categories, '全部类别');
     fillOptions('filter-scenario', RULE_SCHEMA.scenarios, '全部场景');
+    fillOptions('filter-tag', RULE_SCHEMA.tags, '全部体系');
+    fillOptions('filter-part', RULE_SCHEMA.parts, '全部部位/结论');
     done();
   }).catch(function(e) {
     showToast('规则元数据加载失败: ' + e.message, 'error');
@@ -40,12 +44,20 @@ function ensureSchema(done) {
   });
 }
 
+/**
+ * 用后端给的下拉数据填充 select
+ * values 既支持纯字符串数组(类别/场景),也支持 {value,label,count} 数组(体系/部位)
+ */
 function fillOptions(id, values, allLabel) {
   var sel = document.getElementById(id);
   if (!sel || !values) return;
   var current = sel.value;
   sel.innerHTML = '<option value="">' + escapeHtml(allLabel) + '</option>' + values.map(function(v) {
-    return '<option value="' + escapeHtml(v) + '">' + escapeHtml(v) + '</option>';
+    var item = typeof v === 'string' ? { value: v, label: v } : v;
+    if (id === 'filter-tag') TAG_LABEL_MAP[item.value] = item.label;
+    if (id === 'filter-part') PART_LABEL_MAP[item.value] = item.label;
+    var text = (item.label || item.value) + (item.count ? ' ' + item.count : '');
+    return '<option value="' + escapeHtml(item.value) + '">' + escapeHtml(text) + '</option>';
   }).join('');
   sel.value = current;
 }
@@ -64,11 +76,15 @@ function loadRules() {
   var scenario = document.getElementById('filter-scenario').value;
   var enabled = document.getElementById('filter-enabled').value;
   var hit = document.getElementById('filter-hit').value;
+  var tag = document.getElementById('filter-tag').value;
+  var part = document.getElementById('filter-part').value;
 
   if (mode) params.push('mode=' + mode);
   if (gender) params.push('gender=' + encodeURIComponent(gender));
   if (category) params.push('category=' + encodeURIComponent(category));
   if (scenario) params.push('scenario=' + encodeURIComponent(scenario));
+  if (tag) params.push('tag=' + encodeURIComponent(tag));
+  if (part) params.push('part=' + encodeURIComponent(part));
   if (enabled) params.push('enabled=' + enabled);
   if (hit) params.push('hit=' + encodeURIComponent(hit));
 
@@ -114,6 +130,7 @@ function renderRules(groups) {
       '<span class="rule-name">' + escapeHtml(g.name) + '</span>' +
       '<span class="rule-meta">' +
         '<span class="badge badge-accent">' + escapeHtml(CATEGORY_LABELS[g.category] || g.category) + '</span>' +
+        (g.tag ? '<span class="badge badge-purple" title="' + escapeHtml(g.source_key || '') + '">' + escapeHtml(TAG_LABEL_MAP[g.tag] || g.tag) + '</span>' : '') +
         (g.gender ? '<span class="badge badge-purple">' + escapeHtml(g.gender) + '</span>' : '') +
         (g.scenario ? '<span class="badge badge-green">' + escapeHtml(g.scenario) + '</span>' : '') +
         '<span class="badge ' + (g.enabled ? 'badge-green' : 'badge-red') + '">' + (g.enabled ? '启用' : '停用') + '</span>' +

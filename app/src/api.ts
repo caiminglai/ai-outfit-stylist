@@ -380,19 +380,38 @@ export async function postRuleFeedback(
 }
 
 // ============ 长期档案 API(个人模式:越用越懂你) ============
-/** 读取本人长期档案(身体 + 面容 + 已存标签),档案用于表单预填,未填过返回 null */
+/** 档案里的一条:后端把引擎字段名换成中文标签后连同值一起给出,前端不再维护第二套翻译 */
+export type ProfileField = { key: string; label: string; value: string }
+
+/** 读取本人长期档案(上次填的整份表单 + 身体面容 + 已存标签),档案用于表单预填,未填过返回 null */
 export async function getProfileArchive(): Promise<{
   profile: CustomerProfile | null
+  /** 同一份档案的中文清单,label 由后端给,前端不再维护第二套字段名翻译 */
+  fields?: ProfileField[]
   tags?: ProfileTag[]
 }> {
   const res = await fetchWithTimeout(`${BASE}/analysis/archive`, { headers: headers() })
   return unwrap(res)
 }
 
-/** 删除本人档案、标签、归属本人的推荐样本与照片(含上传目录里的文件),返回各类被删条数 */
+/** 存草稿:填了一半没点生成也替他记住,返回本次写进身体/面容档案的字段数 */
+export async function saveProfileArchive(profile: CustomerProfile): Promise<{
+  body: number
+  face: number
+}> {
+  const res = await fetchWithTimeout(`${BASE}/analysis/archive`, {
+    method: 'PUT',
+    headers: headers(),
+    body: JSON.stringify(profile),
+  })
+  return unwrap(res)
+}
+
+/** 删除本人档案、草稿、标签、归属本人的推荐样本与照片(含上传目录里的文件),返回各类被删条数 */
 export async function deleteProfileArchive(): Promise<{
   body: number
   face: number
+  draft: number
   tags: number
   feedback: number
   logs: number

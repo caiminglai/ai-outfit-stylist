@@ -10,6 +10,8 @@
  *   - 体态问题-穿搭映射
  */
 
+const { analyzeBazi, analyzeDay, parseBirthDate } = require('./baziWuxing')
+
 // 简易内存缓存（避免重复计算相同 profile）
 const _enrichCache = new Map()
 const _CACHE_MAX = 200
@@ -618,6 +620,61 @@ const OCCASION_TO_SCENARIO = {
 }
 
 // ============================================================
+// 8.6. 八字五行（第二条判定依据：风水八字 + 日期）
+// ============================================================
+
+/** 年龄段档位，和规则里 age_range 条件用的是同一套值 */
+const AGE_BANDS = [
+  [18, 25, '18-25'],
+  [26, 35, '26-35'],
+  [36, 45, '36-45'],
+  [46, 120, '46+'],
+]
+
+/**
+ * 由出生日期算周岁与年龄段
+ * 拿 age_range 当条件的规则有 12 条，生日一填就不必再让人点一遍年龄段；
+ * 生日没填时返回空对象，表单上那份手选的 age_range 照常生效。
+ * @param {string} birthDate 'YYYY-MM-DD'
+ * @returns {object} { age, age_range? }
+ */
+function deriveAgeFields(birthDate) {
+  const b = parseBirthDate(birthDate)
+  if (!b) return {}
+  const now = new Date()
+  let age = now.getFullYear() - b.y
+  const reached = now.getMonth() + 1 > b.m || (now.getMonth() + 1 === b.m && now.getDate() >= b.d)
+  if (!reached) age -= 1
+  const out = { age }
+  const band = AGE_BANDS.find(([lo, hi]) => age >= lo && age <= hi)
+  if (band) out.age_range = band[2]
+  return out
+}
+
+/**
+ * 由出生日期与时辰档派生五行字段
+ * 没填或填错返回空对象——宁可不给这条依据，也不能往 profile 里塞 undefined，
+ * 引擎是严格 AND，多一个空字段就多一批永远命中不了的规则。
+ * @param {string} birthDate 'YYYY-MM-DD'
+ * @param {string} birthHour '子时'…'亥时' | '不清楚'
+ * @returns {object} 可 Object.assign 进 profile 的字段包
+ */
+function computeBaziFields(birthDate, birthHour) {
+  if (!birthDate) return {}
+  const a = analyzeBazi(birthDate, birthHour || '不清楚')
+  if (!a) return {}
+  return {
+    // 规则条件用的三个标量（in/eq 只能比单值，所以喜用只取主气那一行）
+    day_master_element: a.day_master_element,
+    favorable_element: a.favorable_element,
+    unfavorable_element: a.unfavorable_element,
+    // 报告页展示用
+    bazi: a,
+    bazi_today: analyzeDay(a),
+  }
+}
+
+// ============================================================
 // 9. 主入口：enrichProfile
 // ============================================================
 
@@ -701,6 +758,10 @@ function enrichProfile(profile) {
   Object.assign(p, computeColorSeason12(p.color_season, p.color_chroma))
   // 6.7 风格型(骨架量感×线条倾向,两轴都选了才算)
   Object.assign(p, computeKibbeType(p.frame_size, p.line_quality))
+  // 6.75 周岁与年龄段(生日填了就以生日算,盖掉表单上手选的档位)
+  Object.assign(p, deriveAgeFields(p.birth_date))
+  // 6.8 八字五行(第二条判定依据;没填出生日期就整块缺席,不影响第一批那 20 条四季型规则)
+  Object.assign(p, computeBaziFields(p.birth_date, p.birth_hour))
 
   // 7. 脸型-全维度建议
   if (face_shape) {
@@ -745,6 +806,7 @@ module.exports = {
   computeColorSeason,
   computeColorSeason12,
   computeKibbeType,
+  computeBaziFields,
   CHROMA_LEVEL,
   FRAME_LEVEL,
   LINE_LEVEL,

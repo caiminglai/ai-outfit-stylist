@@ -155,16 +155,6 @@ function renderModels() {
         displayContent = '<div class="model-icon-fallback">' + escapeHtml(m.icon || '🎭') + '</div>';
       }
 
-      // 渲染参数摘要(只读展示,编辑请点"编辑"按钮)
-      var paramSummary =
-        '<div class="model-params-summary">' +
-          '<span title="缩放">🔍 ' + (m.scale ?? 1.0) + '</span>' +
-          '<span title="相机距离">📷 ' + (m.camera_distance ?? 5.0) + '</span>' +
-          '<span title="环境光">💡 ' + (m.ambient_light ?? 0.6) + '</span>' +
-          '<span title="位置">📍 ' + (m.pos_x ?? 0) + ',' + (m.pos_y ?? 0) + ',' + (m.pos_z ?? 0) + '</span>' +
-          '<span title="旋转">🔄 ' + (m.rot_x ?? 0) + '°,' + (m.rot_y ?? 0) + '°,' + (m.rot_z ?? 0) + '°</span>' +
-        '</div>';
-
       // 卡片布局: 左侧图标 + 中间信息 + 右侧操作
       card.innerHTML =
         '<div class="model-card-left">' +
@@ -173,7 +163,6 @@ function renderModels() {
         '<div class="model-card-center">' +
           '<div class="model-card-name">' + escapeHtml(roleName) + ' ' + statusBadge + '</div>' +
           '<div class="model-card-desc">' + (descText ? escapeHtml(descText) : '<span style="opacity:0.4;">无描述</span>') + '</div>' +
-          paramSummary +
         '</div>' +
         '<div class="model-card-right">' +
           '<div class="model-quick-controls">' +
@@ -290,22 +279,6 @@ function editModelName(modelId) {
         '</div>' +
       '</div>' +
 
-      // 渲染参数(缩放/位置/旋转/相机/环境光)
-      '<details style="margin-bottom:14px;">' +
-        '<summary style="cursor:pointer;font-size:13px;color:#4fc3f7;padding:6px 0;">🎛️ 高级渲染参数</summary>' +
-        '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;padding:10px;background:#161616;border-radius:6px;margin-top:6px;">' +
-          '<label>缩放:<input id="edit-scale" type="number" value="' + (model.scale !== undefined ? model.scale : 1) + '" step="0.1" min="0.1" max="5" style="width:100%;padding:6px;background:#222;border:1px solid #444;border-radius:4px;color:#fff;font-size:12px;box-sizing:border-box;"></label>' +
-          '<label>相机距离:<input id="edit-camera" type="number" value="' + (model.camera_distance !== undefined ? model.camera_distance : 5) + '" step="0.5" min="1" max="50" style="width:100%;padding:6px;background:#222;border:1px solid #444;border-radius:4px;color:#fff;font-size:12px;box-sizing:border-box;"></label>' +
-          '<label>环境光:<input id="edit-ambient" type="number" value="' + (model.ambient_light !== undefined ? model.ambient_light : 0.6) + '" step="0.1" min="0" max="3" style="width:100%;padding:6px;background:#222;border:1px solid #444;border-radius:4px;color:#fff;font-size:12px;box-sizing:border-box;"></label>' +
-          '<label>位置X:<input id="edit-pos-x" type="number" value="' + (model.pos_x !== undefined ? model.pos_x : 0) + '" step="0.1" style="width:100%;padding:6px;background:#222;border:1px solid #444;border-radius:4px;color:#fff;font-size:12px;box-sizing:border-box;"></label>' +
-          '<label>位置Y:<input id="edit-pos-y" type="number" value="' + (model.pos_y !== undefined ? model.pos_y : 0) + '" step="0.1" style="width:100%;padding:6px;background:#222;border:1px solid #444;border-radius:4px;color:#fff;font-size:12px;box-sizing:border-box;"></label>' +
-          '<label>位置Z:<input id="edit-pos-z" type="number" value="' + (model.pos_z !== undefined ? model.pos_z : 0) + '" step="0.1" style="width:100%;padding:6px;background:#222;border:1px solid #444;border-radius:4px;color:#fff;font-size:12px;box-sizing:border-box;"></label>' +
-          '<label>旋转X°:<input id="edit-rot-x" type="number" value="' + (model.rot_x !== undefined ? model.rot_x : 0) + '" step="5" style="width:100%;padding:6px;background:#222;border:1px solid #444;border-radius:4px;color:#fff;font-size:12px;box-sizing:border-box;"></label>' +
-          '<label>旋转Y°:<input id="edit-rot-y" type="number" value="' + (model.rot_y !== undefined ? model.rot_y : 0) + '" step="5" style="width:100%;padding:6px;background:#222;border:1px solid #444;border-radius:4px;color:#fff;font-size:12px;box-sizing:border-box;"></label>' +
-          '<label>旋转Z°:<input id="edit-rot-z" type="number" value="' + (model.rot_z !== undefined ? model.rot_z : 0) + '" step="5" style="width:100%;padding:6px;background:#222;border:1px solid #444;border-radius:4px;color:#fff;font-size:12px;box-sizing:border-box;"></label>' +
-        '</div>' +
-      '</details>' +
-
       '<div style="margin-bottom:8px;padding:10px;background:#2a2a2a;border-radius:6px;font-size:12px;color:#888;">' +
         '📁 <strong style="color:#aaa;">文件夹:</strong> ' + escapeHtml(model.folder) + '<br>' +
         '📄 <strong style="color:#aaa;">PMX文件:</strong> ' + escapeHtml(model.file) +
@@ -355,16 +328,7 @@ function editModelName(modelId) {
       icon: overlay.querySelector('#edit-icon-input').value.trim() || '🎭',
       image_preview: overlay.querySelector('#edit-image-preview').value.trim(),
       exposure: numOr('#edit-exposure', 0.3),
-      sort_order: parseInt(overlay.querySelector('#edit-sort').value) || 0,
-      scale: numOr('#edit-scale', 1.0),
-      camera_distance: numOr('#edit-camera', 5.0),
-      ambient_light: numOr('#edit-ambient', 0.6),
-      pos_x: numOr('#edit-pos-x', 0),
-      pos_y: numOr('#edit-pos-y', 0),
-      pos_z: numOr('#edit-pos-z', 0),
-      rot_x: numOr('#edit-rot-x', 0),
-      rot_y: numOr('#edit-rot-y', 0),
-      rot_z: numOr('#edit-rot-z', 0)
+      sort_order: parseInt(overlay.querySelector('#edit-sort').value) || 0
     };
 
     updateModelSetting(modelId, data);
@@ -384,18 +348,9 @@ function updateModelSetting(modelId, data) {
         if (data.source !== undefined) model.source = data.source;
         if (data.icon !== undefined) model.icon = data.icon;
         if (data.image_preview !== undefined) model.image_preview = data.image_preview;
-        // 渲染参数同步到本地 State
-        ['scale','pos_x','pos_y','pos_z','rot_x','rot_y','rot_z','camera_distance','ambient_light'].forEach(function(k){
-          if (data[k] !== undefined) model[k] = data[k];
-        });
       }
       if (data.sort_order !== undefined) State.models.sort(function (a, b) { return a.sort_order - b.sort_order; });
-      // 只要包含非渲染参数字段(如 name/desc/source 等),就重新渲染列表
-      var renderParamKeys = ['scale','pos_x','pos_y','pos_z','rot_x','rot_y','rot_z','camera_distance','ambient_light'];
-      var hasNonRenderParam = Object.keys(data).some(function(k){
-        return renderParamKeys.indexOf(k) < 0;
-      });
-      if (hasNonRenderParam) renderModels();
+      renderModels();
       showToast('设置已更新', 'success');
     } else { showToast('保存失败: ' + res.message, 'error'); }
   }).catch(function (e) { showToast('保存失败: ' + e.message, 'error'); });

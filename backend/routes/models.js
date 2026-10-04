@@ -22,7 +22,7 @@ const {
   parseFolderName,
   shouldSkipDir,
   isSkippedPath,
-  findIgnoringCase,
+  resolvePathIgnoringCase,
   BROKEN_DIR_NAME,
 } = require('../utils/model-utils')
 
@@ -455,11 +455,18 @@ router.get('/file/*', (req, res, next) => {
 
     let fullPath = path.join(MODELS_DIR, safePath)
 
-    // PMX 里声明的纹理名大小写与磁盘文件名不一致时(实测 3 处),Linux 分大小写直接 404,
-    // 而 Windows 本机看不出来。找不到精确名就按大小写无关再找一次,只有唯一命中才认。
+    // PMX 里声明的纹理路径与磁盘只差大小写时，Linux 分大小写直接 404，而 Windows 本机看不出来。
+    // 逐段纠（目录名也要纠）：实测今汐的 PMX 写 `TEX/`、`Tex/`，磁盘是 `tex/`，整张脸纹理全挂。
+    // 先试精确名，命中就走原来的单次 existsSync；只有没命中才逐段解析，不在热路径上多花 N 次系统调用。
     if (!fs.existsSync(fullPath)) {
-      const ciPath = findIgnoringCase(fullPath)
-      if (ciPath) fullPath = ciPath
+      const ciPath = resolvePathIgnoringCase(MODELS_DIR, safePath)
+      if (ciPath) {
+        // 纠完之后可能落进另一个大小写写法的跳过目录（如 `Zip备份`），前面那道闸门按原样比对会被绕开，再查一次
+        if (isSkippedPath(path.relative(MODELS_DIR, ciPath))) {
+          return sendError(res, '文件不存在', 404)
+        }
+        fullPath = ciPath
+      }
     }
 
     // 同名 .gz 是本路由认可的另一份来源(见下面 acceptsGzip 分支),
