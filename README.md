@@ -67,16 +67,21 @@
 │   │   ├── photos.js / analysis.js / tryon.js        # 上传/面容/试穿
 │   │   ├── clothing.js / weather.js / horoscope.js   # 服装识别/天气/星座
 │   │   └── history.js
-│   ├── services/                     # 服务层(9 个)
+│   ├── services/                     # 服务层(14 个)
+│   ├── services/                     # 服务层(14 个)
 │   │   ├── recommendEngine.js        # 推荐引擎(规则匹配 + 旧版兼容)
 │   │   ├── ruleExplainer.js          # 把规则条件翻成中文(可解释性)
 │   │   ├── ruleFeedback.js           # 用户对规则的评好/差评计数
-│   │   ├── profileEnricher.js        # 档案增强(BMI/体型/腰臀比算法)
+│   │   ├── evidenceLevels.js         # 规则依据分档 A国标/B实证/C体系/D命理(判档唯一实现处)
+│   │   ├── colorMetrics.js           # 色度学(sRGB→Lab、CIEDE2000、色相角差、ITA°、上衣贴合分)
+│   │   ├── profileEnricher.js        # 档案增强(BMI/体型/腰臀比/腿身比/肩宽比;腰臀比分性别、腿身比按髋骨到脚跟 0.52/0.56 分档)
 │   │   ├── profileArchive.js         # 长期档案读写(身体/面容入库、算出的结论标签、计算前合并)
 │   │   ├── fullLookAdvisor.js        # 「今天这身」(三柜候选拼一套 + 冷暖皮定金属色)
+│   │   ├── baziWuxing.js             # 八字五行喜用神(命理口径,与 A/B 档分开表述)
 │   │   ├── dashscopeService.js       # 阿里云 DashScope(面容/试穿,无 Key 降级)
 │   │   ├── horoscopeService.js       # 星座运势(本地模板文案,LLM 链路未实现)
-│   │   └── weatherService.js         # 天气查询
+│   │   ├── weatherService.js         # 天气查询
+│   │   └── alipay.js / wechatPay.js  # 支付渠道SDK封装
 │   ├── middleware/                   # 中间件
 │   │   ├── auth.js / logger.js / upload.js
 │   │   ├── rateLimit.js              # 未被引用(限流实际用 npm 包 express-rate-limit,见 server.js)

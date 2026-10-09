@@ -7,7 +7,7 @@
    ══════════════════════════════════════════════════════════════ */
 
 /* ── 筛选事件绑定 ── */
-['filter-mode', 'filter-gender', 'filter-category', 'filter-scenario', 'filter-tag', 'filter-part', 'filter-enabled', 'filter-hit'].forEach(function(id) {
+['filter-mode', 'filter-gender', 'filter-category', 'filter-scenario', 'filter-tag', 'filter-part', 'filter-evidence', 'filter-enabled', 'filter-hit'].forEach(function(id) {
   document.getElementById(id).addEventListener('change', loadRules);
 });
 document.getElementById('rules-refresh').addEventListener('click', loadRules);
@@ -20,8 +20,17 @@ var FIELD_LABEL_MAP = {};
 var ACTION_LABEL_MAP = {};
 var TAG_LABEL_MAP = {};
 var PART_LABEL_MAP = {};
-/** 试算渲染时要跳过的非动作字段(引擎附带的分组元信息) */
-var PREVIEW_META_KEYS = { group_id: 1, group_name: 1, priority: 1, score: 1, explanation: 1 };
+/** 依据档位:标签/说明/下拉项都由 /api/rules/schema 下发,与 services/evidenceLevels.js 同源 */
+var EVIDENCE_LABEL_MAP = {};
+var EVIDENCE_NOTE_MAP = {};
+var EVIDENCE_OPTIONS = [];
+/** 徽章配色:A 硬指标绿、B 实证蓝、C 体系橙、D 命理灰紫、未标注灰 */
+var EVIDENCE_BADGE_CLASS = { A: 'badge-green', B: 'badge-accent', C: 'badge-orange', D: 'badge-purple' };
+/** 试算渲染时要跳过的非动作字段(引擎附带的分组元信息与派生分) */
+var PREVIEW_META_KEYS = {
+  group_id: 1, group_name: 1, priority: 1, score: 1, explanation: 1,
+  evidence_level: 1, color_fit: 1, body_fit: 1, feedback: 1, condition_details: 1,
+};
 
 function ensureSchema(done) {
   if (RULE_SCHEMA) { done(); return; }
@@ -37,6 +46,12 @@ function ensureSchema(done) {
     fillOptions('filter-scenario', RULE_SCHEMA.scenarios, '全部场景');
     fillOptions('filter-tag', RULE_SCHEMA.tags, '全部体系');
     fillOptions('filter-part', RULE_SCHEMA.parts, '全部部位/结论');
+    EVIDENCE_OPTIONS = RULE_SCHEMA.evidenceLevels || [];
+    EVIDENCE_OPTIONS.forEach(function (p) {
+      EVIDENCE_LABEL_MAP[p.value] = p.label;
+      EVIDENCE_NOTE_MAP[p.value] = p.note || '';
+    });
+    fillOptions('filter-evidence', EVIDENCE_OPTIONS, '全部依据档位');
     done();
   }).catch(function(e) {
     showToast('规则元数据加载失败: ' + e.message, 'error');
@@ -78,6 +93,7 @@ function loadRules() {
   var hit = document.getElementById('filter-hit').value;
   var tag = document.getElementById('filter-tag').value;
   var part = document.getElementById('filter-part').value;
+  var evidence = document.getElementById('filter-evidence').value;
 
   if (mode) params.push('mode=' + mode);
   if (gender) params.push('gender=' + encodeURIComponent(gender));
@@ -85,6 +101,7 @@ function loadRules() {
   if (scenario) params.push('scenario=' + encodeURIComponent(scenario));
   if (tag) params.push('tag=' + encodeURIComponent(tag));
   if (part) params.push('part=' + encodeURIComponent(part));
+  if (evidence) params.push('evidence=' + encodeURIComponent(evidence));
   if (enabled) params.push('enabled=' + enabled);
   if (hit) params.push('hit=' + encodeURIComponent(hit));
 
@@ -99,6 +116,16 @@ function loadRules() {
     container.className = '';
     container.innerHTML = '<div class="error-msg">加载失败: ' + escapeHtml(e.message) + '</div>';
   });
+}
+
+/* ── 依据档位徽章：库里存 A/B/C/D，NULL 显示"未标注" ── */
+function evidenceBadge(level) {
+  var v = level || 'none';
+  var label = EVIDENCE_LABEL_MAP[v] || (level ? level + ' 档' : '未标注');
+  var note = EVIDENCE_NOTE_MAP[v] || '未标注：后台手工建或前缀认不出来';
+  var cls = EVIDENCE_BADGE_CLASS[v] || '';
+  var style = cls ? '' : ' style="background:var(--bg);color:var(--muted);border:1px dashed var(--border);"';
+  return '<span class="badge ' + cls + '"' + style + ' title="' + escapeHtml(note) + '">依据 ' + escapeHtml(level || '未标注') + '</span>';
 }
 
 /* ── 渲染规则卡片 ── */
@@ -131,6 +158,7 @@ function renderRules(groups) {
       '<span class="rule-meta">' +
         '<span class="badge badge-accent">' + escapeHtml(CATEGORY_LABELS[g.category] || g.category) + '</span>' +
         (g.tag ? '<span class="badge badge-purple" title="' + escapeHtml(g.source_key || '') + '">' + escapeHtml(TAG_LABEL_MAP[g.tag] || g.tag) + '</span>' : '') +
+        evidenceBadge(g.evidence_level) +
         (g.gender ? '<span class="badge badge-purple">' + escapeHtml(g.gender) + '</span>' : '') +
         (g.scenario ? '<span class="badge badge-green">' + escapeHtml(g.scenario) + '</span>' : '') +
         '<span class="badge ' + (g.enabled ? 'badge-green' : 'badge-red') + '">' + (g.enabled ? '启用' : '停用') + '</span>' +
@@ -207,10 +235,18 @@ function buildRuleForm(rule) {
   html += '</div>';
 
   html += '<div class="form-row">';
-  html += '<div class="form-group"><label>推荐模式</label><select id="rf-mode"><option value="store"' + (g.mode === 'store' ? ' selected' : '') + '>门店模式</option><option value="personal"' + (g.mode === 'personal' ? ' selected' : '') + '>个人衣橱</option></select></div>';
+  // 三个选项都要给：库里 97 条种子规则的 mode 是 'all'(门店+个人通用)。
+  // 少了这一项，编辑这类规则时下拉会默默显示"门店模式"，一保存就把 all 降级成 store，
+  // 这条规则随即在个人模式下不再命中——改依据档位时最容易踩的坑。
+  html += '<div class="form-group"><label>推荐模式</label><select id="rf-mode"><option value="store"' + (g.mode === 'store' ? ' selected' : '') + '>门店模式</option><option value="personal"' + (g.mode === 'personal' ? ' selected' : '') + '>个人衣橱</option><option value="all"' + (g.mode === 'all' ? ' selected' : '') + '>门店+个人通用</option></select></div>';
   html += '<div class="form-group"><label>性别</label><select id="rf-gender"><option value="">不限</option><option value="女"' + (g.gender === '女' ? ' selected' : '') + '>女</option><option value="男"' + (g.gender === '男' ? ' selected' : '') + '>男</option></select></div>';
   html += '<div class="form-group"><label>推荐类别 <span class="req">*</span></label><select id="rf-category">' + optionsHtml(RULE_SCHEMA.categories, g.category, '请选择') + '</select></div>';
   html += '<div class="form-group"><label>场景</label><select id="rf-scenario">' + optionsHtml(RULE_SCHEMA.scenarios, g.scenario, '不限') + '</select></div>';
+  html += '</div>';
+
+  html += '<div class="form-row">';
+  html += '<div class="form-group"><label>依据档位</label><select id="rf-evidence">' + evidenceOptionsHtml(g.evidence_level) + '</select>' +
+    '<div style="font-size:11px;color:var(--muted);margin-top:4px;">只有 A/B 两档能对顾客说"科学依据";C 是行业体系、D 是命理,措辞要分开。留空=未标注,按 C 对待。</div></div>';
   html += '</div>';
 
   html += '<div class="form-group"><label>规则说明</label><textarea id="rf-description" placeholder="描述该规则的适用场景和推荐逻辑">' + escapeHtml(g.description || '') + '</textarea></div>';
@@ -253,6 +289,20 @@ function pairOptionsHtml(pairs, current) {
   return list.map(function(p) {
     return '<option value="' + escapeHtml(p.value) + '"' + (p.value === current ? ' selected' : '') + '>' + escapeHtml(p.label) + '</option>';
   }).join('');
+}
+
+/** 依据档位下拉:选项来自 /schema,'none'(未标注)在表单里用空值表示 */
+function evidenceOptionsHtml(current) {
+  var html = '<option value="">未标注</option>';
+  (EVIDENCE_OPTIONS || []).forEach(function(p) {
+    if (p.value === 'none') return;
+    html += '<option value="' + escapeHtml(p.value) + '"' + (current === p.value ? ' selected' : '') + '>' +
+      escapeHtml(p.label) + (p.count ? ' (' + p.count + ')' : '') + '</option>';
+  });
+  if (current && !['A', 'B', 'C', 'D'].includes(current)) {
+    html = '<option value="' + escapeHtml(current) + '" selected>' + escapeHtml(current + '（未收录）') + '</option>' + html;
+  }
+  return html;
 }
 
 /* 条件值在库里是 JSON 字符串({"skin_tone":"暖皮"}),编辑框和列表都要还原成人填的那个值 */
@@ -312,6 +362,7 @@ document.getElementById('rule-save-btn').addEventListener('click', function() {
     category: category,
     scenario: document.getElementById('rf-scenario').value || null,
     description: document.getElementById('rf-description').value.trim(),
+    evidence_level: document.getElementById('rf-evidence').value || null,
     priority: parseInt(document.getElementById('rf-priority').value) || 0,
     enabled: document.getElementById('rf-enabled').checked,
     conditions: [],
@@ -450,7 +501,7 @@ function runPreview() {
           html += '<div style="font-weight:600;color:var(--accent);margin-bottom:6px;">' + (CATEGORY_LABELS[cat] || cat) + ' (' + rec[cat].length + '条)</div>';
           rec[cat].forEach(function(item) {
             html += '<div style="font-size:12px;margin-bottom:4px;padding:4px 8px;background:var(--bg);border-radius:4px;">';
-            html += '<div style="color:var(--muted);margin-bottom:2px;">[' + escapeHtml(item.group_name || '') + ' · ' + (item.score || 0) + '分]</div>';
+            html += '<div style="color:var(--muted);margin-bottom:2px;">[' + escapeHtml(item.group_name || '') + ' · ' + (item.score || 0) + '分] ' + evidenceBadge(item.evidence_level) + '</div>';
             // 引擎把动作平铺在条目上(item.top_style),没有 item.actions 这个键
             Object.keys(item).forEach(function(k) {
               if (PREVIEW_META_KEYS[k]) return;
@@ -460,6 +511,23 @@ function runPreview() {
               html += '<span style="color:var(--orange);">' + escapeHtml(ACTION_LABEL_MAP[k] || k) + '：</span>' +
                 '<span style="color:var(--green);">' + escapeHtml(String(v)) + '</span><br>';
             });
+            // 色度学贴合分:只有上衣结论认得出色名且档案有肤色档时才有
+            if (item.color_fit) {
+              var f = item.color_fit;
+              html += '<span style="color:var(--orange);">上衣贴合度：</span>' +
+                '<span style="color:var(--green);">' + escapeHtml(f.score + '/100（' + f.top_label + ' ' + f.top_hex +
+                  '，与肤色 ΔE00 ' + f.deltaE00 + '、色相角差 ' + f.dHue + '°、明度差 ' + f.dL + '）') + '</span><br>';
+            }
+            // 身材贴合分:这件上衣的修形方向 vs 这个人的比例偏差(缺测的轴不进总分)
+            if (item.body_fit) {
+              var b = item.body_fit;
+              var ax = (b.axes || []).map(function (a) {
+                return a.name_cn + ' ' + Math.round(a.score * 100);
+              }).join(' / ');
+              html += '<span style="color:var(--orange);">上衣身材适配度：</span>' +
+                '<span style="color:var(--green);">' + escapeHtml(b.score + '/100（' + ax +
+                  '；未计入 ' + (b.axes_missing || []).length + ' 维）') + '</span><br>';
+            }
             html += '</div>';
           });
           html += '</div>';

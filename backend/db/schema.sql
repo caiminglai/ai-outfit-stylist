@@ -187,6 +187,10 @@ CREATE TABLE IF NOT EXISTS rule_groups (
   -- 规则种子的来源标记:增量应用只认这个 key 判断"库里有没有这条"。
   -- 后台手工建的规则留空(NULL),永远不会被种子覆盖;索引在 db/init.js 补列之后才建
   source_key TEXT,
+  -- 依据分档：A 国标/国际标准、B 学术实证、C 行业体系经验、D 命理。
+  -- NULL＝未标注，展示时一律按 C 对待；只有 A/B 允许对顾客出现"科学/量化"字样。
+  -- 判档规则的唯一实现处是 services/evidenceLevels.js（别在别处再写一份前缀表）
+  evidence_level TEXT,
   created_at TEXT DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS ix_rule_groups_mode_enabled_category
@@ -311,6 +315,11 @@ CREATE TABLE IF NOT EXISTS user_wardrobe (
   color TEXT,
   color_tags TEXT,
   pattern TEXT,
+  -- 上衣这两格只能由衣橱主人自己填（库里原来没有，缺测就不打分）：
+  -- fit_style 版型档（合体/宽松，对应 Sakata 2020 实测的两种剪裁走向）；
+  -- fabric_weight 面料厚薄（薄/中/厚，决定同一件上衣的体量感）。
+  fit_style TEXT,
+  fabric_weight TEXT,
   style_tags TEXT,
   season_tags TEXT,
   occasion_tags TEXT,

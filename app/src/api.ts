@@ -31,6 +31,7 @@ import type {
   RuleBrowseQuery,
   SeasonalReminder,
   ShoppingWishlistItem,
+  TopFitResult,
   TryonResult,
   WardrobeGapResult,
   WardrobeItem,
@@ -518,6 +519,16 @@ export async function suggestPurchases(profile?: CustomerProfile): Promise<Shopp
     method: 'POST',
     headers: headers(),
     body: JSON.stringify({ profile: profile || {} }),
+  })
+  return unwrap(res)
+}
+
+/** 衣橱里的上衣按这个人的身材打分排序（不看脸；缺的尺寸不计入） */
+export async function rankTopsByBody(profile: CustomerProfile): Promise<TopFitResult> {
+  const res = await fetchWithTimeout(`${BASE}/wardrobe/top-fit`, {
+    method: 'POST',
+    headers: headers(),
+    body: JSON.stringify({ profile }),
   })
   return unwrap(res)
 }

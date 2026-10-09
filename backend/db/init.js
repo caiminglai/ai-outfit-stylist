@@ -108,6 +108,8 @@ const MISSING_COLUMNS = [
   ['rule_groups', 'feedback_up', 'INTEGER'],
   ['rule_groups', 'feedback_down', 'INTEGER'],
   ['rule_groups', 'source_key', 'TEXT'],
+  // 依据分档(判档规则见 services/evidenceLevels.js)；不设 DEFAULT，NULL 就是"未标注"
+  ['rule_groups', 'evidence_level', 'TEXT'],
   ['recommendation_logs', 'input_snapshot', 'TEXT'],
   ['recommendation_logs', 'user_id', 'INTEGER'],
   ['recommendation_logs', 'store_id', 'INTEGER'],
@@ -117,6 +119,9 @@ const MISSING_COLUMNS = [
   ['body_metrics', 'frame_size', 'TEXT'],
   ['body_metrics', 'line_quality', 'TEXT'],
   ['face_profiles', 'color_chroma', 'TEXT'],
+  // 衣橱单品的版型与面料厚薄:上衣打分要吃的两格,老库不补列就只能判色名判不了剪裁
+  ['user_wardrobe', 'fit_style', 'TEXT'],
+  ['user_wardrobe', 'fabric_weight', 'TEXT'],
   // 八字五行(第二条判定依据)的输入;不填则整条依据缺席
   ['body_metrics', 'birth_date', 'TEXT'],
   ['body_metrics', 'birth_hour', 'TEXT'],

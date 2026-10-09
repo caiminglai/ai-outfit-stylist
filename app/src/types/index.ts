@@ -36,6 +36,9 @@ export interface CustomerProfile {
   hip?: number
   /** 腿长(cm,选填):档案表列名 leg_length_cm */
   leg_length?: number
+  /** 肩宽(cm,选填):档案表列名 shoulder_width_cm。量两侧肩峰点之间的直线距离,不量衣服肩线。
+   *  没有这个数,肩宽比(21~24% 档位)和"倒三角 vs 苹果"都判不出来,系统不再用 38/162 兜底编值。 */
+  shoulder?: number
   /** 出生日期(选填,YYYY-MM-DD):八字五行的输入;空串=主动撤销这条依据(undefined 序列化后会整个消失,带不了这个信号) */
   birth_date?: string
   /** 出生时辰(选填):档位取中点、不做真太阳时校正;选"不清楚"降级为三柱;空串=主动撤销 */
@@ -119,6 +122,90 @@ export interface RecommendationExplanation {
   匹配分: number
   优先级: number
   规则说明: string
+  /** 依据档位一句话标签,如 'B 学术实证';未标注时后端给 'C 行业体系/经验' 口径 */
+  依据档位?: string
+  /** 该档位的判据说明(仅后台/规则浏览器接口 explainGroup 会给) */
+  依据说明?: string
+}
+
+/**
+ * 上衣 × 肤色 的色度学贴合分(后端 services/colorMetrics.js 算)
+ * 换算与色差是 A 档(GB/T 7921 / ISO-CIE 11664),色相与明度效应是 B 档(两篇 DOI),
+ * 三项合成的权重是 C 档手拍值 —— 所以这个分数只能讲"相对差异",不能讲"科学评分"。
+ */
+export interface ColorFitScore {
+  /** 0~100 合成分 */
+  score: number
+  /** 上衣代表色,已归一成大写 */
+  top_hex: string
+  /** 从结论文本里认出的色名,如 '雾霾蓝' */
+  top_label: string
+  /** 与肤色的 CIEDE2000 色差 */
+  deltaE00: number
+  /** 色相对比角 0~180,越小越同族 */
+  dHue: number
+  /** 色相对比分量 0.5~1.0 = 0.5 + dHue/360;上衣衬脸按"对比越大越被偏好"给分(10-08 改) */
+  hueContrast?: number
+  /** 上衣明度 - 肤色明度(负=上衣更深,越显白) */
+  dL: number
+  /** 显白项 0~100 */
+  brighten: number
+  /** 上衣彩度 C* */
+  chroma: number
+  /** 依据档位说明 */
+  evidence: string
+}
+
+/**
+ * 身材适配分的单根轴(后端 services/topFitBody.js,六轴之一)
+ * 缺席的轴不会出现在 axes 里(缺测就不算这一维),所以 score 恒有值且 0~1。
+ */
+export interface BodyFitAxis {
+  key: 'shoulder' | 'waist' | 'ease' | 'length' | 'volume' | 'pattern'
+  /** 轴的中文名,如 '松量' */
+  name_cn: string
+  /** 0~1:'上衣往哪修'与'这个人的比例偏差'对得上的程度 */
+  score: number
+  /** 手拍权重(标定中);总分按在场轴的权重归一化 */
+  weight: number
+  /** 这个人这一维的实测数或想往哪修(+加/−收) */
+  person: number | string | null
+  /** 这件上衣这一维的修形量;松量轴给的是松量代理值 cm */
+  garment: number | null
+  /** 这一维的依据口径(B 方向 + C 刻度) */
+  tier: string
+  /** 被闸门关掉时的说明(如条纹轴在 BMI≥25 时) */
+  gated?: string
+}
+
+/** 上衣那一侧被认出来的"修形标签"(describeTop 的输出；null＝这一维没认出来，不算分) */
+export interface TopDescriptor {
+  label: string
+  source: 'wardrobe' | 'text'
+  text?: string
+  hex: string | null
+  fit_style: string | null
+  fabric_weight: string | null
+  /** 松量代理值 cm：衣柜的版型档优先，其次才是名称里的线索 */
+  ease: number | null
+  shoulder: number | null
+  waist: number | null
+  length: number | null
+  volume: number | null
+  pattern: number | null
+  /** 认到了哪些线索(给用户看清分数不是凭空来的) */
+  signals: string[]
+}
+
+/** 上衣 × 身体 的按人适配分(不看脸;脸侧那半在 ColorFitScore) */
+export interface BodyFitScore {
+  /** 0~100 合成分,只由在场的几根轴加权得出 */
+  score: number
+  axes: BodyFitAxis[]
+  axes_present: string[]
+  axes_missing: string[]
+  top: TopDescriptor
+  evidence: string
 }
 
 /** 规则引擎推荐结果(单条) */
@@ -129,8 +216,14 @@ export interface RuleRecommendationItem {
   score: number
   /** 反馈对这条规则得分的加减量(好评为正、不准为负,最多 ±3) */
   feedback?: number
+  /** 依据档位:A 国标/国际标准 B 学术实证 C 行业体系 D 命理;null=未标注 */
+  evidence_level?: 'A' | 'B' | 'C' | 'D' | null
   /** 可解释性说明:这条推荐命中了哪些规则条件(中文人话) */
   explanation?: RecommendationExplanation
+  /** 色度学贴合分:仅上衣结论认得出色名且档案有肤色档时才有 */
+  color_fit?: ColorFitScore
+  /** 身材贴合分:仅上衣认得出修形信号且档案量到相关尺寸时才有 */
+  body_fit?: BodyFitScore
   [key: string]: unknown
 }
 
@@ -157,6 +250,10 @@ export interface RuleBrowseItem {
   规则说明: string
   /** 优先级,数字越大越优先 */
   优先级: number
+  /** 依据档位一句话标签,如 'B 学术实证' */
+  依据档位?: string
+  /** 该档位的判据说明 */
+  依据说明?: string
 }
 
 /** 规则浏览器查询参数 */
@@ -172,6 +269,96 @@ export interface RuleBrowseQuery {
 }
 
 /** 完整推荐结果 */
+/**
+ * 上衣处方：只按身材 + 肤色出"上衣该选成什么样"，不读衣橱、不给购物建议。
+ * 后端 services/topFromBody.js 的返回；轴只在"这个人量得出"时出现，缺的进 missing。
+ */
+export interface TopSpecAxis {
+  key: 'shoulder' | 'waist' | 'ease' | 'length' | 'volume' | 'pattern'
+  name_cn: string
+  /** 该轴的偏差方向；ease 轴没有 want，用 side='window' 表达 */
+  want: number | null
+  side: number | 'window'
+  /** 档位串：方向哪一档 + 刻度哪一档，全部要显示出来 */
+  tier: string
+  label: string
+  prefer: string[]
+  avoid: string[]
+  /** 这条是按哪个实测数推出来的 */
+  based_on?: string
+  gated?: string
+}
+
+export interface TopSpecColorRow {
+  name: string
+  hex: string
+  score: number
+  deltaE00?: number
+  dHue?: number
+  dL?: number
+  /** 这个分是两个肤色口径里更低的那个，记下短板口径（'深浅' | '冷暖'） */
+  limit_field?: string
+}
+
+export interface TopSpecColour {
+  present: boolean
+  reason?: string
+  skin_label?: string
+  skin_lab?: { L: number; a: number; b: number }
+  /** 认出来的肤色口径数（1=只有深浅或只有冷暖；2=两个都算取低分） */
+  anchor_count?: number
+  scoring?: 'min' | 'single'
+  tier?: string
+  prefer?: TopSpecColorRow[]
+  avoid?: TopSpecColorRow[]
+  note?: string
+}
+
+/** 第 0 层·合身：GB/T 1335 号型 + 四道部位判据（口径见 docs/依据/09） */
+export interface TopSpecFitCheck {
+  key: 'bust_ease' | 'shoulder_seam' | 'body_length' | 'sleeve'
+  name_cn: string
+  /** 本层没有"你这件不合格"——项目里没有成衣实测尺寸通道 */
+  verdict: '可给目标值' | '判不了' | '不适用'
+  target: Record<string, number | number[] | null> | null
+  why: string
+  tier: string
+  missing_input: string | null
+}
+
+export interface TopSpecFit {
+  present: boolean
+  layer_cn?: string
+  size_label?: string
+  size?: { 号: number; 型: number; 体型: string | null; 体型中文: string | null; 体型档: number[] | null }
+  size_scope?: 'standard' | 'near'
+  size_scope_note?: string | null
+  drop_cm?: number | null
+  drop_reason?: string | null
+  target_finished_bust?: number[] | null
+  ease_window_cm?: number[] | null
+  checks?: TopSpecFitCheck[]
+  /** present:false 时只有这三样：挡在门口的话、缺哪个数、怎么量 */
+  blocking?: string[]
+  missing_input?: string[]
+  measure_guide?: string[]
+  note: string
+  evidence: string
+}
+
+export interface TopSpec {
+  inputs: Record<string, unknown>
+  /** 三层固定顺序：合身 → 修形 → 颜色，两段结论可以相反，不合并成一个分 */
+  fit: TopSpecFit
+  axes: TopSpecAxis[]
+  colour: TopSpecColour
+  missing: Array<{ key: string; name_cn: string; reason: string }>
+  note: string
+  evidence: string
+  layer_order?: string[]
+  axis_tiers?: Record<string, string>
+}
+
 export interface EngineRecommendation {
   穿搭: RuleRecommendationItem[]
   妆容: RuleRecommendationItem[]
@@ -197,6 +384,8 @@ export interface EngineRecommendation {
   }
   wardrobe_gaps?: WardrobeGapResult
   wishlist?: ShoppingWishlistItem[]
+  /** 上衣处方（身材+肤色）；六轴一个都算不出且肤色也认不出时整块缺席 */
+  top_spec?: TopSpec
 }
 
 /** 八字五行分析(排盘来自 vendor/lunar,喜用神由本仓库算法推算) */
@@ -290,12 +479,62 @@ export interface WardrobeItem {
   color_tags?: string[]
   season_tags?: string[]
   occasion_tags?: string[]
+  /** 花纹：条纹方向那一维靠它＋名称文本认定，认不出就不算这一维 */
+  pattern?: string
+  /** 版型（选填）：上衣体量轴的输入之一，值域与后端 FIT_STYLE_VALUES 一致。不填＝没量，不参与打分 */
+  fit_style?: '合体' | '宽松'
+  /** 面料厚薄（选填）：决定同一件上衣的体量感，值域与后端 FABRIC_WEIGHT_VALUES 一致 */
+  fabric_weight?: '薄' | '中' | '厚'
   body_type_fit?: string[]
   condition?: string
   is_favorite?: boolean
   notes?: string
   created_at?: string
   updated_at?: string
+}
+
+/**
+ * 这个人的"身材偏差向量"（后端 bodyDeviation）。
+ * 数字项 null＝没量；want 项 null＝这一维不参与打分（缺测不出分，权重按在场轴归一）
+ * want 的符号约定：+ 想往外加/强调，− 想往里收，0 这一维不推拉
+ */
+export interface BodyDeviation {
+  bmi?: number
+  shoulder_ratio?: number
+  leg_ratio?: number
+  bust_waist_diff?: number
+  hip_waist_diff?: number
+  bust_hip_diff?: number
+  /** 腰沟 = min(胸腰差, 臀腰差)；胸围没量时只用臀腰差（后端 notes 会标 partial） */
+  waist_groove_cm?: number
+  wh_ratio?: number
+  /** 按 BMI 定的松量合适区间（Liu 2006 方向 + Sakata 2020 区间先验） */
+  ease_window_cm?: [number, number] | number[]
+  want: {
+    shoulder: number | null
+    waist: number | null
+    length: number | null
+    volume: number | null
+    pattern: number | null
+  }
+  notes: string[]
+}
+
+/** 衣橱上衣按身材打分的结果（POST /api/wardrobe/top-fit） */
+export interface TopFitResult {
+  person_deviation: BodyDeviation
+  ranked: Array<{
+    id?: number
+    name: string
+    score: number
+    axes: BodyFitAxis[]
+    axes_present: string[]
+    axes_missing: string[]
+    top: TopDescriptor
+  }>
+  unscored: Array<{ id?: number; name: string; reason: string }>
+  top_count: number
+  note: string
 }
 
 /** 衣橱搭配组合 */

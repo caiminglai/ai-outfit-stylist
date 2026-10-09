@@ -266,6 +266,7 @@ export default function PersonalProfileForm({
     bust: initial?.bust,
     waist: initial?.waist,
     hip: initial?.hip,
+    shoulder: initial?.shoulder,
     leg_length: initial?.leg_length,
     skin_tone: initial?.skin_tone,
     skin_tone_detail: initial?.skin_tone_detail,
@@ -344,7 +345,7 @@ export default function PersonalProfileForm({
     )
   }
 
-  type NumberField = 'height' | 'weight' | 'bust' | 'waist' | 'hip' | 'leg_length'
+  type NumberField = 'height' | 'weight' | 'bust' | 'waist' | 'hip' | 'leg_length' | 'shoulder'
 
   function renderNumberInput(key: NumberField, label: string, placeholder: string) {
     return (
@@ -495,6 +496,16 @@ export default function PersonalProfileForm({
           {renderNumberInput('waist', '腰围', 'cm')}
           {renderNumberInput('hip', '臀围', 'cm')}
           {renderNumberInput('leg_length', '腿长', 'cm')}
+        </div>
+
+        <div className="text-xs mb-2 mt-4" style={{ color: 'var(--muted)' }}>
+          肩宽（选填，量两侧肩峰点之间的直线距离，不是衣服肩线）。
+          <span style={{ color: 'var(--text)' }}>不填</span>
+          ：肩宽比与「倒三角 / 苹果型」这两条判不了，系统不会替你猜一个数。
+        </div>
+        <div className="flex gap-3">
+          {renderNumberInput('shoulder', '肩宽', 'cm，如 39')}
+          <div className="flex-1 min-w-0" />
         </div>
       </section>
 

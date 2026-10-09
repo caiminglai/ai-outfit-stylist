@@ -12,6 +12,13 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { browseRules } from '../api'
 import type { RuleBrowseItem, RuleBrowseQuery } from '../types'
+import EvidenceTag, { type EvidenceLevel } from './recommend/EvidenceTag'
+
+/** 后端下发的依据档位是 'B 学术实证' 这样的一句话标签,取首字母当档位;其余按未标注处理 */
+function levelOfLabel(text?: string): EvidenceLevel {
+  const head = (text || '').trim().charAt(0)
+  return head === 'A' || head === 'B' || head === 'C' || head === 'D' ? head : null
+}
 
 interface RuleBrowserProps {
   /** 初始模式:store(门店)/personal(个人),默认 store */
@@ -255,6 +262,7 @@ function RuleCard({ rule, theme, compact }: RuleCardProps) {
         <div className="text-sm font-medium flex-1" style={{ color: 'var(--text)' }}>
           {rule.规则名称 || `规则 #${rule.id}`}
         </div>
+        <EvidenceTag level={levelOfLabel(rule.依据档位)} />
         {isHighPriority && (
           <span
             className="pill-tag text-[10px] flex-shrink-0"
@@ -311,6 +319,12 @@ function RuleCard({ rule, theme, compact }: RuleCardProps) {
           style={{ color: 'var(--muted)', borderTop: '1px dashed var(--line)' }}
         >
           📝 {rule.规则说明}
+        </div>
+      )}
+      {/* 依据档位说明:让顾客知道这条是国标/实证撑的,还是行业体系或命理 */}
+      {!compact && rule.依据说明 && (
+        <div className="text-[11px] mt-1" style={{ color: 'var(--muted)', lineHeight: 1.6 }}>
+          {rule.依据档位} —— {rule.依据说明}
         </div>
       )}
     </div>

@@ -11,9 +11,11 @@ import { postRuleFeedback } from '../api'
 import InventoryCard from './InventoryCard'
 import AlgorithmAnalysisCard from './recommend/AlgorithmAnalysis'
 import EnhancedTextCard from './recommend/EnhancedTextCard'
+import EvidenceTag from './recommend/EvidenceTag'
 import HoroscopeCard from './recommend/HoroscopeCard'
 import { FIELD_LABELS, HIDDEN_FIELDS, TAB_LABEL, TABS } from './recommend/RecommendTab'
 import TryonCard from './recommend/TryonCard'
+import TopSpecCard from './recommend/TopSpecCard'
 import WeatherCard from './recommend/WeatherCard'
 
 interface RecommendationReportProps {
@@ -131,6 +133,10 @@ export default function RecommendationReport({
 
       {/* 推荐内容 */}
       <div className="space-y-2.5">
+        {/* 上衣处方卡：只按身材+肤色出规格，与规则结论、衣橱都无关，所以规则没命中时也要在 */}
+        {activeTab === '穿搭' && recommendation.top_spec && (
+          <TopSpecCard spec={recommendation.top_spec} />
+        )}
         {items.length === 0 ? (
           <div className="text-center py-6 text-sm" style={{ color: 'var(--muted)' }}>
             暂无{TAB_LABEL(activeTab)}推荐数据,请补充更多个人信息
@@ -156,6 +162,8 @@ export default function RecommendationReport({
                         `（含反馈 ${item.feedback! > 0 ? '+' : ''}${item.feedback}）`}
                     </span>
                   )}
+                  {/* 依据档位:这条建议是国标/实证/体系/命理哪一级撑起来的 */}
+                  <EvidenceTag level={item.evidence_level} />
                 </div>
               )}
               <div className="space-y-1.5">
@@ -182,6 +190,50 @@ export default function RecommendationReport({
                     )
                   })}
               </div>
+              {/* 上衣贴合度:色度学量出来的"上衣代表色 vs 肤色锚点"相对差异,不是审美评分 */}
+              {item.color_fit && (
+                <div
+                  className="mt-2 flex flex-wrap items-center gap-2 text-xs"
+                  style={{ color: 'var(--muted)' }}
+                >
+                  <span
+                    className="inline-block"
+                    aria-hidden
+                    style={{
+                      width: 14,
+                      height: 14,
+                      borderRadius: 3,
+                      background: item.color_fit.top_hex,
+                      border: '1px solid var(--line)',
+                    }}
+                  />
+                  <span>
+                    上衣贴合度 {item.color_fit.score}/100 · {item.color_fit.top_label}
+                    （与肤色色差 ΔE00 {item.color_fit.deltaE00}、色相角差 {item.color_fit.dHue}°、明度差{' '}
+                    {item.color_fit.dL}）
+                  </span>
+                </div>
+              )}
+              {/* 身材贴合度:这件上衣的修形方向与这个人的比例偏差对不对得上;缺的尺寸不计入 */}
+              {item.body_fit && (
+                <div
+                  className="mt-2 flex flex-wrap items-center gap-2 text-xs"
+                  style={{ color: 'var(--muted)' }}
+                >
+                  <span>
+                    上衣身材适配度 {item.body_fit.score}/100（
+                    {item.body_fit.axes
+                      .map((a) => `${a.name_cn} ${Math.round(a.score * 100)}`)
+                      .join(' / ')}
+                    ）
+                    {item.body_fit.axes_missing.length > 0 && (
+                      <span style={{ color: 'var(--muted)' }}>
+                        {item.body_fit.axes_missing.length} 维没量到 ⇒ 没计入
+                      </span>
+                    )}
+                  </span>
+                </div>
+              )}
               {item.explanation && item.explanation.命中条件.length > 0 && (
                 <div className="mt-2 pt-2" style={{ borderTop: '1px dashed var(--line)' }}>
                   <button
@@ -212,6 +264,10 @@ export default function RecommendationReport({
                       ))}
                       <div className="mt-1" style={{ fontSize: '11px' }}>
                         匹配分: {item.explanation.匹配分} · 优先级: {item.explanation.优先级}
+                      </div>
+                      {/* 依据档位说明:只有 A/B 才够称"有量化依据",C/D 要说清是体系或命理 */}
+                      <div className="mt-1">
+                        <EvidenceTag level={item.evidence_level} withNote />
                       </div>
                     </div>
                   )}

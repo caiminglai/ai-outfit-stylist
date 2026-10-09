@@ -15,6 +15,9 @@ const {
   computeColorMatch,
 } = require('./profileEnricher')
 const { explainMatchedRecommendation, CATEGORY_CN_TO_EN } = require('./ruleExplainer')
+const { colorFit } = require('./colorMetrics')
+const { topFitBody, bodyDeviation } = require('./topFitBody')
+const { topSpec } = require('./topFromBody')
 
 /**
  * 获取穿搭推荐
@@ -385,6 +388,8 @@ function matchRules(profile, mode = 'store', category = null, incrementHitCount 
         priority: group.priority || 0,
         score: score + feedback,
         feedback,
+        // 依据分档 A/B/C/D；NULL＝未标注，展示端按 C 对待（见 services/evidenceLevels.js）
+        evidence_level: group.evidence_level ?? null,
         actions,
         // 命中条件详情(含每个条件的命中状态,供生成可解释性说明)
         condition_details: conditionDetails,
@@ -419,6 +424,8 @@ function matchRules(profile, mode = 'store', category = null, incrementHitCount 
 function buildRecommendation(profile, mode = 'store', incrementHitCount = true) {
   // 1. 画像增强:计算 BMI、体型、腰臀比、肤色匹配、脸型建议等
   const enriched = enrichProfile(profile)
+  // 身材偏差向量整次推荐只算一次(topFitBody 只吃连续量,不吃 body_type 这类离散标签)
+  const bodyDev = bodyDeviation(enriched)
 
   const result = {
     穿搭: [],
@@ -463,6 +470,21 @@ function buildRecommendation(profile, mode = 'store', incrementHitCount = true) 
   if (enriched.kibbe_type) {
     result._computed.kibbe_type = enriched.kibbe_type
   }
+  // 上衣身材分那一维的原始材料:这个人的实测数 + 每维想往哪修(+加 / −收,null=没量就不算)
+  // 一维都拉不出来时不写这个键 ⇒ 前端显示"还打不了分",而不是拿 0 分当结论
+  const hasDeviation =
+    Object.values(bodyDev.want).some((v) => v != null) || bodyDev.ease_window != null
+  if (hasDeviation) {
+    const deviation = { want: bodyDev.want, notes: bodyDev.notes }
+    for (const [k, v] of Object.entries(bodyDev.measure)) if (v != null) deviation[k] = v
+    if (bodyDev.ease_window) deviation.ease_window_cm = bodyDev.ease_window
+    if (enriched.wh_ratio) deviation.wh_ratio = enriched.wh_ratio
+    result._computed.body_deviation = deviation
+  }
+  // 上衣处方:不读衣橱、不给购物建议,只按这个人的身材与肤色出"该选成什么样"
+  // 六轴一个都算不出且肤色也认不出 ⇒ 这个键整块缺席(缺测不出处方)
+  const spec = topSpec(enriched)
+  if (spec) result.top_spec = spec
   // 八字五行(第二条判定依据);没填出生日期时整块缺席
   if (enriched.bazi) {
     result._computed.bazi = enriched.bazi
@@ -597,10 +619,26 @@ function buildRecommendation(profile, mode = 'store', incrementHitCount = true) 
         priority: m.priority,
         score: m.score,
         feedback: m.feedback,
+        evidence_level: m.evidence_level ?? null,
       }
       Object.assign(recommendation, m.actions)
       // 注入可解释性说明:这条推荐命中了哪些条件(中文人话,供前端展示"为什么推荐")
       recommendation.explanation = explainMatchedRecommendation(m, m.condition_details)
+      // 色度学贴合分:上衣结论里认得出色名 + 肤色档能给 Lab 锚点,两个都有才出分;
+      // 缺任一侧就不写这个字段(空柜不编造)。权重是 C 档手拍值,见 colorMetrics.js 文件头。
+      // 上衣字段在规则动作里叫 top_style,兜底硬编码那条叫 outfit_top,两个都认。
+      const topText = recommendation.top_style || recommendation.outfit_top
+      const fit = colorFit(enriched.skin_tone_detail || enriched.skin_tone, topText)
+      if (fit) recommendation.color_fit = fit
+      // 身材贴合分:这一维不看脸,量的是"这件上衣往哪修"和"这个人的比例偏差"对不对得上。
+      // 一维都凑不齐(没量尺寸 或 句子认不出任何版型/肩线/长短/色信号)就不写这个字段。
+      const bf = topFitBody(null, topText, bodyDev)
+      if (bf) {
+        // person 里那份是这个人自己的数,整份报告只留一份(见 _computed.body_deviation),
+        // 每条推荐再带一遍会让 payload 白白翻一倍
+        delete bf.person
+        recommendation.body_fit = bf
+      }
       result[cat].push(recommendation)
     }
   }
@@ -614,19 +652,37 @@ function buildRecommendation(profile, mode = 'store', incrementHitCount = true) 
       scenario,
     )
     for (const item of fallback) {
-      result['穿搭'].push({
+      const entry = {
         group_name: '默认推荐',
         priority: 0,
         score: 0,
+        evidence_level: null, // 兜底条目没走规则库,档位留空(后台与前端显示"未标注")
         outfit_top: item.top_style,
         outfit_bottom: item.bottom_style,
         outfit_color: item.color_combo,
         outfit_reason: item.reason,
-      })
+      }
+      // 兜底那几条同样是上衣结论,身材这一维照算(色彩那一维按原口径不算:兜底没有肤色依据)
+      const bf = topFitBody(null, entry.outfit_top, bodyDev)
+      if (bf) {
+        delete bf.person
+        entry.body_fit = bf
+      }
+      result['穿搭'].push(entry)
     }
   }
 
   return result
 }
 
-module.exports = { getRecommendations, buildRecommendation }
+/**
+ * 单独取这个人的"身材偏差向量"（供衣橱按身材排序等入口复用，与 buildRecommendation 里同一套口径）。
+ * 只读 profile、不写库；没量到任何尺寸 ⇒ want 全为 null，调用方据此判"这个人还打不了分"。
+ * @param {object} profile
+ * @returns {{measure:object, want:object, ease_window:number[]|null, notes:string[]}}
+ */
+function recommendationBodyDeviation(profile) {
+  return bodyDeviation(enrichProfile(profile || {}))
+}
+
+module.exports = { getRecommendations, buildRecommendation, recommendationBodyDeviation }

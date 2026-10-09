@@ -426,7 +426,7 @@
       "scenario": null,
       "priority": 18,
       "enabled": 1,
-      "description": "视觉比例:腿身比按腿长/身高算,低于 47% 判偏短。改比例靠高腰线与同色延伸,不需要减重。",
+      "description": "视觉比例:腿身比=腿长(髋骨到脚跟)/身高,低于 52% 判偏短。国标 GB/T 10000 的成年人中位数约 54%,52% 是产品切点而非国标结论。改比例靠高腰线与同色延伸,不需要减重。",
       "conditions": [{ "field": "leg_proportion", "operator": "eq", "value": "偏短", "weight": 3 }],
       "actions": [
         { "type": "top_style", "content": "上衣束进腰头(至少塞前面一角),长度不过胯" },
@@ -445,7 +445,7 @@
       "scenario": null,
       "priority": 18,
       "enabled": 1,
-      "description": "视觉比例:腿长/身高在 47%~52% 判标准。",
+      "description": "视觉比例:腿长(髋骨到脚跟)/身高在 52%~56% 判标准,国标中位数约 54% 正落在这档。",
       "conditions": [{ "field": "leg_proportion", "operator": "eq", "value": "标准", "weight": 3 }],
       "actions": [
         { "type": "top_style", "content": "常规收腰即可,高腰中腰都不出错" },
@@ -462,7 +462,7 @@
       "scenario": null,
       "priority": 18,
       "enabled": 1,
-      "description": "视觉比例:腿长/身高高于 52% 判偏长,这时要把长度还给上身。",
+      "description": "视觉比例:腿长(髋骨到脚跟)/身高高于 56% 判偏长,这时要把长度还给上身。",
       "conditions": [{ "field": "leg_proportion", "operator": "eq", "value": "偏长", "weight": 3 }],
       "actions": [
         { "type": "top_style", "content": "中长上衣、落腰设计或腰线外移的款式" },

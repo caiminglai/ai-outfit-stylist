@@ -19,6 +19,7 @@
 const fs = require('fs')
 const path = require('path')
 const { FIELD_LABELS, ACTION_LABELS } = require('../services/ruleExplainer')
+const { evidenceOf } = require('../services/evidenceLevels')
 
 const SEED_DIR = path.join(__dirname, 'seed')
 const SEED_FILE_RE = /^rules-.*\.json$/
@@ -118,9 +119,9 @@ function applyRuleSeeds(db) {
   const findKey = db.prepare('SELECT id FROM rule_groups WHERE source_key = ?')
   const insertGroup = db.prepare(`
     INSERT INTO rule_groups (name, mode, gender, category, scenario, region, age_range,
-                             description, priority, enabled, source_key)
+                             description, priority, enabled, source_key, evidence_level)
     VALUES (@name, @mode, @gender, @category, @scenario, @region, @age_range,
-            @description, @priority, @enabled, @source_key)
+            @description, @priority, @enabled, @source_key, @evidence_level)
   `)
   const insertCondition = db.prepare(
     'INSERT INTO rule_conditions (group_id, field, operator, value, weight) VALUES (?, ?, ?, ?, ?)',
@@ -185,6 +186,7 @@ function applyRuleSeeds(db) {
             priority: Number.isFinite(rule.priority) ? rule.priority : 5,
             enabled: rule.enabled === 0 ? 0 : 1,
             source_key: String(rule.key).trim(),
+            evidence_level: evidenceOf(rule.key) || null,
           })
           const groupId = info.lastInsertRowid
           for (const cond of rule.conditions) {
@@ -208,6 +210,26 @@ function applyRuleSeeds(db) {
         stat.rejected.push(`${label}: 写入失败 ${err.message}`)
       }
     }
+  }
+
+  // 依据分档回填：只补"有 source_key 但还没档位"的老种子行（本次加列之前插进去的那批）。
+  // 后台手工建的规则 source_key 为 NULL，永远不会被这里碰到；已在后台改过档位的也不覆盖。
+  try {
+    const pending = db
+      .prepare('SELECT id, source_key FROM rule_groups WHERE evidence_level IS NULL AND source_key IS NOT NULL')
+      .all()
+    const setLevel = db.prepare('UPDATE rule_groups SET evidence_level = ? WHERE id = ?')
+    let filled = 0
+    for (const row of pending) {
+      const level = evidenceOf(row.source_key)
+      if (!level) continue
+      setLevel.run(level, row.id)
+      filled++
+    }
+    if (filled) stat.evidence_backfilled = filled
+  } catch (err) {
+    // 老库还没补列（db/init.js 的 MISSING_COLUMNS 没跑）时不该整体炸掉启动
+    stat.rejected.push(`依据分档回填失败: ${err.message}`)
   }
 
   return stat

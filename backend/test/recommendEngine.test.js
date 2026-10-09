@@ -220,3 +220,180 @@ test('buildRecommendation: 场合写成"派对"的老规则在聚会场景能命
     `scenario=聚会 应命中"派对"那组妆容,实际: ${makeupNames.join(' / ')}`,
   )
 })
+
+// ============================================================
+// 色度学贴合分 + 依据档位透传(2026-10-06 接入)
+// 断言的都是现场实测值:buildRecommendation 的入参与输出形状
+// ============================================================
+const FIT_PROFILE = {
+  gender: '女',
+  ageGroup: '26-35',
+  region: 'north',
+  scene: 'daily',
+  skin_tone: '白皙',
+  scenario: '通勤',
+  height: 165,
+  weight: 55,
+  waist: 62,
+  hip: 92,
+  leg_length: 90, // 90/165=0.545,新口径(髋骨到脚跟)判标准
+  shoulder: 39,
+}
+
+test('buildRecommendation: 上衣认得出色名+有肤色档 ⇒ 给出 color_fit 且各项有界', () => {
+  const r = buildRecommendation(FIT_PROFILE, 'personal', false)
+  const list = r['穿搭'] || []
+  const fits = list.filter((e) => e.color_fit)
+  assert.ok(fits.length >= 1, `至少一条上衣结论该算出贴合分,实际 ${fits.length} 条`)
+  fits.forEach((e) => {
+    const f = e.color_fit
+    assert.ok(Number.isFinite(f.score) && f.score >= 0 && f.score <= 100, `score 越界: ${f.score}`)
+    ;[f.deltaE00, f.dHue, f.hueContrast, f.dL, f.brighten, f.chroma].forEach((v, i) => {
+      assert.ok(Number.isFinite(v), `第 ${i} 项非有限数: ${v}`)
+    })
+    assert.match(f.top_hex, /^#[0-9A-F]{6}$/, `hex 应归一成大写: ${f.top_hex}`)
+    assert.ok(f.evidence.includes('GB/T 7921'), 'evidence 要写清依据档位')
+  })
+})
+
+test('buildRecommendation: 没有肤色档 ⇒ 一律不给 color_fit(空柜不编造)', () => {
+  const p = { ...FIT_PROFILE }
+  delete p.skin_tone
+  const r = buildRecommendation(p, 'personal', false)
+  const withFit = (r['穿搭'] || []).filter((e) => e.color_fit)
+  assert.strictEqual(withFit.length, 0, `缺肤色还出分就是编造: ${JSON.stringify(withFit.map((e) => e.group_name))}`)
+})
+
+// ============================================================
+// 身材贴合分(2026-10-09 接入 services/topFitBody.js;这一维不看脸)
+// ============================================================
+
+test('buildRecommendation: 上衣结论带 body_fit 时每根轴都有界、依据串写明手拍权重', () => {
+  const r = buildRecommendation(FIT_PROFILE, 'personal', false)
+  const withBody = (r['穿搭'] || []).filter((e) => e.body_fit)
+  assert.ok(withBody.length >= 1, `至少一条上衣结论该算出身材分,实际 ${withBody.length} 条`)
+  withBody.forEach((e) => {
+    const b = e.body_fit
+    assert.ok(Number.isFinite(b.score) && b.score >= 0 && b.score <= 100, `总分越界: ${b.score}`)
+    assert.strictEqual(b.axes.length, b.axes_present.length, 'axes 只准列在场的轴')
+    b.axes.forEach((a) => {
+      assert.ok(a.score >= 0 && a.score <= 1, `${a.key} 单轴分越界: ${a.score}`)
+      assert.ok(typeof a.tier === 'string' && a.tier.length > 0, `${a.key} 缺档位说明`)
+    })
+    assert.match(b.evidence, /C 刻度与权重|标定中/, 'evidence 必须承认刻度与权重是手拍的')
+    assert.ok(!('person' in b), 'person 那份整报告只留 _computed.body_deviation,每条再带一遍是浪费')
+  })
+  // 这个人自己的偏差向量随报告出一份
+  const dev = r._computed.body_deviation
+  assert.ok(dev && dev.want, '_computed.body_deviation 应在场')
+  assert.ok(Number.isFinite(dev.bmi), 'BMI 是从身高体重算出来的,要带过去')
+})
+
+test('buildRecommendation: 同一句上衣结论,换一个人身材 ⇒ body_fit 分数不同', () => {
+  const slim = { ...FIT_PROFILE, height: 165, weight: 50, waist: 62, hip: 88, shoulder: 36 }
+  const broad = { ...FIT_PROFILE, height: 175, weight: 90, waist: 92, hip: 98, shoulder: 47 }
+  const a = buildRecommendation(slim, 'personal', false)
+  const b = buildRecommendation(broad, 'personal', false)
+  const pair = (r) =>
+    (r['穿搭'] || [])
+      .filter((e) => e.body_fit)
+      .map((e) => [e.group_name, e.body_fit.score])
+  const la = new Map(pair(a))
+  const diffs = pair(b)
+    .filter(([name, s]) => la.has(name) && la.get(name) !== s)
+    .map(([name, s]) => `${name}: ${la.get(name)} → ${s}`)
+  assert.ok(diffs.length >= 1, `两条链路的上衣分数完全一样 ⇒ 这一维还跟人无关:\n${[...la].map(([n, s]) => `${n}=${s}`).join(' / ')}`)
+})
+
+test('buildRecommendation: 一个尺寸都没量 ⇒ 全场没有 body_fit(缺测不出分)', () => {
+  const bare = { gender: '女', scenario: '通勤', skin_tone: '白皙' }
+  const r = buildRecommendation(bare, 'personal', false)
+  const withBody = (r['穿搭'] || []).filter((e) => e.body_fit)
+  assert.strictEqual(withBody.length, 0, `没量尺寸还出分就是编造: ${JSON.stringify(withBody.map((e) => e.group_name))}`)
+  assert.ok(!r._computed.body_deviation, '偏差向量也该整块缺席,前端才有"还打不了分"的判据')
+})
+
+test('buildRecommendation: 每条穿搭都带 evidence_level 字段(A/B/C/D 或 null,不许 undefined)', () => {
+  const r = buildRecommendation(FIT_PROFILE, 'personal', false)
+  const list = r['穿搭'] || []
+  assert.ok(list.length >= 4, `应命中多条规则,实际 ${list.length}`)
+  list.forEach((e) => {
+    assert.ok(
+      'evidence_level' in e,
+      `${e.group_name} 缺 evidence_level 字段(前端要按 null 显示"未标注")`,
+    )
+    assert.ok([null, 'A', 'B', 'C', 'D'].includes(e.evidence_level), `${e.group_name} 档位非法: ${e.evidence_level}`)
+  })
+  // 现场:比例类规则应是 A/B,四季色彩应是 C
+  assert.ok(list.some((e) => e.evidence_level === 'A' || e.evidence_level === 'B'), '比例类规则应带 A/B 档')
+  assert.ok(list.some((e) => e.evidence_level === 'C'), '色彩季型类规则应带 C 档')
+})
+
+test('buildRecommendation: 腿长留空就不匹配腿身比规则(阈值改造后的负向断言)', () => {
+  const p = { ...FIT_PROFILE }
+  delete p.leg_length
+  const r = buildRecommendation(p, 'personal', false)
+  const names = (r['穿搭'] || []).map((e) => e.group_name || '')
+  assert.ok(
+    !names.some((n) => n.includes('腿身比')),
+    `没量腿长却命中了腿身比规则: ${names.join(' / ')}`,
+  )
+  // 对照组:量了腿长(0.545 判标准)就该命中"标准"那组
+  const names2 = (buildRecommendation(FIT_PROFILE, 'personal', false)['穿搭'] || []).map((e) => e.group_name || '')
+  assert.ok(names2.some((n) => n.includes('腿身比标准')), `0.545 应判标准: ${names2.join(' / ')}`)
+})
+
+// ============================================================
+// 上衣处方（services/topFromBody.js：只吃身材+肤色，不读衣橱）
+// ============================================================
+
+test('buildRecommendation: 量得出身材的人 ⇒ 结果带 top_spec，每轴有档位串与实测数', () => {
+  const r = buildRecommendation(FIT_PROFILE, 'personal', false)
+  const s = r.top_spec
+  assert.ok(s, 'FIT_PROFILE 有身高体重肩宽腿长肤色 ⇒ 处方该在场')
+  assert.ok(s.axes.length >= 2, `至少出两轴，实际 ${s.axes.length}`)
+  s.axes.forEach((a) => {
+    assert.ok(typeof a.tier === 'string' && a.tier.length > 4, `${a.key} 缺档位串`)
+    assert.ok(Array.isArray(a.prefer) && Array.isArray(a.avoid))
+    assert.ok(a.label && a.name_cn)
+  })
+  assert.ok(s.colour.present && s.colour.prefer.length >= 1, '有肤色 ⇒ 颜色段该出候选')
+  assert.match(s.note, /没有任何标准/, '顶层那句"没有标准规定好看"必须在')
+})
+
+test('buildRecommendation: 一个尺寸没量且肤色认不出 ⇒ top_spec 整块缺席', () => {
+  const r = buildRecommendation({ gender: '女', scenario: '通勤' }, 'personal', false)
+  assert.ok(!('top_spec' in r), '缺测不出处方，不许给一张空表')
+})
+
+test('buildRecommendation: 只量了身高与净胸围 ⇒ 处方仍出，但只有合身段（第 0 层独立站得住）', () => {
+  const s = buildRecommendation({ gender: '男', height: 172, bust: 92 }, 'personal', false).top_spec
+  assert.ok(s, '号型算得出来就该出，这一层不等修形层')
+  assert.ok(s.fit.present)
+  assert.strictEqual(s.fit.size_label, '170/92', `号 172→170、型 92 已是 4 的倍数：${s.fit.size_label}`)
+  assert.strictEqual(s.axes.length, 0, '腰围体重肩宽都没量 ⇒ 修形层一条不许编')
+  assert.strictEqual(s.colour.present, false)
+})
+
+test('buildRecommendation: FIT_PROFILE 没有净胸围 ⇒ 合身段只出 blocking 与测量指引', () => {
+  const s = buildRecommendation(FIT_PROFILE, 'personal', false).top_spec
+  assert.strictEqual(s.fit.present, false, '量了身高体重腰臀腿肩，唯独没胸围 ⇒ 号型的"型"定不了')
+  assert.match(JSON.stringify(s.fit.blocking), /净胸围/)
+  assert.ok(s.fit.measure_guide.length >= 4, '必须把"怎么量"交回给用户，不许显示空白')
+  assert.ok(s.axes.length >= 2, '修形层不依赖胸围，照旧该出')
+})
+
+test('buildRecommendation: 同一个人带上衣橱再算一遍 ⇒ 处方一字不变（它不读衣橱）', () => {
+  const bare = buildRecommendation(FIT_PROFILE, 'personal', false).top_spec
+  const withWardrobe = buildRecommendation(
+    {
+      ...FIT_PROFILE,
+      wardrobe_items: [
+        { name: '落肩卫衣', category: '上衣', color: '灰', fit_style: '宽松', fabric_weight: '厚' },
+      ],
+    },
+    'personal',
+    false,
+  ).top_spec
+  assert.strictEqual(JSON.stringify(bare), JSON.stringify(withWardrobe), '衣橱不许渗进处方')
+})

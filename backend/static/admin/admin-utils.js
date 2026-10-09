@@ -39,6 +39,11 @@ var SCENARIO_LABELS = {
 var VALUE_LABELS = {
   // rule_groups.mode
   'rule_groups.mode': { 'store': '门店', 'personal': '个人', 'all': '门店+个人' },
+  // rule_groups.evidence_level —— 与后端 services/evidenceLevels.js 的档位一致
+  'rule_groups.evidence_level': {
+    'A': 'A 国标/国际标准', 'B': 'B 学术实证', 'C': 'C 行业体系/经验', 'D': 'D 命理体系',
+    'null': '未标注(按 C 档对待)', '': '未标注(按 C 档对待)',
+  },
   // rule_groups.category
   'rule_groups.category': { '穿搭': '穿搭', '妆容': '美妆', '发型': '发型', '配饰': '配饰', '姿势': '姿势' },
   // rule_groups.enabled / inventory_products.enabled / model_configs.enabled 等
@@ -309,6 +314,7 @@ var COLUMN_COMMENTS = {
     'feedback_down': '差评数',
     'created_at': '创建时间',
     'source_key': '内置规则标识（空=手工新建）',
+    'evidence_level': '依据档位（A国标/B实证/C体系/D命理）',
   },
   // rule_conditions 规则条件表
   'rule_conditions': {
