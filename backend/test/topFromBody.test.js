@@ -126,10 +126,12 @@ test('topSpec: 塞衣橱/购物字段、换离散标签 ⇒ 合身段一字不�
   assert.strictEqual(JSON.stringify(base), JSON.stringify(dirty), '号型只吃身体实测数')
 })
 
-test('topSpec: 合身段的证据串点名【二手·需购文本复核】，措辞不许升级成国标算出的体型', () => {
+test('topSpec: 合身段证据串报出四件国标（分档值已逐字核对），措辞仍不许升级成国标算出的体型', () => {
   const f = topSpec(JIA).fit
-  assert.match(f.evidence, /二手·需购文本复核/)
   assert.match(f.evidence, /GB\/T 1335/)
+  assert.match(f.evidence, /官方原文·文本层逐字/)
+  assert.match(f.evidence, /GB\/T 31901-2024/)
+  assert.ok(!/需购文本复核/.test(f.evidence), '原文已在本机逐字核对，这句过期限定不得再出现')
   assert.match(f.note, /好不好看/)
   assert.ok(!JSON.stringify(f.checks).includes('不合格'), '没有成衣实测通道，就不许判"你这件不合格"')
 })

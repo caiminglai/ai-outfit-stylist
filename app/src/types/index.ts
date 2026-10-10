@@ -333,8 +333,14 @@ export interface TopSpecFit {
   size?: { 号: number; 型: number; 体型: string | null; 体型中文: string | null; 体型档: number[] | null }
   size_scope?: 'standard' | 'near'
   size_scope_note?: string | null
+  /** 常用档系表列的出处（按性别分表，1335.1／1335.2-2008） */
+  size_scope_ref?: string
   drop_cm?: number | null
   drop_reason?: string | null
+  /** 胖瘦程度＝另一条轴（GB/T 31901-2024 附录 A 表 A.2，2026-12-01 实施 ⇒ 现为内部口径） */
+  bmi?: number | null
+  bmi_band?: { cn: string; band: (number | null)[] } | null
+  bmi_band_note?: string
   target_finished_bust?: number[] | null
   ease_window_cm?: number[] | null
   checks?: TopSpecFitCheck[]

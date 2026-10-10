@@ -56,12 +56,23 @@ test('没量净胸围 ⇒ 合身段只出"先量身体"与测量指引，不许�
   assert.ok(t.indexOf('### 第 1 层') > 0, '合身判不了不影响修形段照出')
 })
 
-test('报告里的国标口径：现行说现行，转录说转录', () => {
+test('报告里的国标口径：现行说现行，逐字核对说逐字核对（旧"需购文本复核"已过期）', () => {
   const seg = report(全身)
   assert.match(seg, /GB\/T 1335/)
-  assert.match(seg, /需购 GB\/T 1335 文本复核|需购文本复核/)
+  assert.match(seg, /逐字核对/)
+  assert.ok(!/需购/.test(seg), '本机 PDF 已逐字核对，报告不许再挂"需购文本复核"')
   assert.match(seg, /GB\/T 16160-2017/)
+  assert.match(seg, /腰际线/)
+  assert.match(seg, /GB\/T 5703-2023/)
   assert.match(seg, /不含好不好看的判据|号型只管尺寸分档/)
+})
+
+test('报告里 BMI 那条轴要出现，并带实施日期与"另一条轴"的定性', () => {
+  const seg = report(全身)
+  assert.match(seg, /胖瘦程度\(另一条轴/)
+  assert.match(seg, /31901-2024/)
+  assert.match(seg, /2026-12-01/)
+  assert.match(seg, /内部口径/)
 })
 
 test('修形段与颜色段的既有内容没被搬家搬坏（档位行、肤色口径、实测数都还在）', () => {

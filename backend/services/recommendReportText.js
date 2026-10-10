@@ -87,6 +87,10 @@ function generateStructuredText(recommendation, weather, mode) {
         }`,
       )
       if (fit.drop_reason) lines.push(`  - 体型位没出的原因: ${fit.drop_reason}`)
+      if (fit.bmi_band)
+        lines.push(
+          `  - 胖瘦程度(另一条轴, 不推翻上面的体型代号): BMI ${fit.bmi} ⇒ ${fit.bmi_band.cn}〔GB/T 31901-2024 附录 A 表 A.2: 偏瘦<18.5 / 正常 18.5~24 / 偏胖≥24; ⚠ 该版 2026-12-01 才实施, 现在只当内部口径〕`,
+        )
       if (fit.target_finished_bust)
         lines.push(
           `- **成衣胸围该到**: ${fit.target_finished_bust.join('~')}cm(松量窗口 ${fit.ease_window_cm.join('~')}cm)`,
@@ -103,7 +107,7 @@ function generateStructuredText(recommendation, weather, mode) {
         lines.push(`  - 档位: ${c.tier}`)
       }
       lines.push(
-        `  - 号型只管尺寸分档，不含好不好看的判据；测量方法依据 GB/T 16160-2017，分档数值取自公开转录【需购 GB/T 1335 文本复核】`,
+        `  - 号型只管尺寸分档，不含好不好看的判据；测量口径依据 GB/T 16160-2017（腰围取腰际线）与 GB/T 5703-2023 §6.2.7（肩宽取两肩峰点直线距离，家用软尺只能当参考值），分档值与常用档系表列已对本机 GB/T 1335.1／1335.2-2008 的 PDF 逐字核对`,
       )
     } else {
       lines.push(`- **这一层判不了，先量身体**:`)

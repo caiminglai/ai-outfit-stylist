@@ -69,3 +69,5 @@ AppData/
 
 # AI工具配置
 CLAUDE.md
+# Office 锁文件（Word/Excel 打开时同目录生成的 ~$xxx.docx，162B 垃圾件，永不入库）
+~$*

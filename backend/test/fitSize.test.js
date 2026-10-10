@@ -29,10 +29,11 @@ test('fitLayer：女 165/88A（胸腰差 16 落在女 A 档 14~18）', () => {
   const f = fitLayer(甲)
   assert.ok(f.present)
   assert.strictEqual(f.size_label, '165/88A')
-  assert.strictEqual(f.size.体型中文, '正常体')
+  assert.strictEqual(f.size.体型中文, '收腰适中')
   assert.deepStrictEqual(f.size.体型档, [14, 18])
   assert.strictEqual(f.drop_cm, 16)
   assert.strictEqual(f.size_scope, 'standard')
+  assert.match(f.size_scope_ref, /1335\.2-2008/)
 })
 
 test('体型边界包含在内，跨到 Y 档就换码', () => {
@@ -79,6 +80,76 @@ test('号或型超出常用档系 ⇒ 仍给就近档但必须标 near', () => {
   const f = fitLayer({ ...甲, height: 142 })
   assert.strictEqual(f.size_scope, 'near')
   assert.match(f.size_scope_note, /就近换算，不是标准档/)
+})
+
+// ============================================================
+// 2b. 常用档系按性别分表（10-10 定案，10 §4 第 2 条）
+// ============================================================
+
+test('女体胸围 68~71：在原文 B/C 系列表内 ⇒ 不再误报 near', () => {
+  const f = fitLayer({ height: 160, bust: 69, waist: 60, weight: 50, gender: '女' }) // 差 9 ⇒ B 档，女 B 型列表列 68~108
+  assert.strictEqual(f.size.体型, 'B')
+  assert.strictEqual(f.size.型, 68)
+  assert.strictEqual(f.size_scope, 'standard', `女 B 档 68 该在表列内：${f.size_scope_note}`)
+})
+
+test('女体 Y 档上界收到 100：胸围 104 出界 ⇒ near', () => {
+  const f = fitLayer({ ...甲, bust: 104, waist: 80, gender: '女' }) // 差 24 ⇒ Y，女 Y 列表列 72~100
+  assert.strictEqual(f.size.体型, 'Y')
+  assert.strictEqual(f.size_scope, 'near')
+  assert.match(f.size_scope_note, /型 72~100/)
+})
+
+test('男体"号"从 155 起：身高 150 出界 ⇒ near（旧口径 145 是女册的值）', () => {
+  const f = fitLayer({ height: 150, bust: 92, waist: 78, weight: 45, gender: '男' }) // 差 14 ⇒ A
+  assert.strictEqual(f.size.体型, 'A')
+  assert.strictEqual(f.size_scope, 'near')
+  assert.match(f.size_scope_ref, /1335\.1-2008/)
+  assert.match(f.size_scope_note, /号 155~190/)
+})
+
+test('男体上界收到 116：胸围 118 就近到 120 ⇒ near（旧口径 120 比国标宽 4cm）', () => {
+  const f = fitLayer({ height: 170, bust: 118, waist: 110, weight: 80, gender: '男' }) // 差 8 ⇒ B，男 B 列表列 72~116
+  assert.strictEqual(f.size.体型, 'B')
+  assert.strictEqual(f.size.型, 120)
+  assert.strictEqual(f.size_scope, 'near')
+})
+
+test('性别没填 ⇒ 用两册并集兜底，并在 ref 里写明是并集', () => {
+  const f = fitLayer({ height: 170, bust: 118, waist: 110, weight: 80 })
+  assert.match(f.size_scope_ref, /两册并集/)
+  assert.strictEqual(f.size_scope, 'near')
+})
+
+// ============================================================
+// 2c. 胖瘦程度＝另一条轴（GB/T 31901-2024 附录 A 表 A.2）
+// ============================================================
+
+test('BMI 档：偏瘦＜18.5／正常 18.5~24／偏胖≥24，且不推翻体型代号', () => {
+  const thin = fitLayer({ ...甲, weight: 40 }) // 40/1.65² ≈ 14.7
+  const normal = fitLayer(甲) // 62/1.65² ≈ 22.8
+  const heavy = fitLayer({ ...甲, weight: 70 }) // ≈ 25.7
+  assert.strictEqual(thin.bmi_band.cn, '偏瘦')
+  assert.strictEqual(normal.bmi_band.cn, '正常')
+  assert.strictEqual(heavy.bmi_band.cn, '偏胖')
+  assert.strictEqual(normal.bmi, 22.8)
+  assert.deepStrictEqual(normal.bmi_band.band, [18.5, 24])
+  // 两个轴并存：BMI 换了，胸腰差定出来的 Y/A/B/C 一个字不变
+  assert.strictEqual(thin.size.体型, heavy.size.体型)
+  assert.strictEqual(thin.size_label, heavy.size_label)
+})
+
+test('缺体重 ⇒ bmi 与 bmi_band 都不出，不兜底', () => {
+  const f = fitLayer({ ...甲, weight: 0 })
+  assert.strictEqual(f.bmi, null)
+  assert.strictEqual(f.bmi_band, null)
+})
+
+test('BMI 档的对外诚实：必须写明 2026-12-01 实施、现为内部口径', () => {
+  const f = fitLayer(甲)
+  assert.match(f.bmi_band_note, /2026-12-01/)
+  assert.match(f.bmi_band_note, /内部口径/)
+  assert.match(f.bmi_band_note, /表 A\.2/)
 })
 
 // ============================================================
@@ -151,13 +222,36 @@ test('肩缝判据：正肩区间=净肩宽±1.5，落肩另给下限，并标 C
 // 4. 依据诚实：档位、二手数值、不含美观判据
 // ============================================================
 
-test('evidence 串必须带"二手·需购文本复核"，note 必须说号型不含美观判据', () => {
+test('evidence 串：号型分档已升【官方原文·文本层逐字】，并点到 16160／5703／31901 三件', () => {
   const f = fitLayer(甲)
-  assert.match(f.evidence, /二手·需购文本复核/)
   assert.match(f.evidence, /GB\/T 1335/)
+  assert.match(f.evidence, /官方原文·文本层逐字/)
   assert.match(f.evidence, /GB\/T 16160/)
+  assert.match(f.evidence, /GB\/T 5703-2023 §6\.2\.7/)
+  assert.match(f.evidence, /GB\/T 31901-2024/)
+  assert.ok(
+    !/需购文本复核/.test(f.evidence),
+    '本机已有原文逐字核对，这句过期限定不得再出现在合身层 evidence 里',
+  )
   assert.match(f.note, /不含任何"好不好看"的判据/)
   assert.match(f.note, /由你决定/)
+})
+
+test('缺身高/胸围被挡住时，evidence 也不得再挂"需购文本复核"', () => {
+  const f = fitLayer({})
+  assert.strictEqual(f.present, false)
+  assert.ok(!/需购文本复核/.test(f.evidence), f.evidence)
+})
+
+test('测量指引：腰围走 16160 的腰际线、肩宽走 5703 的肩峰点直线，且不再说"腰最细处"', () => {
+  const f = fitLayer(甲)
+  const joined = f.measure_guide.join(' ')
+  assert.match(joined, /腰际线/)
+  assert.match(joined, /§2\.2\.10/)
+  assert.match(joined, /肩峰点/)
+  assert.match(joined, /§6\.2\.7/)
+  assert.match(joined, /圆杆直角规/)
+  assert.ok(!/最细处/.test(joined), '旧话术"腰部最细处"必须消失（与两份国标位置不一致）')
 })
 
 test('测量指引只声称"怎么量"，不声称量到多少算好看', () => {
@@ -205,4 +299,27 @@ test('DROP_BANDS：男女各四档，区间连续无重叠、Y 上界到 C 下�
       if (i > 0) assert.ok(b.hi < bands[i - 1].lo, `${g} ${b.code} 与上一档重叠`)
     })
   }
+})
+
+test('体型中文不许出现"胖/瘦"——1335 两册全文没有这两个字，代号才是国标的东西', () => {
+  for (const g of ['男', '女']) {
+    for (const b of DROP_BANDS[g]) {
+      assert.ok(
+        !/[胖瘦]/.test(b.cn),
+        `${g} ${b.code} 的中文名 "${b.cn}" 挂的是评判词，不是国标用词`,
+      )
+      assert.match(b.cn, /收腰|直筒/, `${g} ${b.code} 的中文名要描述胸腰差，别描述身材好坏`)
+    }
+  }
+})
+
+test('常用档系表列与原文一致（防手改）：女 145~180／68~112，男 155~190／72~116', () => {
+  assert.deepStrictEqual(SIZE_STEPS.scope['女'].height, [145, 180])
+  assert.deepStrictEqual(SIZE_STEPS.scope['女'].chest.all, [68, 112])
+  assert.deepStrictEqual(SIZE_STEPS.scope['女'].chest.Y, [72, 100])
+  assert.deepStrictEqual(SIZE_STEPS.scope['女'].chest.B, [68, 108])
+  assert.deepStrictEqual(SIZE_STEPS.scope['男'].height, [155, 190])
+  assert.deepStrictEqual(SIZE_STEPS.scope['男'].chest.all, [72, 116])
+  assert.deepStrictEqual(SIZE_STEPS.scope['男'].chest.Y, [76, 104])
+  assert.deepStrictEqual(SIZE_STEPS.scope['男'].chest.C, [76, 116])
 })

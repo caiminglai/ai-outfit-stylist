@@ -98,13 +98,21 @@ function FitBlock({ fit }: { fit: TopSpecFit }) {
             号＝身高就近 5cm 一档，型＝净胸围就近 4cm 一档，体型按胸腰差分 Y/A/B/C
             {fit.drop_cm ? `（你的胸腰差 ${fit.drop_cm}cm）` : ''}。
             {fit.drop_reason ? `体型位没出：${plain(fit.drop_reason)}` : ''}
+            {fit.bmi_band ? (
+              <>
+                <br />
+                胖瘦程度是另一条轴：BMI {fit.bmi} ⇒ {fit.bmi_band.cn}
+                <span title={plain(fit.bmi_band_note)}>（GB/T 31901-2024 表 A.2，2026-12-01 才实施 ⇒ 现为内部口径）</span>
+              </>
+            ) : null}
           </div>
 
           {fit.checks?.map((c) => <FitCheckRow key={c.key} c={c} />)}
 
           <div style={muted}>
-            号型只管尺寸分档，本身不含"好不好看"的判据（GB/T 1335 就没写）；测量方法依据 GB/T 16160-2017，
-            分档数值取自公开转录，正式引用前需购文本复核。
+            号型只管尺寸分档，本身不含"好不好看"的判据（GB/T 1335 就没写）；测量口径依据 GB/T 16160-2017（腰围取腰际线）与
+            GB/T 5703-2023 §6.2.7（肩宽取两肩峰点直线距离，家用软尺只当参考值），分档值与常用档系表列已对本机国标 PDF
+            逐字核对。Y/A/B/C 后面的中文是我们的描述词，不是国标用词。
           </div>
         </>
       ) : (
