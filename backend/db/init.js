@@ -35,6 +35,7 @@ db.exec('PRAGMA foreign_keys = ON')
 
 // WAL checkpoint 定时器句柄(由 server.js 在退出时清理)
 let walCheckpointTimer = null
+let sessionCleanupTimer = null
 
 /**
  * 执行 WAL checkpoint
@@ -107,6 +108,8 @@ const MISSING_COLUMNS = [
   ['rule_groups', 'feedback_up', 'INTEGER'],
   ['rule_groups', 'feedback_down', 'INTEGER'],
   ['rule_groups', 'source_key', 'TEXT'],
+  // 依据分档(判档规则见 services/evidenceLevels.js)；不设 DEFAULT，NULL 就是"未标注"
+  ['rule_groups', 'evidence_level', 'TEXT'],
   ['recommendation_logs', 'input_snapshot', 'TEXT'],
   ['recommendation_logs', 'user_id', 'INTEGER'],
   ['recommendation_logs', 'store_id', 'INTEGER'],
@@ -116,6 +119,14 @@ const MISSING_COLUMNS = [
   ['body_metrics', 'frame_size', 'TEXT'],
   ['body_metrics', 'line_quality', 'TEXT'],
   ['face_profiles', 'color_chroma', 'TEXT'],
+  // 衣橱单品的版型与面料厚薄:上衣打分要吃的两格,老库不补列就只能判色名判不了剪裁
+  ['user_wardrobe', 'fit_style', 'TEXT'],
+  ['user_wardrobe', 'fabric_weight', 'TEXT'],
+  // 八字五行(第二条判定依据)的输入;不填则整条依据缺席
+  ['body_metrics', 'birth_date', 'TEXT'],
+  ['body_metrics', 'birth_hour', 'TEXT'],
+  // 管理员改密码后作废旧 Token 的锚点;老库不补列的话 verifyAdminToken 查它会直接报错
+  ['admin_users', 'password_changed_at', 'INTEGER'],
 ]
 
 function initMissingColumns() {
@@ -208,8 +219,11 @@ function initAdminUser() {
     // 如果环境变量有密码且与当前不同,自动更新
     if (!bcrypt.compareSync(password, admin.password_hash)) {
       const hash = bcrypt.hashSync(password, 10)
-      db.prepare('UPDATE admin_users SET password_hash = ? WHERE username = ?').run(hash, 'admin')
-      console.log('[初始化] 已从环境变量更新管理员密码')
+      const changedAt = Math.floor(Date.now() / 1000)
+      db.prepare(
+        'UPDATE admin_users SET password_hash = ?, password_changed_at = ? WHERE username = ?',
+      ).run(hash, changedAt, 'admin')
+      console.log('[初始化] 已从环境变量更新管理员密码,签发早于此刻的旧 Token 全部作废')
     }
   }
 }
@@ -278,6 +292,14 @@ function cleanupMissingModels() {
   let removedBroken = 0
   let removedMissing = 0
 
+  // 目录整体缺失时不能往下走:下面的逐行判定会把每一条记录都算成"文件缺失",
+  // 一次启动就把 model_configs 删空。缺目录只可能是挂载没挂上或模型没搬过来,
+  // 属于环境问题而不是数据脏,所以直接跳过并原样返回计数的形状。
+  if (!fs.existsSync(modelsDir)) {
+    console.log('[模型清理] models 目录不存在,跳过清理(不删除任何记录)')
+    return { removedBroken, removedMissing }
+  }
+
   // 1. 删除已归入"残缺模型"文件夹的记录
   const brokenRows = db
     .prepare(`SELECT id, name, folder FROM model_configs WHERE folder = ? OR folder LIKE ?`)
@@ -332,6 +354,30 @@ function cleanupExpiredSessions() {
 }
 
 /**
+ * 启动过期会话定时清理
+ * 隐私声明承诺"超时后自动清除",只在启动时清一次等于没清(进程不重启就永远不清)。
+ * 已同步到门店的行不在这里删:身份字段在同步当场剥掉了,行本身留着顾客才还能走
+ * DELETE /session/:id 把门店那条记录一并删掉(删了行就 404,删除权反而没了)。
+ * @param {number} intervalMs 间隔毫秒,默认 600000(10 分钟)
+ */
+function startSessionCleanupTimer(intervalMs = 10 * 60 * 1000) {
+  if (sessionCleanupTimer) {
+    clearInterval(sessionCleanupTimer)
+  }
+  sessionCleanupTimer = setInterval(() => {
+    try {
+      cleanupExpiredSessions()
+    } catch (err) {
+      console.error('[隐私清理] 定时清理失败:', err.message)
+    }
+  }, intervalMs)
+  if (sessionCleanupTimer.unref) {
+    sessionCleanupTimer.unref()
+  }
+  console.log(`[隐私清理] 过期会话定时清理已启动(每 ${intervalMs / 1000}s 一次)`)
+}
+
+/**
  * 初始化所有
  */
 function initAll() {
@@ -348,6 +394,8 @@ function initAll() {
   cleanupExpiredSessions()
   // 启动 WAL 定时 checkpoint
   startWalCheckpointTimer()
+  // 隐私声明写了"超时后自动清除",所以清理必须周期跑,不能只在启动时清一次
+  startSessionCleanupTimer()
 }
 
 // 模块加载时自动执行初始化

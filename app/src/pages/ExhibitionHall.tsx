@@ -13,10 +13,11 @@ import {
   loginAccount,
   logoutAccount,
   registerAccount,
+  saveProfileArchive,
   setGlobalErrorHandler,
   syncCustomerToCloud,
 } from '../api'
-import type { AccountInfo } from '../api'
+import type { AccountInfo, ProfileField } from '../api'
 import { useResponsive } from '../hooks/useResponsive'
 import type { CustomerProfile, EngineRecommendation, ProfileTag } from '../types'
 
@@ -55,7 +56,7 @@ export default function ExhibitionHall() {
   const [serviceMode, setServiceMode] = useState<ServiceMode>('store')
 
   const [profile, setProfile] = useState<CustomerProfile | null>(null)
-  /** 个人模式:后端长期档案,用于预填深度表单 */
+  /** 后端长期档案(含没点生成的草稿),两个模式的表单都拿它预填 */
   const [archiveProfile, setArchiveProfile] = useState<CustomerProfile | null>(null)
   /** 个人模式:本次计算从档案补进来的字段中文名 */
   const [archiveUsed, setArchiveUsed] = useState<string[]>([])
@@ -110,12 +111,10 @@ export default function ExhibitionHall() {
     [serviceMode],
   )
 
-  // 个人模式预填:只给正式账号读档案(游客会话会轮换,预填不可靠)
-  const archiveFetched = useRef(false)
+  // 预填:在"选择模式"那一屏就把档案读回来.两个表单组件都只在挂载那一刻读一次 initial,
+  // 等进了表单页再取已经来不及;门店模式同样复用,因为他不想为同一个人填两遍
   useEffect(() => {
-    if (serviceMode !== 'personal' || stage !== 'form') return
-    if (archiveFetched.current || !getAccount()) return
-    archiveFetched.current = true
+    if (stage !== 'mode-select' || !getAccount()) return
     getProfileArchive()
       .then((res) => {
         if (res.profile) setArchiveProfile(res.profile)
@@ -124,7 +123,19 @@ export default function ExhibitionHall() {
       .catch(() => {
         /* 档案读取失败不影响正常填写 */
       })
-  }, [serviceMode, stage])
+  }, [stage])
+
+  // 草稿自动保存:填了一半没点生成也替他记住.游客没有账号可挂,直接不存
+  const draftTimer = useRef<number | null>(null)
+  const handleDraft = useCallback((p: CustomerProfile) => {
+    if (!getAccount()) return
+    if (draftTimer.current) window.clearTimeout(draftTimer.current)
+    draftTimer.current = window.setTimeout(() => {
+      saveProfileArchive(p).catch(() => {
+        /* 草稿没存上不该打断填写 */
+      })
+    }, 1500)
+  }, [])
 
   const handleSync = useCallback(async () => {
     if (!sessionId) return
@@ -294,6 +305,7 @@ export default function ExhibitionHall() {
                 synced={synced}
                 reportTab={reportTab}
                 onSubmit={handleSubmit}
+                onDraft={handleDraft}
                 onSync={handleSync}
                 onDelete={handleDelete}
                 onBack={handleBack}
@@ -353,6 +365,7 @@ export default function ExhibitionHall() {
           synced={synced}
           reportTab={reportTab}
           onSubmit={handleSubmit}
+          onDraft={handleDraft}
           onSync={handleSync}
           onDelete={handleDelete}
           onBack={handleBack}
@@ -395,15 +408,15 @@ function ServiceLinkCards() {
       href: '/pay.html',
       icon: '💳',
       title: '付款通道',
-      sub: '收款码 · 凭证提交',
+      sub: '在线付款 · 凭证提交',
       desc: '已选好服务?在这里付款并把付款凭证提交给我们核对.',
     },
     {
       href: '/creator.html',
       icon: '🎨',
-      title: '创作者分成及推广模式',
-      sub: '提交方案 · 平台曝光 · 成交分成',
-      desc: '上传你的搭配、化妆或推荐规则方案,审核通过后按市场推广度获得曝光,成交后参与分成.',
+      title: '创作者投稿与曝光',
+      sub: '提交方案 · 审核展示 · 按热度曝光',
+      desc: '上传你的搭配、化妆或推荐规则方案,审核通过后按市场推广度获得曝光.投稿目前只做展示,不涉及任何款项往来.',
     },
   ]
   return (
@@ -455,6 +468,15 @@ function AccountEntry() {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [account, setAccount] = useState<AccountInfo | null>(() => getAccount())
+  /** 打开面板时读一次:后端把档案与草稿变成了中文清单,这里只负责列出来 */
+  const [stored, setStored] = useState<{ fields: ProfileField[]; tags: ProfileTag[] } | null>(null)
+
+  useEffect(() => {
+    if (!open || !account || stored) return
+    getProfileArchive()
+      .then((res) => setStored({ fields: res.fields || [], tags: res.tags || [] }))
+      .catch(() => setStored({ fields: [], tags: [] }))
+  }, [open, account, stored])
 
   const panelStyle: React.CSSProperties = {
     background: 'rgba(255,255,255,0.03)',
@@ -497,7 +519,7 @@ function AccountEntry() {
     if (busy) return
     if (
       !window.confirm(
-        '将删除你存下的身体档案、面容档案、形象标签、点过的建议评价、推荐与搭配记录、试穿结果,以及上传过的照片和它在服务器上的文件.删除后无法恢复,确定继续?',
+        '将删除你存下的身体档案、面容档案、没点生成的表单草稿、形象标签、点过的建议评价、推荐与搭配记录、试穿结果,以及上传过的照片和它在服务器上的文件.删除后无法恢复,确定继续?',
       )
     )
       return
@@ -507,6 +529,7 @@ function AccountEntry() {
       const deleted = [
         `身体档案 ${r.body} 份`,
         `面容档案 ${r.face} 份`,
+        `表单草稿 ${r.draft} 份`,
         `形象标签 ${r.tags} 条`,
         `建议评价 ${r.feedback} 条`,
         `推荐记录 ${r.logs} 条`,
@@ -518,6 +541,7 @@ function AccountEntry() {
         `已删除:${deleted}${r.files ? `,同时清掉 ${r.files} 个文件` : ''}${r.files_failed ? `;${r.files_failed} 个文件没删掉,请联系管理员` : ''}`,
       )
       setOpen(false)
+      setStored(null)
     } catch (e) {
       toast.error(e instanceof Error ? e.message : '删除失败,请重试')
     } finally {
@@ -549,7 +573,7 @@ function AccountEntry() {
         <p className="text-xs" style={{ color: '#a8b8c4', lineHeight: '1.6' }}>
           {account
             ? '你提交的作品、衣橱和推荐记录都挂在这个手机号上,不会再随浏览器变化.'
-            : '不登录也能逛和试用;注册后方案与作品会一直跟着这个手机号,创作者分成也发到这儿.'}
+            : '不登录也能逛和试用;注册后方案与作品会一直跟着这个手机号,投稿审核结果也发到这儿.'}
         </p>
       </button>
 
@@ -607,6 +631,35 @@ function AccountEntry() {
                 >
                   退出登录
                 </button>
+                <div className="p-3 text-xs" style={{ ...panelStyle, lineHeight: '1.8' }}>
+                  <p className="font-semibold" style={{ color: 'var(--text)' }}>
+                    我存的信息
+                  </p>
+                  {!stored && <p style={{ color: 'var(--muted)' }}>读取中…</p>}
+                  {stored && stored.fields.length === 0 && stored.tags.length === 0 && (
+                    <p style={{ color: 'var(--muted)' }}>
+                      还没替你记住任何东西.填一次点生成,或只在表单里改几项,都会自动存下来.
+                    </p>
+                  )}
+                  {stored && (stored.fields.length > 0 || stored.tags.length > 0) && (
+                    <div className="mt-1" style={{ maxHeight: '170px', overflowY: 'auto' }}>
+                      {stored.fields.map((f) => (
+                        <div key={f.key} style={{ color: '#a8b8c4' }}>
+                          <span style={{ color: 'var(--muted)' }}>{f.label}：</span>
+                          {f.value}
+                        </div>
+                      ))}
+                      {stored.tags.map((t) => (
+                        <div key={t.key} style={{ color: '#a8b8c4' }}>
+                          <span style={{ color: 'var(--muted)' }}>
+                            {t.label.includes('（算出）') ? t.label : `${t.label}（算出）`}：
+                          </span>
+                          {t.value}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
                 <p className="text-xs" style={{ color: '#a8b8c4', lineHeight: '1.6' }}>
                   下面这项删除的是我们替你记住的身体与面容档案、以及挂在账号下的推荐记录,删完仍可随时重新填写试用.
                 </p>
@@ -731,6 +784,8 @@ interface ServicePanelProps {
   synced: boolean
   reportTab: ReportTab
   onSubmit: (p: CustomerProfile) => void
+  /** 表单每改一次就回调,由上层防抖存草稿(游客没有账号可挂,不会真发请求) */
+  onDraft: (p: CustomerProfile) => void
   onSync: () => void
   onDelete: () => void
   onBack: () => void
@@ -754,6 +809,7 @@ function ServicePanel(props: ServicePanelProps) {
     synced,
     reportTab,
     onSubmit,
+    onDraft,
     onSync,
     onDelete,
     onBack,
@@ -873,7 +929,7 @@ function ServicePanel(props: ServicePanelProps) {
               </div>
             </div>
             <p className="text-xs" style={{ color: '#a8b8c4', lineHeight: '1.6' }}>
-              适合个人深度使用,采集完整身材数据、五官细节、风格偏好,获得BMI/体型/肤色/脸型科学分析,管理衣橱/化妆品/配饰三柜,获取跨柜联动推荐和购物建议.
+              适合个人深度使用,采集完整身材数据、五官细节、风格偏好:BMI/腰臀比/腿身比按人体尺寸的常见量级和公开研究方向计算,区间是参考线,不是国标判定;体型、肤色季型、脸型与风格建议属行业经验体系,都不是科学结论.管理衣橱/化妆品/配饰三柜,获取跨柜联动推荐和购物建议.
             </p>
           </button>
         </div>
@@ -945,15 +1001,16 @@ function ServicePanel(props: ServicePanelProps) {
         >
           {serviceMode === 'store' ? (
             <CustomerForm
-              initial={profile || undefined}
+              initial={profile || archiveProfile || undefined}
               onSubmit={onSubmit}
               submitting={submitting}
               compact={compact}
             />
           ) : (
             <PersonalProfileForm
-              initial={profile || (serviceMode === 'personal' ? archiveProfile : null) || undefined}
+              initial={profile || archiveProfile || undefined}
               onSubmit={onSubmit}
+              onChange={onDraft}
               submitting={submitting}
               compact={compact}
             />

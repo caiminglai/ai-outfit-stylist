@@ -6,7 +6,15 @@ const prettierConfig = require('eslint-config-prettier')
 
 module.exports = [
   {
-    ignores: ['node_modules/', 'static/', 'templates/', 'uploads/', 'scripts/scan-report.json'],
+    // vendor/ 是原样拷进来的第三方源码(实测 912 条 no-var 之类全是上游 ES5 写法),与 .prettierignore 同口径
+    ignores: [
+      'node_modules/',
+      'static/',
+      'templates/',
+      'uploads/',
+      'scripts/scan-report.json',
+      'vendor/',
+    ],
   },
   // 预定义推荐规则集
   js.configs.recommended,

@@ -7,3 +7,5 @@ uploads/
 static/
 templates/
 scripts/scan-report.json
+# 第三方源码原样保留(格式化它就没法和上游对账)
+vendor/

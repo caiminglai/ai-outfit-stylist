@@ -22,14 +22,21 @@ const router = express.Router()
 
 const CUSTOMER_DATA_TTL = parseInt(process.env.CUSTOMER_DATA_TTL || '7200', 10)
 
+/** 声明里写的有效期必须跟着 env 走，别让人改了配置文案还写着 2 小时 */
+function formatTtlHours(seconds) {
+  const s = Number(seconds) > 0 ? Number(seconds) : 7200
+  if (s < 3600) return `${Math.round(s / 60)} 分钟`
+  return `${+(s / 3600).toFixed(1)} 小时`
+}
+
 /** 隐私声明内容 */
 const PRIVACY_NOTICE = {
   title: '门店数据隐私保护声明',
   content: [
     '您填写的画像仅用于生成本次搭配建议，保存在门店会话中，不做其他用途。',
-    '会话有效期为 2 小时，超时后自动清除。',
+    `会话有效期为 ${formatTtlHours(CUSTOMER_DATA_TTL)}，超时后未同步到门店的会话自动清除。`,
     '您可随时删除自己的数据，删除后不可恢复，已生成的建议记录一并删除。',
-    '门店留存的建议记录不含昵称等身份信息，仅用于持续完善形象建议，可随删除一并清除。',
+    '已同步给门店的建议记录只保留形象字段，不含昵称与手机号，仅用于持续完善形象建议，可随删除一并清除。',
     '推荐结果基于规则引擎生成，不涉及人脸识别等生物特征存储。',
   ],
   highlight: '我们尊重并保护您的个人隐私',
@@ -194,10 +201,15 @@ router.post('/session/:sessionId/sync', (req, res) => {
     }
 
     const syncedAt = new Date().toISOString()
-    db.prepare('UPDATE customer_sessions SET synced = 1, synced_at = ? WHERE session_id = ?').run(
-      syncedAt,
-      sessionId,
-    )
+    // 隐私声明说"门店留存的记录不含昵称等身份信息"。写进 recommendation_logs 的快照
+    // 早就剥掉了这两项（services/profileArchive.js:374-375），但这条会话行是另一份原文，
+    // 且 synced=1 之后不再被过期清理删掉，手机号就这样长期留在库里——同步当场一并剥掉。
+    const storedProfile = parseProfileData(session.profile_data)
+    delete storedProfile.nickname
+    delete storedProfile.phone
+    db.prepare(
+      'UPDATE customer_sessions SET synced = 1, synced_at = ?, profile_data = ? WHERE session_id = ?'
+    ).run(syncedAt, JSON.stringify(storedProfile), sessionId)
 
     return sendSuccess(
       res,
@@ -207,7 +219,7 @@ router.post('/session/:sessionId/sync', (req, res) => {
         privacy_notice: PRIVACY_NOTICE.highlight,
         synced: true,
         synced_at: syncedAt,
-        profile_data: parseProfileData(session.profile_data),
+        profile_data: storedProfile,
       },
       '数据已同步到门店',
     )

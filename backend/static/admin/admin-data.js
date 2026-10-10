@@ -6,6 +6,12 @@
    依赖: admin-utils.js（State, fetchJSON, escapeHtml, API_BASE, tableLabel）
    ══════════════════════════════════════════════════════════════ */
 
+/* 规则条件值 → 中文（实测仅 category 一项存的是英文标识，其余条件值本身就是中文）
+   只用于数据浏览网格的只读显示：规则编辑器里那个输入框必须保持机器值，存库才对得上 */
+var COND_VALUE_LABELS = {
+  category: { accessory: '配饰', hairstyle: '发型', makeup: '妆容', outfit: '穿搭', pose: '姿势', posture: '体态' },
+};
+
 /* ════════════════════════════════════
    数据库表结构
    ════════════════════════════════════ */
@@ -38,9 +44,8 @@ function renderTables(tables) {
     var header = document.createElement('div');
     header.className = 'table-info-header';
     var cnLabel = TABLE_LABELS[table.table_name] || '';
-    var displayName = cnLabel ? cnLabel + ' (' + escapeHtml(table.table_name) + ')' : escapeHtml(table.table_name);
-    header.innerHTML = '<h3>📊 ' + displayName +
-      ' <span style="color:var(--muted);font-size:11px">[' + escapeHtml(table.class_name) + ']</span></h3>' +
+    var displayName = cnLabel || table.table_name;
+    header.innerHTML = '<h3>📊 ' + escapeHtml(displayName) + '</h3>' +
       '<span class="badge badge-null" style="margin-left:10px;">' + (table.row_count >= 0 ? table.row_count + ' 行' : '未知') + '</span>';
     div.appendChild(header);
 
@@ -53,25 +58,21 @@ function renderTables(tables) {
 
     var tbl = document.createElement('table');
     tbl.className = 'cols-table';
-    tbl.innerHTML = '<thead><tr><th>列名</th><th>类型</th><th>可空</th><th>键</th><th>外键关联</th><th>中文注释</th></tr></thead><tbody>' +
+    tbl.innerHTML = '<thead><tr><th>列名</th><th>类型</th><th>可空</th><th>键</th><th>外键关联</th></tr></thead><tbody>' +
       table.columns.map(function(col) {
         var badges = [];
         if (col.primary_key) badges.push('<span class="badge badge-pk">主键</span>');
         if (col.foreign_key) badges.push('<span class="badge badge-fk">外键</span>');
         var nullBadge = col.nullable ? '<span class="badge badge-null">可空</span>' : '<span class="badge badge-notnull">非空</span>';
-        // 中文列名：优先从 COLUMN_COMMENTS 获取
+        // 列名：有中文注释用中文，没有的退回原列名兜底
         var cnComment = getColumnComment(table.table_name, col.name);
-        var colDisplay = escapeHtml(col.name);
-        if (cnComment) {
-          colDisplay = '<span style="color:var(--accent)">' + escapeHtml(cnComment) + '</span> <span style="color:var(--muted);font-size:11px">(' + escapeHtml(col.name) + ')</span>';
-        }
+        var colDisplay = '<span style="color:var(--accent)">' + escapeHtml(cnComment || col.name) + '</span>';
         return '<tr>' +
           '<td class="col-name">' + colDisplay + '</td>' +
-          '<td class="col-type">' + escapeHtml(col.type) + '</td>' +
+          '<td class="col-type">' + escapeHtml(columnTypeLabel(col.type)) + '</td>' +
           '<td>' + nullBadge + '</td>' +
           '<td>' + badges.join(' ') + '</td>' +
-          '<td style="font-size:11px;color:var(--purple)">' + (col.foreign_key ? escapeHtml(col.foreign_key) : '-') + '</td>' +
-          '<td class="col-comment">' + escapeHtml(cnComment || col.comment || '') + '</td></tr>';
+          '<td style="font-size:11px;color:var(--purple)">' + (col.foreign_key ? escapeHtml(tableLabel(col.foreign_key)) : '-') + '</td></tr>';
       }).join('') + '</tbody>';
     div.appendChild(tbl);
 
@@ -113,7 +114,7 @@ function renderTableSelect(tables) {
   tables.forEach(function(table) {
     var opt = document.createElement('option');
     opt.value = table.table_name;
-    opt.textContent = tableLabel(table.table_name) + ' [' + table.class_name + ']';
+    opt.textContent = tableLabel(table.table_name);
     select.appendChild(opt);
   });
 }
@@ -206,7 +207,7 @@ function renderTableData(data) {
     emptyHtml += '<table class="data-table"><thead><tr>';
     schemaCols.forEach(function(c) {
       var cn = getColumnComment(State.currentTable, c);
-      var th = cn ? '<span style="color:var(--accent)">' + escapeHtml(cn) + '</span><br><span style="color:var(--muted);font-size:10px">' + escapeHtml(c) + '</span>' : escapeHtml(c);
+      var th = escapeHtml(cn || c);
       emptyHtml += '<th>' + th + '</th>';
     });
     emptyHtml += '</tr></thead><tbody><tr><td colspan="' + schemaCols.length + '" style="text-align:center;color:var(--muted);padding:20px;">暂无数据</td></tr></tbody></table></div>';
@@ -219,7 +220,7 @@ function renderTableData(data) {
   html += '<table class="data-table"><thead><tr>';
   cols.forEach(function(c) {
     var cn = getColumnComment(State.currentTable, c);
-    var th = cn ? '<span style="color:var(--accent)">' + escapeHtml(cn) + '</span><br><span style="color:var(--muted);font-size:10px">' + escapeHtml(c) + '</span>' : escapeHtml(c);
+    var th = escapeHtml(cn || c);
     html += '<th>' + th + '</th>';
   });
   html += '</tr></thead><tbody>';
@@ -237,13 +238,15 @@ function renderTableData(data) {
         var store = State.stores.find(function(s) { return s.id === val; });
         val = '<span style="color:var(--accent)">' + escapeHtml(store ? store.name : '未登记门店') + '</span>' +
               '<span style="color:var(--muted);font-size:10px"> (#' + escapeHtml(val) + ')</span>';
+      } else if (/_at$/.test(c)) {
+        // 时间列：库里存 UTC，这里显示北京时间
+        var bj = formatUtcAsBeijing(val);
+        val = bj ? '<span style="color:var(--accent)">' + escapeHtml(bj) + '</span>' : escapeHtml(val);
       } else {
         // 翻译英文枚举值为中文
         var translated = translateValue(State.currentTable, c, val);
         if (translated !== val) {
-          // 有翻译：显示中文 + 小字英文原文
-          val = '<span style="color:var(--accent)">' + escapeHtml(translated) + '</span>' +
-                '<span style="color:var(--muted);font-size:10px"> (' + escapeHtml(val) + ')</span>';
+          val = '<span style="color:var(--accent)">' + escapeHtml(translated) + '</span>';
         } else if (State.currentTable === 'rule_conditions' && c === 'value') {
           // 规则条件值：解析 JSON 并格式化显示
           try {
@@ -251,7 +254,9 @@ function renderTableData(data) {
             var parts = [];
             Object.keys(parsed).forEach(function(k) {
               var fieldLabel = (VALUE_LABELS['rule_conditions.field'] || {})[k] || k;
-              parts.push(fieldLabel + '=' + parsed[k]);
+              var valueLabels = COND_VALUE_LABELS[k] || {};
+              var raw = Array.isArray(parsed[k]) ? parsed[k] : [parsed[k]];
+              parts.push(fieldLabel + '=' + raw.map(function(x) { return valueLabels[x] || x }).join('、'));
             });
             val = '<span style="color:var(--accent)">' + escapeHtml(parts.join('，')) + '</span>';
           } catch(e) {

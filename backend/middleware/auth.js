@@ -119,6 +119,13 @@ function verifyAdminToken(token) {
     const now = new Date()
     if (now - tokenTime > 24 * 60 * 60 * 1000) return false
 
+    // 签名对只证明"持密钥方签过"，不证明这个账号还在：删号/禁用后旧 token 必须当场失效
+    const account = db
+      .prepare('SELECT password_changed_at FROM admin_users WHERE username = ? AND is_active = 1')
+      .get(username)
+    if (!account) return false
+    // 改过密码则更早签发的 token 全部作废；NULL=从没改过，不能因此把已登录的后台踢下线
+    if (account.password_changed_at > Number(timestamp)) return false
     return true
   } catch {
     return false

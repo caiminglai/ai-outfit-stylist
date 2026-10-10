@@ -20,7 +20,7 @@ const {
   writeRecommendationLog,
 } = require('../services/profileArchive')
 const { SIGNALS, recordFeedback } = require('../services/ruleFeedback')
-const { ACTION_LABELS } = require('../services/ruleExplainer')
+const { generateStructuredText } = require('../services/recommendReportText')
 
 // 推荐引擎限流：每分钟最多 20 次
 const recommendLimiter = rateLimit({ windowMs: 60000, max: 20 })
@@ -127,73 +127,5 @@ router.post('/enhance', (req, res) => {
   }
 })
 
-/**
- * 生成结构化推荐文案（LLM 降级版）
- */
-function generateStructuredText(recommendation, weather, mode) {
-  const lines = []
-
-  // 标题
-  if (mode === 'personal') {
-    lines.push('# 个人专属穿搭推荐报告\n')
-  } else {
-    lines.push('# 门店穿搭推荐报告\n')
-  }
-
-  // 天气信息
-  if (weather && weather.temp != null) {
-    lines.push(`## 今日天气\n`)
-    lines.push(`气温 ${weather.temp}°C，${weather.description || '天气良好'}。\n`)
-  }
-
-  // 各类别建议(引擎返回的顶层键是中文类别名,动作键是 action_type)
-  const META_KEYS = ['group_id', 'group_name', 'priority', 'score', 'feedback', 'explanation']
-  const categoryTitles = ['穿搭', '妆容', '发型', '配饰', '姿势']
-  for (const cat of categoryTitles) {
-    const items = recommendation[cat] || []
-    if (items.length === 0) continue
-    lines.push(`## ${cat}建议\n`)
-    for (const item of items.slice(0, 3)) {
-      lines.push(`### ${item.group_name || '推荐方案'}\n`)
-      for (const [key, val] of Object.entries(item)) {
-        if (META_KEYS.includes(key) || !val) continue
-        lines.push(`- **${ACTION_LABELS[key] || key}**: ${val}`)
-      }
-      lines.push('')
-    }
-  }
-
-  // 算法分析（个人模式）
-  const analysis = recommendation.algorithm_analysis
-  if (analysis?.sections?.length) {
-    lines.push('## 深度分析报告\n')
-    if (analysis.metrics?.length) {
-      lines.push(`${analysis.metrics.join(' / ')}\n`)
-    }
-    for (const section of analysis.sections) {
-      lines.push(`### ${section.title}\n`)
-      for (const advice of section.advices) {
-        lines.push(`- ${advice}`)
-      }
-      lines.push('')
-    }
-  }
-
-  // 计算字段
-  const computed = recommendation._computed
-  if (computed) {
-    lines.push('## 您的数据概览\n')
-    if (computed.bmi) lines.push(`- BMI: ${computed.bmi}（${computed.bmi_level || '正常'}）`)
-    if (computed.body_shape) lines.push(`- 体型: ${computed.body_shape}`)
-    if (computed.wh_ratio)
-      lines.push(`- 腰臀比: ${computed.wh_ratio}（${computed.wh_status || '正常'}）`)
-    lines.push('')
-  }
-
-  lines.push('---')
-  lines.push('*以上推荐基于您的个人数据生成，仅供参考。*')
-
-  return lines.join('\n')
-}
 
 module.exports = router

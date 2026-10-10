@@ -510,7 +510,7 @@ export default function CosmeticTab({ profile, compact }: CosmeticTabProps) {
                   {item.color_name && <span className={pillCls}>{item.color_name}</span>}
                   {item.price != null && (
                     <span style={{ color: 'var(--accent)', fontSize: '12px', fontWeight: 500 }}>
-                      ¥{item.price}
+                      ¥{Number(item.price).toFixed(2)}
                     </span>
                   )}
                 </div>

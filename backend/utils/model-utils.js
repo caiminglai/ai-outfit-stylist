@@ -109,22 +109,33 @@ function isSkippedPath(relPath) {
 }
 
 /**
- * 在同一目录内做大小写无关的 basename 匹配,只有唯一命中才返回纠正后的绝对路径。
- * 用于 PMX 声明的纹理名与磁盘文件名只差大小写的情形:Windows 不分大小写所以本机看不出,
- * Linux 下就是必现 404(实测全站 3 处)。只替换 basename、目录沿用原路径,不引入新的遍历面。
+ * 从 baseDir 起逐段解析 relPath，任一段精确名不存在时按大小写无关找唯一命中。
+ * PMX 里声明的纹理名与目录名都可能与磁盘只差大小写（实测今汐声明 `TEX/`、`Tex/`，
+ * 磁盘是 `tex/`），Windows 不分大小写所以本机看不出，Linux 下整张脸纹理全 404。
+ * 任何一段零命中或多命中（磁盘上同时有 `tex` 和 `TEX`）都返回 null，不做猜测。
+ * 只做同一目录内的改名匹配，不解析 `..`，越界仍由调用方 realpath 兜底。
  */
-function findIgnoringCase(absPath) {
-  const dir = path.dirname(absPath)
-  const name = path.basename(absPath)
-  let entries
-  try {
-    entries = fs.readdirSync(dir)
-  } catch {
-    return null // 目录本身不存在
+function resolvePathIgnoringCase(baseDir, relPath) {
+  let current = baseDir
+  for (const seg of String(relPath).split(/[/\\]+/)) {
+    if (!seg || seg === '.') continue
+    const candidate = path.join(current, seg)
+    if (fs.existsSync(candidate)) {
+      current = candidate
+      continue
+    }
+    let entries
+    try {
+      entries = fs.readdirSync(current)
+    } catch {
+      return null // 父目录就不存在，后面无从查找
+    }
+    const lower = seg.toLowerCase()
+    const hits = entries.filter((e) => e.toLowerCase() === lower)
+    if (hits.length !== 1) return null
+    current = path.join(current, hits[0])
   }
-  const lower = name.toLowerCase()
-  const hits = entries.filter((e) => e.toLowerCase() === lower)
-  return hits.length === 1 ? path.join(dir, hits[0]) : null
+  return current
 }
 
 // 残缺模型文件夹名(供 init.js 清理记录时判断 folder 前缀用)
@@ -137,7 +148,7 @@ module.exports = {
   parseFolderName,
   shouldSkipDir,
   isSkippedPath,
-  findIgnoringCase,
+  resolvePathIgnoringCase,
   SKIP_DIRS,
   BROKEN_DIR_NAME,
 }

@@ -6,6 +6,9 @@
  *   - 当次表单只覆盖他这次真的填了的项（mergeWithArchive）
  *   - 算完把这次新填的写回档案（saveArchive）
  *   - 每次推荐落一条样本，能查到是谁（writeRecommendationLog）
+ *   - 下次进表单页时，把上次填的整份表单读回来预填（loadLastForm）
+ *   - 填了一半没点生成的，也按人存一份草稿（saveDraft / loadDraft）
+ *   - 给用户查阅"我们替你记了什么"时，把字段名换成中文（describeProfile）
  *
  * 词表约定：列名一律用规则引擎在用的条件字段名（如 nose_bridge），
  * 入库即命中规则，不再维护第二套名字。
@@ -25,6 +28,9 @@ const ARCHIVE_LABELS = {
   waist: '腰围',
   hip: '臀围',
   shoulder: '肩宽',
+  // 八字五行的输入:不是规则条件字段,只给用户看名字
+  birth_date: '出生日期',
+  birth_hour: '出生时辰',
 }
 
 /**
@@ -59,6 +65,8 @@ const BODY_FIELDS = [
   { key: 'body_type', column: 'body_type', kind: 'text' },
   { key: 'frame_size', column: 'frame_size', kind: 'text' },
   { key: 'line_quality', column: 'line_quality', kind: 'text' },
+  { key: 'birth_date', column: 'birth_date', kind: 'text' },
+  { key: 'birth_hour', column: 'birth_hour', kind: 'text' },
 ]
 
 /** profile 字段 ⇄ 面容档案列；source 是该字段在表单里的多个可能名字 */
@@ -75,6 +83,13 @@ const FACE_FIELDS = [
   { key: 'nose_bridge', column: 'nose_bridge', source: ['nose_bridge', 'nose_height'] },
   { key: 'lip_thickness', column: 'lip_thickness', source: ['lip_thickness'] },
 ]
+
+/**
+ * 允许用户主动清掉的选填项
+ * 出生日期填错了又想撤掉这条依据时，光把输入框清空不够：档案里的旧值会被当成"这次没填"填回来，
+ * 照旧算八字与年龄。这两项传空串就代表"我要撤掉"，其余字段仍按"只增不清"处理。
+ */
+const CLEARABLE_KEYS = ['birth_date', 'birth_hour']
 
 /** 判断"这次真的填了"：空串、null、undefined、NaN 都算没填 */
 function isFilled(val) {
@@ -145,6 +160,111 @@ function loadArchive(userId) {
 }
 
 /**
+ * 读这个人上一次填的完整表单（最近一条个人模式样本的输入快照）
+ * 档案表只存身体/面容那二十几项，场合、预算、主要目标、风格偏好这些只留在快照里，
+ * 不拿快照打底，用户每次回来都得把它们重填一遍。
+ * @param {number} userId
+ * @returns {object} 快照里的字段；没填过返回空对象
+ */
+function loadLastForm(userId) {
+  if (!userId) return {}
+  const row = db
+    .prepare(
+      `SELECT input_snapshot FROM recommendation_logs
+       WHERE user_id = ? AND mode = 'personal' AND input_snapshot IS NOT NULL
+       ORDER BY created_at DESC, id DESC LIMIT 1`,
+    )
+    .get(userId)
+  if (!row) return {}
+  try {
+    return JSON.parse(row.input_snapshot) || {}
+  } catch {
+    return {}
+  }
+}
+
+/**
+ * 读这个人的表单草稿（填了一半、还没点生成的那一份）
+ * @param {number} userId
+ * @returns {object} 草稿里的字段；没存过返回空对象
+ */
+function loadDraft(userId) {
+  if (!userId) return {}
+  const row = db.prepare('SELECT form_json FROM profile_drafts WHERE user_id = ?').get(userId)
+  if (!row) return {}
+  try {
+    return JSON.parse(row.form_json) || {}
+  } catch {
+    return {}
+  }
+}
+
+/**
+ * 存草稿：整份表单原样留下，永远只有最新一份
+ * 与档案一样只增不清——清空某个字段不会把库里的旧值抹掉，要抹走"删除我的形象档案与记录"
+ * @param {number} userId
+ * @param {object} form 表单当前值
+ * @returns {number} 存进去的字段数
+ */
+function saveDraft(userId, form) {
+  if (!userId) return 0
+  const draft = {}
+  for (const [key, val] of Object.entries(form || {})) {
+    if (key === 'nickname' || key === 'phone') continue
+    if (!isFilled(val)) continue
+    draft[key] = typeof val === 'string' ? val.slice(0, 200) : val
+  }
+  const columns = Object.keys(draft)
+  if (columns.length === 0) return 0
+  db.prepare(
+    `INSERT INTO profile_drafts (user_id, form_json) VALUES (?, ?)
+     ON CONFLICT(user_id) DO UPDATE SET
+       form_json = excluded.form_json, updated_at = datetime('now')`,
+  ).run(userId, JSON.stringify(draft))
+  return columns.length
+}
+
+/**
+ * 把表单字段变成给用户看的中文清单
+ * 数字项取 ARCHIVE_LABELS，分类项取 FIELD_LABELS，两个表都不认的原样留 key（宁可露一个英文，不可露一个错译）
+ * @param {object} profile 合并后的档案
+ * @returns {Array<{key: string, label: string, value: string}>}
+ */
+function describeProfile(profile) {
+  return Object.entries(profile || {})
+    .filter(([, val]) => isFilled(val))
+    .map(([key, val]) => ({
+      key,
+      label: ARCHIVE_LABELS[key] || FIELD_LABELS[key] || key,
+      value: typeof val === 'number' ? String(val) : String(val).slice(0, 200),
+    }))
+}
+
+/**
+ * 拼出"下次回来该预填的东西"：上次填过的样本打底 → 最近的草稿覆盖 → 身体面容档案收尾
+ * 档案排在最后，因为它是校验过的列值；草稿只负责把档案没有的场合、预算这类字段带回来
+ * @param {number} userId
+ * @returns {object}
+ */
+function loadPrefill(userId) {
+  const prefill = { ...loadLastForm(userId), ...loadDraft(userId), ...loadArchive(userId) }
+  // 档案里已撤销的选填项要连样本快照里那份旧值一起压掉，否则清空了下次进来又冒出来
+  if (userId) {
+    const body = db
+      .prepare('SELECT birth_date, birth_hour FROM body_metrics WHERE user_id = ?')
+      .get(userId)
+    if (body) {
+      for (const field of BODY_FIELDS) {
+        if (CLEARABLE_KEYS.includes(field.key) && !isFilled(body[field.column])) {
+          delete prefill[field.key]
+        }
+      }
+    }
+  }
+  return prefill
+}
+
+/**
  * 档案打底，当次表单覆盖
  * @param {object} profile 本次提交
  * @param {object} archive loadArchive 的结果
@@ -153,7 +273,10 @@ function loadArchive(userId) {
 function mergeWithArchive(profile, archive) {
   const merged = { ...profile }
   const used = []
+  const cleared = new Set(CLEARABLE_KEYS.filter((key) => merged[key] === ''))
+  for (const key of cleared) delete merged[key]
   for (const [key, val] of Object.entries(archive || {})) {
+    if (cleared.has(key)) continue
     if (!isFilled(merged[key])) {
       merged[key] = val
       used.push(ARCHIVE_LABELS[key] || FIELD_LABELS[key] || key)
@@ -181,21 +304,30 @@ function saveArchive(userId, profile) {
   if (!bodyRow.body_type && isFilled(profile.body_type_detail)) {
     bodyRow.body_type = cleanText(profile.body_type_detail)
   }
-  if (Object.keys(bodyRow).length > 0) {
+  // 主动撤销的选填项（空串）：档案里已有这一行时把列清成 NULL
+  const clearCols = BODY_FIELDS.filter(
+    (field) => CLEARABLE_KEYS.includes(field.key) && profile[field.key] === '',
+  ).map((field) => field.column)
+
+  const columns = Object.keys(bodyRow)
+  if (columns.length > 0 || clearCols.length > 0) {
     const existing = db.prepare('SELECT * FROM body_metrics WHERE user_id = ?').get(userId)
-    const columns = Object.keys(bodyRow)
     if (existing) {
+      const sets = [
+        ...columns.map((c) => `${c} = ?`),
+        ...clearCols.map((c) => `${c} = NULL`),
+      ]
       db.prepare(
-        `UPDATE body_metrics SET ${columns.map((c) => `${c} = ?`).join(', ')},
+        `UPDATE body_metrics SET ${sets.join(', ')},
          updated_at = datetime('now') WHERE user_id = ?`,
       ).run(...columns.map((c) => bodyRow[c]), userId)
-    } else {
+    } else if (columns.length > 0) {
       db.prepare(
         `INSERT INTO body_metrics (user_id, ${columns.join(', ')})
          VALUES (?, ${columns.map(() => '?').join(', ')})`,
       ).run(userId, ...columns.map((c) => bodyRow[c]))
     }
-    saved.body = columns.length
+    saved.body = columns.length + (existing ? clearCols.length : 0)
   }
 
   const faceRow = {}
@@ -309,6 +441,11 @@ function saveTags(userId, result) {
 
 module.exports = {
   loadArchive,
+  loadLastForm,
+  loadDraft,
+  saveDraft,
+  describeProfile,
+  loadPrefill,
   mergeWithArchive,
   saveArchive,
   writeRecommendationLog,

@@ -1,0 +1,420 @@
+{
+  "_说明": "第三批规则：八字五行。判定依据从只看自身条件扩成两条——①自身条件(身材/面容/色彩档案) ②风水八字(出生日期+时辰算出的日主与喜用)。字段由 profileEnricher.computeBaziFields 派生，没填出生日期时 favorable_element/unfavorable_element 直接缺席，引擎严格 AND 会把这 25 条整体跳过，等于一条都不加，老的 72 条美学规则一字不受影响。喜用只取主气那一行(引擎 in/eq 只能比单值)，次气与喜用方位只在报告页展示、不进条件。",
+  "rules": [
+    {
+      "key": "wuxing_mu_outfit",
+      "name": "喜用木·穿搭配色",
+      "mode": "all",
+      "category": "穿搭",
+      "gender": null,
+      "scenario": null,
+      "priority": 26,
+      "enabled": 1,
+      "description": "依据：喜用五行＝木。档位：主气喜木者，全身大面积色取木行。",
+      "conditions": [{ "field": "favorable_element", "operator": "eq", "value": "木", "weight": 4 }],
+      "actions": [
+        { "type": "color_combo", "content": "主色走绿色系：橄榄绿、薄荷绿、青碧，配米白或浅木色打底" },
+        { "type": "穿搭要点", "content": "木质纤维最贴喜用：棉、麻、莫代尔优先，版型宜舒展直立，像树木生发" },
+        { "type": "reason", "content": "你八字喜用取木，绿色系与棉麻属木行，顺自身喜用" }
+      ]
+    },
+    {
+      "key": "wuxing_huo_outfit",
+      "name": "喜用火·穿搭配色",
+      "mode": "all",
+      "category": "穿搭",
+      "gender": null,
+      "scenario": null,
+      "priority": 26,
+      "enabled": 1,
+      "description": "依据：喜用五行＝火。档位：主气喜火者，暖明度色做主色或点缀。",
+      "conditions": [{ "field": "favorable_element", "operator": "eq", "value": "火", "weight": 4 }],
+      "actions": [
+        { "type": "color_combo", "content": "主色走红橙系：正红、砖红、橘粉、玫红，冬季可靠近暖黄提亮" },
+        { "type": "穿搭要点", "content": "面料宜有光泽与蓬松感，避免一身死黑压住火行的明度" },
+        { "type": "reason", "content": "你八字喜用取火，暖色高明度属火行，顺自身喜用" }
+      ]
+    },
+    {
+      "key": "wuxing_tu_outfit",
+      "name": "喜用土·穿搭配色",
+      "mode": "all",
+      "category": "穿搭",
+      "gender": null,
+      "scenario": null,
+      "priority": 26,
+      "enabled": 1,
+      "description": "依据：喜用五行＝土。档位：主气喜土者，大地色系做全身基调。",
+      "conditions": [{ "field": "favorable_element", "operator": "eq", "value": "土", "weight": 4 }],
+      "actions": [
+        { "type": "color_combo", "content": "主色走大地色系：卡其、焦糖、奶咖、陶土红、米黄" },
+        { "type": "穿搭要点", "content": "厚重感是土行的形：羊毛、针织、灯芯绒，层数叠起来比单件利落更合" },
+        { "type": "reason", "content": "你八字喜用取土，大地色与厚实织物属土行，顺自身喜用" }
+      ]
+    },
+    {
+      "key": "wuxing_jin_outfit",
+      "name": "喜用金·穿搭配色",
+      "mode": "all",
+      "category": "穿搭",
+      "gender": null,
+      "scenario": null,
+      "priority": 26,
+      "enabled": 1,
+      "description": "依据：喜用五行＝金。档位：主气喜金者，白灰银与硬挺线条。",
+      "conditions": [{ "field": "favorable_element", "operator": "eq", "value": "金", "weight": 4 }],
+      "actions": [
+        { "type": "color_combo", "content": "主色走白灰系：本白、银灰、雾霾蓝灰，配一件金属感亮面" },
+        { "type": "穿搭要点", "content": "线条要收：西装料、挺括衬衫、利落肩线，金行主肃杀收敛，忌堆叠松软" },
+        { "type": "reason", "content": "你八字喜用取金，白灰与挺括版型属金行，顺自身喜用" }
+      ]
+    },
+    {
+      "key": "wuxing_shui_outfit",
+      "name": "喜用水·穿搭配色",
+      "mode": "all",
+      "category": "穿搭",
+      "gender": null,
+      "scenario": null,
+      "priority": 26,
+      "enabled": 1,
+      "description": "依据：喜用五行＝水。档位：主气喜水者，黑蓝色系与流动垂坠。",
+      "conditions": [{ "field": "favorable_element", "operator": "eq", "value": "水", "weight": 4 }],
+      "actions": [
+        { "type": "color_combo", "content": "主色走黑蓝系：墨黑、藏蓝、雾霾蓝、深紫蓝，同色系深浅叠穿" },
+        { "type": "穿搭要点", "content": "水主流动：垂坠感面料、斜裁、飘逸下摆，避免过分硬挺方正的廓形" },
+        { "type": "reason", "content": "你八字喜用水，黑蓝与垂坠流动属水行，顺自身喜用" }
+      ]
+    },
+    {
+      "key": "wuxing_mu_accessory",
+      "name": "喜用木·配饰与金属色",
+      "mode": "all",
+      "category": "配饰",
+      "gender": null,
+      "scenario": null,
+      "priority": 25,
+      "enabled": 1,
+      "description": "依据：喜用五行＝木。档位：饰品取木质纤维类，金属退到配角。",
+      "conditions": [{ "field": "favorable_element", "operator": "eq", "value": "木", "weight": 4 }],
+      "actions": [
+        { "type": "配饰要点", "content": "木质手串、藤编包、草编帽、竹木发簪为主，金属只留细款点缀" },
+        { "type": "metal_color", "content": "需要金属时选哑光浅金，避开高反光的镜面银" },
+        { "type": "bag_style", "content": "藤编、帆布、软皮大包贴合木行的舒展感" }
+      ]
+    },
+    {
+      "key": "wuxing_huo_accessory",
+      "name": "喜用火·配饰与金属色",
+      "mode": "all",
+      "category": "配饰",
+      "gender": null,
+      "scenario": null,
+      "priority": 25,
+      "enabled": 1,
+      "description": "依据：喜用五行＝火。档位：暖色与光泽材质，红色系点缀。",
+      "conditions": [{ "field": "favorable_element", "operator": "eq", "value": "火", "weight": 4 }],
+      "actions": [
+        { "type": "配饰要点", "content": "红玛瑙、石榴石、琥珀、漆面与树脂饰品，丝巾选红橙暖调" },
+        { "type": "metal_color", "content": "玫瑰金、亮金优于银白，火行喜明艳反光" },
+        { "type": "earring_type", "content": "有存在感的暖色坠饰，避免素净小银钉" }
+      ]
+    },
+    {
+      "key": "wuxing_tu_accessory",
+      "name": "喜用土·配饰与金属色",
+      "mode": "all",
+      "category": "配饰",
+      "gender": null,
+      "scenario": null,
+      "priority": 25,
+      "enabled": 1,
+      "description": "依据：喜用五行＝土。档位：玉石陶瓷类，分量感重于精巧。",
+      "conditions": [{ "field": "favorable_element", "operator": "eq", "value": "土", "weight": 4 }],
+      "actions": [
+        { "type": "配饰要点", "content": "和田玉、蜜蜡、陶瓷、粗陶珠与皮质宽腰带，选有厚度有分量的款" },
+        { "type": "metal_color", "content": "黄铜、古金、亚光棕金，避开冷白镜面" },
+        { "type": "belt", "content": "宽皮腰带是土行的锚，能把大地色整套压住" }
+      ]
+    },
+    {
+      "key": "wuxing_jin_accessory",
+      "name": "喜用金·配饰与金属色",
+      "mode": "all",
+      "category": "配饰",
+      "gender": null,
+      "scenario": null,
+      "priority": 25,
+      "enabled": 1,
+      "description": "依据：喜用五行＝金。档位：金属与镜面为主，是金行的正配。",
+      "conditions": [{ "field": "favorable_element", "operator": "eq", "value": "金", "weight": 4 }],
+      "actions": [
+        { "type": "配饰要点", "content": "银饰、白金、钢链、几何切面款为主，造型越利落越合" },
+        { "type": "metal_color", "content": "亮银、白金、镜面钢，冷调反光优先" },
+        { "type": "watch", "content": "金属链带腕表最贴金行，皮带给暖色让位" }
+      ]
+    },
+    {
+      "key": "wuxing_shui_accessory",
+      "name": "喜用水·配饰与金属色",
+      "mode": "all",
+      "category": "配饰",
+      "gender": null,
+      "scenario": null,
+      "priority": 25,
+      "enabled": 1,
+      "description": "依据：喜用五行＝水。档位：珠光玻璃类，深色调通透感。",
+      "conditions": [{ "field": "favorable_element", "operator": "eq", "value": "水", "weight": 4 }],
+      "actions": [
+        { "type": "配饰要点", "content": "珍珠、黑曜石、海蓝宝、玻璃与水晶类，造型偏圆润流动" },
+        { "type": "metal_color", "content": "银白与枪灰，透明感强于厚重金属" },
+        { "type": "necklace_type", "content": "细长链坠，把视线往下带出水行的垂坠感" }
+      ]
+    },
+    {
+      "key": "wuxing_mu_makeup",
+      "name": "喜用木·妆容色彩",
+      "mode": "all",
+      "category": "妆容",
+      "gender": null,
+      "scenario": null,
+      "priority": 25,
+      "enabled": 1,
+      "description": "依据：喜用五行＝木。档位：妆容色彩走青绿与豆沙。",
+      "conditions": [{ "field": "favorable_element", "operator": "eq", "value": "木", "weight": 4 }],
+      "actions": [
+        { "type": "eye_shadow", "content": "橄榄绿、薄荷青、草木绿做小面积晕染，配大地色打底压住" },
+        { "type": "lip_color", "content": "豆沙、水红、清透珊瑚，避开厚重的砖红与深棕" },
+        { "type": "妆容要点", "content": "整体走清透自然，木行主生发，妆面宜薄不宜厚" }
+      ]
+    },
+    {
+      "key": "wuxing_huo_makeup",
+      "name": "喜用火·妆容色彩",
+      "mode": "all",
+      "category": "妆容",
+      "gender": null,
+      "scenario": null,
+      "priority": 25,
+      "enabled": 1,
+      "description": "依据：喜用五行＝火。档位：暖调高饱和，红唇是正配。",
+      "conditions": [{ "field": "favorable_element", "operator": "eq", "value": "火", "weight": 4 }],
+      "actions": [
+        { "type": "lip_color", "content": "正红、烂番茄、玫红，火行靠唇色提气最直接" },
+        { "type": "blush", "content": "蜜桃粉、珊瑚橙，位置偏高偏外，做出暖光感" },
+        { "type": "eye_shadow", "content": "红棕、酒红、暖金珠光，避开冷灰调" }
+      ]
+    },
+    {
+      "key": "wuxing_tu_makeup",
+      "name": "喜用土·妆容色彩",
+      "mode": "all",
+      "category": "妆容",
+      "gender": null,
+      "scenario": null,
+      "priority": 25,
+      "enabled": 1,
+      "description": "依据：喜用五行＝土。档位：哑光大地色，厚重温暖。",
+      "conditions": [{ "field": "favorable_element", "operator": "eq", "value": "土", "weight": 4 }],
+      "actions": [
+        { "type": "foundation", "content": "偏暖的中性粉底，雾面或半雾面质感，土行不宜水光过透" },
+        { "type": "eye_shadow", "content": "焦糖、土黄、陶土棕、南瓜色，同色系深浅叠出厚度" },
+        { "type": "lip_color", "content": "脏橘、红棕、奶茶棕，边界画柔不做锋利唇线" }
+      ]
+    },
+    {
+      "key": "wuxing_jin_makeup",
+      "name": "喜用金·妆容色彩",
+      "mode": "all",
+      "category": "妆容",
+      "gender": null,
+      "scenario": null,
+      "priority": 25,
+      "enabled": 1,
+      "description": "依据：喜用五行＝金。档位：冷调干净，线条清晰。",
+      "conditions": [{ "field": "favorable_element", "operator": "eq", "value": "金", "weight": 4 }],
+      "actions": [
+        { "type": "eyeliner", "content": "利落眼线与清晰眉形，金行主收敛，线条干净比色彩更重要" },
+        { "type": "eye_shadow", "content": "银灰、冷棕、雾灰蓝、珍珠白，微光即可不做亮片堆叠" },
+        { "type": "lip_color", "content": "冷粉、莓果、玫瑰豆沙，避开偏橘的暖调" }
+      ]
+    },
+    {
+      "key": "wuxing_shui_makeup",
+      "name": "喜用水·妆容色彩",
+      "mode": "all",
+      "category": "妆容",
+      "gender": null,
+      "scenario": null,
+      "priority": 25,
+      "enabled": 1,
+      "description": "依据：喜用五行＝水。档位：水润通透，深蓝紫点睛。",
+      "conditions": [{ "field": "favorable_element", "operator": "eq", "value": "水", "weight": 4 }],
+      "actions": [
+        { "type": "foundation", "content": "水光感底妆，光泽优先于遮瑕厚度，水行主润" },
+        { "type": "eye_shadow", "content": "藏蓝、深紫、墨黑烟熏，由深至浅向外晕开" },
+        { "type": "lip_color", "content": "浆果色、梅子色、透明唇釉，质地偏水光不做哑光" }
+      ]
+    },
+    {
+      "key": "wuxing_mu_hair",
+      "name": "喜用木·发色",
+      "mode": "all",
+      "category": "发型",
+      "gender": null,
+      "scenario": null,
+      "priority": 24,
+      "enabled": 1,
+      "description": "依据：喜用五行＝木。档位：自然深色系，保留生机感。",
+      "conditions": [{ "field": "favorable_element", "operator": "eq", "value": "木", "weight": 3 }],
+      "actions": [
+        { "type": "hair_color", "content": "自然黑棕、冷棕、青黑，可少量橄榄绿挑染呼应木行" },
+        { "type": "发型", "content": "层次向上生长的剪法贴木行生发之性，避免全部压平的厚重直发" }
+      ]
+    },
+    {
+      "key": "wuxing_huo_hair",
+      "name": "喜用火·发色",
+      "mode": "all",
+      "category": "发型",
+      "gender": null,
+      "scenario": null,
+      "priority": 24,
+      "enabled": 1,
+      "description": "依据：喜用五行＝火。档位：暖调亮色，明度偏高。",
+      "conditions": [{ "field": "favorable_element", "operator": "eq", "value": "火", "weight": 3 }],
+      "actions": [
+        { "type": "hair_color", "content": "酒红、枫叶红、暖橘棕、红铜色，火行宜亮不宜闷" },
+        { "type": "发型", "content": "蓬松卷度与空气感，发根立起来比贴头皮合" }
+      ]
+    },
+    {
+      "key": "wuxing_tu_hair",
+      "name": "喜用土·发色",
+      "mode": "all",
+      "category": "发型",
+      "gender": null,
+      "scenario": null,
+      "priority": 24,
+      "enabled": 1,
+      "description": "依据：喜用五行＝土。档位：暖棕大地色，质感厚。",
+      "conditions": [{ "field": "favorable_element", "operator": "eq", "value": "土", "weight": 3 }],
+      "actions": [
+        { "type": "hair_color", "content": "焦糖棕、奶茶棕、栗色，带暖底的中深明度最稳" },
+        { "type": "发型", "content": "有分量的饱满造型，土行宜厚重扎实，忌过于轻飘稀疏" }
+      ]
+    },
+    {
+      "key": "wuxing_jin_hair",
+      "name": "喜用金·发色",
+      "mode": "all",
+      "category": "发型",
+      "gender": null,
+      "scenario": null,
+      "priority": 24,
+      "enabled": 1,
+      "description": "依据：喜用五行＝金。档位：冷调与高光泽。",
+      "conditions": [{ "field": "favorable_element", "operator": "eq", "value": "金", "weight": 3 }],
+      "actions": [
+        { "type": "hair_color", "content": "冷黑、蓝黑、灰棕、雾金，冷调底是金行的关键" },
+        { "type": "发型", "content": "线条利落、发尾干净，齐切或清晰分区比随性层次合" }
+      ]
+    },
+    {
+      "key": "wuxing_shui_hair",
+      "name": "喜用水·发色",
+      "mode": "all",
+      "category": "发型",
+      "gender": null,
+      "scenario": null,
+      "priority": 24,
+      "enabled": 1,
+      "description": "依据：喜用五行＝水。档位：深色与流动感。",
+      "conditions": [{ "field": "favorable_element", "operator": "eq", "value": "水", "weight": 3 }],
+      "actions": [
+        { "type": "hair_color", "content": "墨黑、深蓝黑、紫黑，可少量藏蓝挑染" },
+        { "type": "发型", "content": "长层次与大波浪，做出水流的动势，忌死板定型" }
+      ]
+    },
+    {
+      "key": "wuxing_avoid_mu",
+      "name": "忌木·避开项",
+      "mode": "all",
+      "category": "穿搭",
+      "gender": null,
+      "scenario": null,
+      "priority": 25,
+      "enabled": 1,
+      "description": "依据：忌用五行＝木。档位：木行的色与材质退到小面积或不用。",
+      "conditions": [{ "field": "unfavorable_element", "operator": "eq", "value": "木", "weight": 3 }],
+      "actions": [
+        { "type": "avoid", "content": "大面积绿色系与棉麻木质饰品；喜欢绿色时只留小包、耳饰这类小面积" },
+        { "type": "reason", "content": "你八字忌神取木，木行的色与材质会压掉喜用的力量" }
+      ]
+    },
+    {
+      "key": "wuxing_avoid_huo",
+      "name": "忌火·避开项",
+      "mode": "all",
+      "category": "穿搭",
+      "gender": null,
+      "scenario": null,
+      "priority": 25,
+      "enabled": 1,
+      "description": "依据：忌用五行＝火。档位：暖艳色与高光泽退到小面积。",
+      "conditions": [{ "field": "unfavorable_element", "operator": "eq", "value": "火", "weight": 3 }],
+      "actions": [
+        { "type": "avoid", "content": "整身正红橘红、大面积漆面亮片，玫红只留点缀不做主色" },
+        { "type": "reason", "content": "你八字忌神取火，火行的艳色与强反光会过旺" }
+      ]
+    },
+    {
+      "key": "wuxing_avoid_tu",
+      "name": "忌土·避开项",
+      "mode": "all",
+      "category": "穿搭",
+      "gender": null,
+      "scenario": null,
+      "priority": 25,
+      "enabled": 1,
+      "description": "依据：忌用五行＝土。档位：大地色与厚重叠穿让位。",
+      "conditions": [{ "field": "unfavorable_element", "operator": "eq", "value": "土", "weight": 3 }],
+      "actions": [
+        { "type": "avoid", "content": "从头到脚的卡其焦糖米色、厚重的多层叠穿与宽大皮腰带" },
+        { "type": "reason", "content": "你八字忌神取土，土行的沉闷色与体量会把线条压塌" }
+      ]
+    },
+    {
+      "key": "wuxing_avoid_jin",
+      "name": "忌金·避开项",
+      "mode": "all",
+      "category": "配饰",
+      "gender": null,
+      "scenario": null,
+      "priority": 25,
+      "enabled": 1,
+      "description": "依据：忌用五行＝金。档位：金属与冷硬线条减量。",
+      "conditions": [{ "field": "unfavorable_element", "operator": "eq", "value": "金", "weight": 3 }],
+      "actions": [
+        { "type": "avoid", "content": "成串银饰金属链、镜面亮银大面积、过于锋利刻板的廓形" },
+        { "type": "reason", "content": "你八字忌神取金，金行的冷硬与反光过强会克掉喜用" }
+      ]
+    },
+    {
+      "key": "wuxing_avoid_shui",
+      "name": "忌水·避开项",
+      "mode": "all",
+      "category": "穿搭",
+      "gender": null,
+      "scenario": null,
+      "priority": 25,
+      "enabled": 1,
+      "description": "依据：忌用五行＝水。档位：一身黑蓝与垂坠飘逸让位。",
+      "conditions": [{ "field": "unfavorable_element", "operator": "eq", "value": "水", "weight": 3 }],
+      "actions": [
+        { "type": "avoid", "content": "整身墨黑藏蓝、通体丝绸雪纺的飘逸款；黑色只用作鞋与包这类小面积" },
+        { "type": "reason", "content": "你八字忌神取水，水行的深暗与过分会显气色沉" }
+      ]
+    }
+  ]
+}

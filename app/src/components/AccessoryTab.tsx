@@ -370,7 +370,7 @@ export default function AccessoryTab({ profile, compact }: AccessoryTabProps) {
                 {item.metal_color && <span className={pillCls}>{item.metal_color}</span>}
                 {item.price != null && (
                   <span style={{ color: 'var(--accent)', fontSize: '12px', fontWeight: 500 }}>
-                    ¥{item.price}
+                    ¥{Number(item.price).toFixed(2)}
                   </span>
                 )}
               </div>

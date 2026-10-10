@@ -51,14 +51,14 @@ const newRules = [
     ],
     actions: [
       { action_type: 'top_style', content: '速干运动背心 / 运动T恤' },
-      { action_type: 'bottom_style', content: '高弹力运动legging / 运动短裤' },
+      { action_type: 'bottom_style', content: '高弹力运动打底裤 / 运动短裤' },
       { action_type: 'shoe_style', content: '专业跑步鞋 / 训练鞋' },
       { action_type: 'color_combo', content: '亮色系（荧光绿/橙/粉）提升运动可见度' },
       { action_type: 'outerwear', content: '轻薄防风外套（户外运动时搭配）' },
       {
         action_type: 'reason',
         content:
-          '运动生理学建议：速干面料减少体表湿度，弹性面料提供运动自由度（ACSM 运动服装指南）',
+          '运动生理学建议：速干面料减少体表湿度，弹性面料提供运动自由度（运动服装指南）',
       },
     ],
   },
@@ -115,7 +115,7 @@ const newRules = [
       { action_type: 'color_combo', content: '浅色系（白/浅蓝/薄荷绿）反射阳光降低体感温度' },
       {
         action_type: 'reason',
-        content: '热调节理论：浅色反射阳光，棉麻透气率比化纤高40%（Textile Research Journal）',
+        content: '热调节理论：浅色反射阳光，棉麻透气率比化纤高40%',
       },
     ],
   },
@@ -163,7 +163,7 @@ const newRules = [
       { action_type: 'outerwear', content: '羽绒外套 / 厚毛呢大衣' },
       {
         action_type: 'reason',
-        content: '热调节理论：三层穿衣法（base+mid+shell），深色吸热效率高（ASCI 低温着装研究）',
+        content: '热调节理论：三层穿衣法（内层+中层+外层），深色吸热效率高（低温着装研究）',
       },
     ],
   },
@@ -189,7 +189,7 @@ const newRules = [
       { action_type: 'outerwear', content: '羽绒服 / 厚呢大衣 / 棉服' },
       {
         action_type: 'reason',
-        content: '热调节理论：三层穿衣法，男性冬季需保证core区域（躯干）保暖优先',
+        content: '热调节理论：三层穿衣法，男性冬季需保证核心区域（躯干）保暖优先',
       },
     ],
   },
@@ -248,7 +248,7 @@ const newRules = [
       {
         action_type: 'reason',
         content:
-          '正常BMI（18.5-22.9）体型穿搭自由度最高，可灵活驾驭各种风格（亚洲BMI标准 WHO WPR 2000）',
+          '正常BMI（18.5-22.9）体型穿搭自由度最高，可灵活驾驭各种风格（亚洲体型标准）',
       },
     ],
   },
@@ -360,7 +360,7 @@ const newRules = [
       {
         action_type: 'reason',
         content:
-          '皮肤科学：干皮角质层含水量<10%，需选择含透明质酸/甘油的保湿型底妆，避免粉状产品加重干燥（Journal of Cosmetic Dermatology）',
+          '皮肤科学：干皮角质层含水量<10%，需选择含透明质酸/甘油的保湿型底妆，避免粉状产品加重干燥',
       },
     ],
   },
@@ -387,7 +387,7 @@ const newRules = [
       {
         action_type: 'reason',
         content:
-          '皮肤科学：油皮皮脂分泌旺盛，需选择控油配方和哑光妆效产品，粉状质地优于液态（American Academy of Dermatology）',
+          '皮肤科学：油皮皮脂分泌旺盛，需选择控油配方和哑光妆效产品，粉状质地优于液态',
       },
     ],
   },
@@ -413,7 +413,7 @@ const newRules = [
       {
         action_type: 'reason',
         content:
-          '皮肤科学：敏感肌屏障受损，需选择无香精/无酒精/无paraben的产品，矿物彩妆致敏率最低（Contact Dermatitis Journal）',
+          '皮肤科学：敏感肌屏障受损，需选择无香精/无酒精/无羟苯酯类防腐剂的产品，矿物彩妆致敏率最低',
       },
       { action_type: 'avoid', content: '含酒精产品 / 浓香型化妆品 / 强着色力彩妆' },
     ],
@@ -440,7 +440,7 @@ const newRules = [
       {
         action_type: 'reason',
         content:
-          '皮肤科学：混合皮T区油U区干，需分区使用不同质地产品（International Journal of Cosmetic Science）',
+          '皮肤科学：混合皮T区油U区干，需分区使用不同质地产品',
       },
     ],
   },
@@ -473,7 +473,7 @@ const newRules = [
       {
         action_type: 'reason',
         content:
-          '视觉比例理论：黄金比例1:1.618，矮个子（<160cm）应提高腰线至肋骨下缘，上下同色系拉长视觉线条（Fashion Design Theory）',
+          '视觉比例理论：黄金比例1:1.618，矮个子（<160cm）应提高腰线至肋骨下缘，上下同色系拉长视觉线条',
       },
       { action_type: 'avoid', content: '过长上衣 / 低腰裤 / 及膝靴 / 大面积图案' },
     ],
@@ -493,14 +493,14 @@ const newRules = [
       { field: 'height_range', operator: 'eq', value: '180+' },
     ],
     actions: [
-      { action_type: 'top_style', content: 'oversized上衣 / 长款大衣 / 宽松衬衫' },
+      { action_type: 'top_style', content: '宽松上衣 / 长款大衣 / 宽松衬衫' },
       { action_type: 'bottom_style', content: '阔腿长裤 / 长裙 / 直筒牛仔裤' },
       { action_type: 'shoe_style', content: '平底鞋 / 厚底鞋均可（身高已足够）' },
       { action_type: 'color_combo', content: '可大胆使用上下撞色（身高优势可驾驭）' },
       {
         action_type: 'reason',
         content:
-          '视觉比例理论：高个子（>170cm）穿搭自由度高，可驾驭长款和oversized，上下分色不影响整体比例',
+          '视觉比例理论：高个子（>170cm）穿搭自由度高，可驾驭长款和宽松廓形，上下分色不影响整体比例',
       },
     ],
   },
@@ -527,7 +527,7 @@ const newRules = [
       {
         action_type: 'reason',
         content:
-          '视觉比例理论：男性身高160-170cm应选择合身剪裁和高腰线，同色系搭配拉长视觉（Menswear Design Theory）',
+          '视觉比例理论：男性身高160-170cm应选择合身剪裁和高腰线，同色系搭配拉长视觉',
       },
       { action_type: 'avoid', content: '过长上衣 / 低腰裤 / 宽松大裤脚 / 平底靴' },
     ],
@@ -559,7 +559,7 @@ const newRules = [
       {
         action_type: 'reason',
         content:
-          '消费心理学：平价预算应投资基础款（胶囊衣橱理论），60%基础款+30%流行款+10%个性款（Wardrobe Economics）',
+          '消费心理学：平价预算应投资基础款（胶囊衣橱理论），60%基础款+30%流行款+10%个性款',
       },
     ],
   },
@@ -585,7 +585,7 @@ const newRules = [
       {
         action_type: 'reason',
         content:
-          '消费心理学：高端预算应注重面料质感和剪裁工艺，投资天然纤维和经典款式（Luxury Fashion Theory）',
+          '消费心理学：高端预算应注重面料质感和剪裁工艺，投资天然纤维和经典款式',
       },
     ],
   },
@@ -611,7 +611,7 @@ const newRules = [
       {
         action_type: 'reason',
         content:
-          '消费心理学：平价预算男性应投资合身的基础款，比花哨款式更耐穿且显品味（Minimalist Menswear）',
+          '消费心理学：平价预算男性应投资合身的基础款，比花哨款式更耐穿且显品味',
       },
     ],
   },
@@ -635,14 +635,14 @@ const newRules = [
       { field: 'age_range', operator: 'eq', value: '18-25' },
     ],
     actions: [
-      { action_type: 'top_style', content: 'oversized卫衣 / crop top / 碎花衬衫' },
+      { action_type: 'top_style', content: '宽松卫衣 / 短款上衣 / 碎花衬衫' },
       { action_type: 'bottom_style', content: '高腰牛仔裤 / 百褶裙 / 运动短裤' },
       { action_type: 'shoe_style', content: '老爹鞋 / 帆布鞋 / 马丁靴' },
       { action_type: 'color_combo', content: '活力色系（粉/蓝/黄/绿）可大胆撞色' },
       {
         action_type: 'reason',
         content:
-          '年龄心理学：18-25岁年轻人审美接受度高，可尝试前卫色彩和潮流款式（Youth Fashion Psychology）',
+          '年龄心理学：18-25岁年轻人审美接受度高，可尝试前卫色彩和潮流款式',
       },
     ],
   },
@@ -668,7 +668,7 @@ const newRules = [
       {
         action_type: 'reason',
         content:
-          '年龄心理学：26-35岁轻熟女性注重质感和得体，从活力转向知性优雅（Adult Development Theory）',
+          '年龄心理学：26-35岁轻熟女性注重质感和得体，从活力转向知性优雅',
       },
     ],
   },
@@ -687,14 +687,14 @@ const newRules = [
       { field: 'age_range', operator: 'eq', value: '18-25' },
     ],
     actions: [
-      { action_type: 'top_style', content: 'oversized卫衣 / 潮牌T恤 / 棒球夹克' },
+      { action_type: 'top_style', content: '宽松卫衣 / 潮牌T恤 / 棒球夹克' },
       { action_type: 'bottom_style', content: '工装裤 / 束脚裤 / 直筒牛仔裤' },
       { action_type: 'shoe_style', content: '老爹鞋 / 篮球鞋 / 板鞋' },
       { action_type: 'color_combo', content: '潮流撞色 / 街头风格色系' },
       {
         action_type: 'reason',
         content:
-          '年龄心理学：18-25岁男性偏好街头潮流和运动风格，注重品牌认同感（Youth Consumer Behavior）',
+          '年龄心理学：18-25岁男性偏好街头潮流和运动风格，注重品牌认同感',
       },
     ],
   },
@@ -720,7 +720,7 @@ const newRules = [
       {
         action_type: 'reason',
         content:
-          '年龄心理学：26-35岁男性从潮流转向质感，注重面料和剪裁（Adult Development Theory）',
+          '年龄心理学：26-35岁男性从潮流转向质感，注重面料和剪裁',
       },
     ],
   },
@@ -752,7 +752,7 @@ const newRules = [
       {
         action_type: 'reason',
         content:
-          '人体比例美学：短颈宽肩应使用V领拉长颈部，下半身膨胀平衡肩宽比例（Proportion Theory）',
+          '人体比例美学：短颈宽肩应使用V领拉长颈部，下半身膨胀平衡肩宽比例',
       },
       { action_type: 'avoid', content: '高领 / 垫肩 / 泡泡袖 / 船领' },
     ],
@@ -780,7 +780,7 @@ const newRules = [
       {
         action_type: 'reason',
         content:
-          '人体比例美学：长颈窄肩应使用高领和垫肩增加肩部体积，平衡长颈比例（Proportion Theory）',
+          '人体比例美学：长颈窄肩应使用高领和垫肩增加肩部体积，平衡长颈比例',
       },
     ],
   },
@@ -810,7 +810,7 @@ const newRules = [
       { action_type: 'color_combo', content: '春季型色系：珊瑚粉+奶白、鹅黄+浅蓝、薄荷绿+米色' },
       {
         action_type: 'reason',
-        content: '四季色彩分析：暖白皮属于春季型，适合温暖明亮的清色系（Carole Jackson 1987）',
+        content: '四季色彩分析：暖白皮属于春季型，适合温暖明亮的清色系',
       },
       { action_type: 'avoid', content: '冷色调（藏青/酒红/深紫）会显暗沉' },
     ],
@@ -835,7 +835,7 @@ const newRules = [
       { action_type: 'color_combo', content: '秋季型色系：焦糖+奶油、橄榄绿+卡其、赤陶红+深棕' },
       {
         action_type: 'reason',
-        content: '四季色彩分析：暖黄皮属于秋季型，适合浓郁的大地色系（Carole Jackson 1987）',
+        content: '四季色彩分析：暖黄皮属于秋季型，适合浓郁的大地色系',
       },
       { action_type: 'avoid', content: '冷蓝色调 / 荧光色 / 粉色系会显黑' },
     ],
@@ -860,7 +860,7 @@ const newRules = [
       { action_type: 'color_combo', content: '夏季型色系：雾霾蓝+白、薰衣草紫+银灰、浅粉+灰蓝' },
       {
         action_type: 'reason',
-        content: '四季色彩分析：冷白皮属于夏季型，适合柔和的冷色系（Carole Jackson 1987）',
+        content: '四季色彩分析：冷白皮属于夏季型，适合柔和的冷色系',
       },
       { action_type: 'avoid', content: '橙色 / 金棕色 / 深绿色会显脏' },
     ],
@@ -885,7 +885,7 @@ const newRules = [
       { action_type: 'color_combo', content: '冬季型色系：纯白+黑、正红+藏青、宝蓝+银色' },
       {
         action_type: 'reason',
-        content: '四季色彩分析：冷深皮属于冬季型，适合高饱和高对比的纯色系（Carole Jackson 1987）',
+        content: '四季色彩分析：冷深皮属于冬季型，适合高饱和高对比的纯色系',
       },
       { action_type: 'avoid', content: '柔和浊色 / 大地色 / 浅粉色会显暗' },
     ],
@@ -918,7 +918,7 @@ const newRules = [
       {
         action_type: 'reason',
         content:
-          '着装规范理论：婚礼宾客应避免白色系，选择正式感礼服，尊重场合文化（Dress Code Etiquette）',
+          '着装规范理论：婚礼宾客应避免白色系，选择正式感礼服，尊重场合文化',
       },
     ],
   },
@@ -945,7 +945,7 @@ const newRules = [
       {
         action_type: 'reason',
         content:
-          '着装规范理论：男性参加婚礼需着正装或礼服，领结配色需根据婚礼主题调整（Black Tie Dress Code）',
+          '着装规范理论：男性参加婚礼需着正装或礼服，领结配色需根据婚礼主题调整',
       },
     ],
   },
@@ -977,7 +977,7 @@ const newRules = [
       {
         action_type: 'reason',
         content:
-          '色彩学冷暖理论：暖皮（含黄色素多）搭配暖色调金色系配饰，视觉和谐度最高（Color Theory, Johannes Itten）',
+          '色彩学冷暖理论：暖皮（含黄色素多）搭配暖色调金色系配饰，视觉和谐度最高',
       },
     ],
   },
@@ -1003,7 +1003,7 @@ const newRules = [
       {
         action_type: 'reason',
         content:
-          '色彩学冷暖理论：冷皮（含蓝色素多）搭配冷色调银色系配饰，提升皮肤通透感（Color Theory）',
+          '色彩学冷暖理论：冷皮（含蓝色素多）搭配冷色调银色系配饰，提升皮肤通透感',
       },
     ],
   },
@@ -1028,7 +1028,7 @@ const newRules = [
       {
         action_type: 'reason',
         content:
-          '色彩学冷暖理论：暖皮男性适合金色系和棕色调配饰，整体和谐有质感（Menswear Color Theory）',
+          '色彩学冷暖理论：暖皮男性适合金色系和棕色调配饰，整体和谐有质感',
       },
     ],
   },
@@ -1053,7 +1053,7 @@ const newRules = [
       {
         action_type: 'reason',
         content:
-          '色彩学冷暖理论：冷皮男性适合银色系和黑色调配饰，干净利落显气质（Menswear Color Theory）',
+          '色彩学冷暖理论：冷皮男性适合银色系和黑色调配饰，干净利落显气质',
       },
     ],
   },
@@ -1083,7 +1083,7 @@ const newRules = [
       {
         action_type: 'reason',
         content:
-          '接触性皮炎研究：金属过敏（镍过敏最常见）患者应选择钛钢/医疗不锈钢/铂金材质，致敏率<1%（Contact Dermatitis Journal）',
+          '接触性皮炎研究：金属过敏（镍过敏最常见）患者应选择钛钢/医疗不锈钢/铂金材质，致敏率<1%',
       },
       { action_type: 'avoid', content: '镍合金 / 便宜合金 / 含铜饰品 / 劣电镀品' },
     ],
@@ -1109,15 +1109,15 @@ const newRules = [
       { field: 'face_shape', operator: 'eq', value: '圆脸' },
     ],
     actions: [
-      { action_type: '发型', content: '中长直发 / 高马尾 / 侧分长bob' },
+      { action_type: '发型', content: '中长直发 / 高马尾 / 侧分长波波头' },
       { action_type: 'hair_length', content: '中长发（锁骨以下） / 长发' },
       { action_type: 'bang_type', content: '侧分刘海 / 中分无刘海（避免齐刘海）' },
       {
         action_type: 'reason',
         content:
-          '面部比例美学：圆脸（宽=长）需纵向拉伸，选择有高度感的发型和侧分线条（Facial Proportion Theory）',
+          '面部比例美学：圆脸（宽=长）需纵向拉伸，选择有高度感的发型和侧分线条',
       },
-      { action_type: 'avoid', content: '齐刘海 / 短bob / 蓬松卷发会显脸更圆' },
+      { action_type: 'avoid', content: '齐刘海 / 短波波头 / 蓬松卷发会显脸更圆' },
     ],
   },
   {
@@ -1141,7 +1141,7 @@ const newRules = [
       {
         action_type: 'reason',
         content:
-          '面部比例美学：方脸（下颌角突出）需柔和曲线发型弱化棱角（Facial Proportion Theory）',
+          '面部比例美学：方脸（下颌角突出）需柔和曲线发型弱化棱角',
       },
       { action_type: 'avoid', content: '直发一刀切 / 高扎发露出下颌 / 短发' },
     ],
@@ -1161,13 +1161,13 @@ const newRules = [
       { field: 'face_shape', operator: 'eq', value: '心形脸' },
     ],
     actions: [
-      { action_type: '发型', content: '下巴长度bob / 中长卷发 / 蓬松中长发' },
+      { action_type: '发型', content: '下巴长度波波头 / 中长卷发 / 蓬松中长发' },
       { action_type: 'hair_length', content: '短发到下巴 / 中长发（增加下半部分体积）' },
       { action_type: 'bang_type', content: '侧分刘海 / 轻薄刘海' },
       {
         action_type: 'reason',
         content:
-          '面部比例美学：心形脸（宽额窄下巴）需在下半部分增加体积平衡（Facial Proportion Theory）',
+          '面部比例美学：心形脸（宽额窄下巴）需在下半部分增加体积平衡',
       },
     ],
   },
@@ -1192,7 +1192,7 @@ const newRules = [
       {
         action_type: 'reason',
         content:
-          '面部比例美学：长脸（长>宽）需横向丰满和刘海缩短视觉长度（Facial Proportion Theory）',
+          '面部比例美学：长脸（长>宽）需横向丰满和刘海缩短视觉长度',
       },
       { action_type: 'avoid', content: '超长直发 / 中分无刘海 / 过于贴头皮' },
     ],
@@ -1225,7 +1225,7 @@ const newRules = [
       {
         action_type: 'reason',
         content:
-          '职场着装心理学：上班通勤应保持干练形象，中性色系传达专业感（Workplace Psychology, Heilman 2018）',
+          '职场着装心理学：上班通勤应保持干练形象，中性色系传达专业感',
       },
     ],
   },
@@ -1252,7 +1252,7 @@ const newRules = [
       {
         action_type: 'reason',
         content:
-          '职场着装心理学：男性商务休闲(Smart Casual)平衡专业与亲和力（Workplace Psychology）',
+          '职场着装心理学：男性商务休闲平衡专业与亲和力',
       },
     ],
   },
@@ -1283,7 +1283,7 @@ const newRules = [
       {
         action_type: 'reason',
         content:
-          '舒适心理学：居家应选择天然棉质宽松面料，柔和色调促进放松（Environmental Psychology）',
+          '舒适心理学：居家应选择天然棉质宽松面料，柔和色调促进放松',
       },
     ],
   },
@@ -1309,7 +1309,7 @@ const newRules = [
       {
         action_type: 'reason',
         content:
-          '舒适心理学：男性居家同样需要舒适面料，低饱和色调有助于精神放松（Environmental Psychology）',
+          '舒适心理学：男性居家同样需要舒适面料，低饱和色调有助于精神放松',
       },
     ],
   },
@@ -1340,7 +1340,7 @@ const newRules = [
       {
         action_type: 'reason',
         content:
-          '社交印象管理：约会聚会应展现女性魅力，浪漫色系和适度露肤提升吸引力（Impression Management Theory, Goffman 1959）',
+          '社交印象管理：约会聚会应展现女性魅力，浪漫色系和适度露肤提升吸引力',
       },
     ],
   },
@@ -1366,7 +1366,7 @@ const newRules = [
       {
         action_type: 'reason',
         content:
-          '社交印象管理：男性约会应展现品味而非炫耀，修身合体+有质感的搭配提升好感度（Impression Management）',
+          '社交印象管理：男性约会应展现品味而非炫耀，修身合体+有质感的搭配提升好感度',
       },
     ],
   },

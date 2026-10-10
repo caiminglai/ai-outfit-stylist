@@ -106,6 +106,9 @@ export default function CustomerForm({
     region: initial?.region,
     height: initial?.height,
     weight: initial?.weight,
+    bust: initial?.bust,
+    waist: initial?.waist,
+    shoulder: initial?.shoulder,
     skin_tone: initial?.skin_tone,
     skin_tone_detail: initial?.skin_tone_detail,
     color_chroma: initial?.color_chroma,
@@ -379,7 +382,7 @@ export default function CustomerForm({
         )}
       </section>
 
-      {/* 身高体重(选填,填了才有 BMI/体型数字) */}
+      {/* 身高体重与围度(选填,填了才有 BMI/体型数字与合身层) */}
       <section
         className={sectionClass}
         style={{
@@ -388,9 +391,9 @@ export default function CustomerForm({
           marginBottom: '14px',
         }}
       >
-        <div className="section-title">身高体重（选填）</div>
-        <div className="flex gap-3">
-          <div className="flex-1 min-w-0">
+        <div className="section-title">身高体重与围度（选填）</div>
+        <div className={`grid ${gap} grid-cols-2`}>
+          <div className="min-w-0">
             <div className="text-xs mb-2" style={{ color: 'var(--muted)' }}>
               身高
             </div>
@@ -404,7 +407,7 @@ export default function CustomerForm({
               }
             />
           </div>
-          <div className="flex-1 min-w-0">
+          <div className="min-w-0">
             <div className="text-xs mb-2" style={{ color: 'var(--muted)' }}>
               体重
             </div>
@@ -418,6 +421,53 @@ export default function CustomerForm({
               }
             />
           </div>
+          <div className="min-w-0">
+            <div className="text-xs mb-2" style={{ color: 'var(--muted)' }}>
+              净胸围
+            </div>
+            <input
+              type="number"
+              placeholder="cm，如 92"
+              className="form-input"
+              value={profile.bust ?? ''}
+              onChange={(e) => update('bust', e.target.value ? Number(e.target.value) : undefined)}
+            />
+          </div>
+          <div className="min-w-0">
+            <div className="text-xs mb-2" style={{ color: 'var(--muted)' }}>
+              净腰围
+            </div>
+            <input
+              type="number"
+              placeholder="cm，如 84"
+              className="form-input"
+              value={profile.waist ?? ''}
+              onChange={(e) => update('waist', e.target.value ? Number(e.target.value) : undefined)}
+            />
+          </div>
+          <div className="min-w-0">
+            <div className="text-xs mb-2" style={{ color: 'var(--muted)' }}>
+              肩宽
+            </div>
+            <input
+              type="number"
+              placeholder="cm，如 39"
+              className="form-input"
+              value={profile.shoulder ?? ''}
+              onChange={(e) =>
+                update('shoulder', e.target.value ? Number(e.target.value) : undefined)
+              }
+            />
+          </div>
+        </div>
+        <div className="text-xs mt-2" style={{ color: 'var(--muted)' }}>
+          围度量的是身体不是衣服：软尺水平绕一圈、贴皮不勒，取呼气末的数。净胸围过胸部最丰满处，
+          净腰围在胯骨上端与肋骨下缘之间那条腰际线上绕一周（一般在肚脐上方一两指，别往下拉到肚脐，位置低了会把体型档判错），
+          肩宽量两侧肩峰点之间的直线距离（需两人配合，从背面量）。
+        </div>
+        <div className="text-xs mt-1" style={{ color: 'var(--muted)' }}>
+          身高与净胸围决定上衣的号型与该买到的胸围，缺了这两格，「合身」那一段只会显示请先量；
+          净腰围用来定 Y/A/B/C 分档。不填系统不会替你猜一个数。
         </div>
       </section>
 

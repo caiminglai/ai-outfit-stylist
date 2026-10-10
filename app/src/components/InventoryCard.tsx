@@ -92,7 +92,7 @@ export default function InventoryCard({ product, compact }: InventoryCardProps) 
           )}
           {product.price != null && (
             <span className="text-[10px] font-medium" style={{ color: 'var(--accent)' }}>
-              ¥{product.price}
+              ¥{Number(product.price).toFixed(2)}
             </span>
           )}
           {product.stock > 0 && product.stock <= 3 && (

@@ -117,51 +117,77 @@ test('computeBodyShape: 直筒型(差值不大)', () => {
 // ============================================================
 // 腰臀比
 // ============================================================
-test('computeWhRatio: 标准腰臀比 (< 0.7)', () => {
-  // 腰 60 臀 90 → 0.667
-  const r = computeWhRatio(60, 90)
-  assert.ok(r.wh_ratio < 0.7)
+// 档位边界按性别分：女 0.80/0.85、男 0.90/0.95（WHO 2008 中心性肥胖阈值，健康口径）
+test('computeWhRatio: 女 明显 (< 0.80)', () => {
+  // 腰 66 臀 90 → 0.733
+  const r = computeWhRatio(66, 90, '女')
+  assert.ok(r.wh_ratio < 0.8)
   assert.strictEqual(r.wh_status, 'good')
 })
 
-test('computeWhRatio: 正常 (0.7 ~ 0.85)', () => {
-  // 腰 70 臀 90 → 0.778
-  const r = computeWhRatio(70, 90)
-  assert.ok(r.wh_ratio >= 0.7 && r.wh_ratio < 0.85)
+test('computeWhRatio: 女 中等 (0.80 ~ 0.85)', () => {
+  // 腰 74 臀 90 → 0.822
+  const r = computeWhRatio(74, 90, '女')
   assert.strictEqual(r.wh_status, 'normal')
 })
 
-test('computeWhRatio: 偏高 (>= 0.85)', () => {
+test('computeWhRatio: 女 模糊 (>= 0.85)', () => {
   // 腰 80 臀 90 → 0.889
-  const r = computeWhRatio(80, 90)
-  assert.ok(r.wh_ratio >= 0.85)
+  const r = computeWhRatio(80, 90, '女')
   assert.strictEqual(r.wh_status, 'warning')
 })
 
-test('computeWhRatio: 臀围 0 兜底', () => {
-  const r = computeWhRatio(60, 0)
-  assert.strictEqual(r.wh_ratio, 0.73)
+// 回归用：改之前男女共用 0.70 界，男性正常区间(0.85~0.95)永远拿不到"明显"
+test('computeWhRatio: 男 0.85 判明显（旧实现会误判模糊）', () => {
+  // 腰 76.5 臀 90 → 0.85
+  const r = computeWhRatio(76.5, 90, '男')
+  assert.ok(r.wh_ratio >= 0.8 && r.wh_ratio < 0.9)
+  assert.strictEqual(r.wh_status, 'good')
+})
+
+test('computeWhRatio: 男 模糊 (>= 0.95)', () => {
+  // 腰 88 臀 90 → 0.978
+  const r = computeWhRatio(88, 90, 'male')
+  assert.strictEqual(r.wh_status, 'warning')
+})
+
+test('computeWhRatio: 性别缺失只出比值不出档位', () => {
+  const r = computeWhRatio(70, 90)
+  assert.strictEqual(r.wh_ratio, 0.78)
+  assert.strictEqual(r.wh_status, undefined)
+})
+
+test('computeWhRatio: 腰臀缺一就不编造', () => {
+  assert.deepStrictEqual(computeWhRatio(60, 0, '女'), {})
+  assert.deepStrictEqual(computeWhRatio(0, 90, '女'), {})
 })
 
 // ============================================================
 // 腿身比 & 肩宽比
 // ============================================================
-test('computeLegRatio: 短腿 (< 0.53)', () => {
-  const r = computeLegRatio(80, 160)
-  assert.ok(r.leg_ratio < 0.53)
+// 口径:腿长量"髋骨到脚跟"(髂嵴点高类),切点 0.52/0.56,中位数≈0.54(GB/T 10000 转录值)
+test('computeLegRatio: 偏短 (< 0.52)', () => {
+  const r = computeLegRatio(80, 160) // 0.50
+  assert.ok(r.leg_ratio < 0.52)
   assert.strictEqual(r.leg_status, 'short')
 })
 
-test('computeLegRatio: 长腿 (> 0.58)', () => {
-  const r = computeLegRatio(100, 160)
-  assert.ok(r.leg_ratio > 0.58)
+test('computeLegRatio: 偏长 (> 0.56)', () => {
+  const r = computeLegRatio(100, 160) // 0.625
+  assert.ok(r.leg_ratio > 0.56)
   assert.strictEqual(r.leg_status, 'long')
 })
 
-test('computeLegRatio: 正常 (0.53 ~ 0.58)', () => {
-  const r = computeLegRatio(88, 162)
-  assert.ok(r.leg_ratio >= 0.53 && r.leg_ratio <= 0.58)
+test('computeLegRatio: 标准 (0.52 ~ 0.56)', () => {
+  const r = computeLegRatio(88, 162) // 0.543
+  assert.ok(r.leg_ratio >= 0.52 && r.leg_ratio <= 0.56)
   assert.strictEqual(r.leg_status, 'normal')
+})
+
+test('computeLegRatio: 缺身高或腿长不编造', () => {
+  assert.deepStrictEqual(computeLegRatio(88, 0), {})
+  assert.deepStrictEqual(computeLegRatio(0, 162), {})
+  assert.deepStrictEqual(computeLegRatio(undefined, undefined), {})
 })
 
 test('computeShoulderRatio: 计算肩宽比(百分比形式)', () => {
@@ -173,6 +199,28 @@ test('computeShoulderRatio: 计算肩宽比(百分比形式)', () => {
     `肩宽比应在 20-30 之间,实际: ${r.shoulder_ratio}`,
   )
   assert.ok(r.shoulder_status, '应有肩宽状态')
+})
+
+// 缺测不出分:原来这里缺肩宽会拿 38/162 编出 23.5 + 'normal',现在整段不返回
+test('computeShoulderRatio: 缺肩宽或身高不编造', () => {
+  assert.deepStrictEqual(computeShoulderRatio(0, 162), {})
+  assert.deepStrictEqual(computeShoulderRatio(undefined, 162), {})
+  assert.deepStrictEqual(computeShoulderRatio(38, 0), {})
+  assert.deepStrictEqual(computeShoulderRatio(undefined, undefined), {})
+})
+
+test('computeBodyShape: 缺胸/腰/臀任一项不编造', () => {
+  assert.deepStrictEqual(computeBodyShape(0, 70, 90, 38), {})
+  assert.deepStrictEqual(computeBodyShape(90, undefined, 90, 38), {})
+  assert.deepStrictEqual(computeBodyShape(90, 70, 0, 38), {})
+})
+
+test('computeBodyShape: 上身占优但没量肩宽 → 判不出型,只标 unmeasured', () => {
+  // 胸 95 腰 70 臀 85:胸腰差 25 > 臀腰差 15+5,是"肩宽"还是"腰腹"分不开
+  const r = computeBodyShape(95, 70, 85, undefined)
+  assert.strictEqual(r.body_shape, undefined, '不该给体型标签')
+  assert.strictEqual(r.body_shape_key, undefined, '不该给体型键(前端体型卡整段不出现)')
+  assert.strictEqual(r.body_shape_status, 'unmeasured')
 })
 
 // ============================================================

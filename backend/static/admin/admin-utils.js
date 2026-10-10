@@ -39,6 +39,11 @@ var SCENARIO_LABELS = {
 var VALUE_LABELS = {
   // rule_groups.mode
   'rule_groups.mode': { 'store': '门店', 'personal': '个人', 'all': '门店+个人' },
+  // rule_groups.evidence_level —— 与后端 services/evidenceLevels.js 的档位一致
+  'rule_groups.evidence_level': {
+    'A': 'A 国标/国际标准', 'B': 'B 学术实证', 'C': 'C 行业体系/经验', 'D': 'D 命理体系',
+    'null': '未标注(按 C 档对待)', '': '未标注(按 C 档对待)',
+  },
   // rule_groups.category
   'rule_groups.category': { '穿搭': '穿搭', '妆容': '美妆', '发型': '发型', '配饰': '配饰', '姿势': '姿势' },
   // rule_groups.enabled / inventory_products.enabled / model_configs.enabled 等
@@ -78,7 +83,14 @@ var VALUE_LABELS = {
   // feedback_events.signal —— 与后端 services/ruleFeedback.js 的 SIGNALS 一字一样,改那边要改这里
   'feedback_events.signal': { 'useful': '有用', 'inaccurate': '不准' },
   // photos.type
-  'photos.type': { 'face': '面部', 'body': '全身', 'cloth': '衣物' },
+  'photos.type': { 'face': '面部', 'body': '全身', 'cloth': '衣物', 'tryon': '试穿' },
+  // admin_users.role
+  'admin_users.role': { 'superadmin': '超级管理员', 'admin': '管理员' },
+  // inventory_categories.code
+  'inventory_categories.code': {
+    'top': '上装', 'bottom': '下装', 'shoes': '鞋履',
+    'accessory': '配饰', 'makeup': '妆容', 'hairstyle': '发型',
+  },
   // rule_conditions.field —— 与后端 services/ruleExplainer.js 的 FIELD_LABELS 一字一样,改那边要改这里
   'rule_conditions.field': {
     'gender': '性别', 'category': '分类', 'scenario': '场景', 'skin_tone': '肤色',
@@ -129,9 +141,10 @@ function translateValue(tableName, columnName, value) {
   return value;
 }
 
-/* ── 数据库表中英文对照 ── */
+/* ── 数据库表中文名对照 ── */
 var TABLE_LABELS = {
   'users': '用户表',
+  'stores': '门店表',
   'photos': '照片表',
   'face_features': '人脸特征表',
   'face_profiles': '面容档案表(手工)',
@@ -154,9 +167,13 @@ var TABLE_LABELS = {
   'user_cosmetics': '用户化妆品表',
   'user_accessories': '用户配饰表',
   'admin_users': '管理员表',
+  'user_accounts': '正式账号表',
   'model_configs': '3D模型配置表',
   'styleai_config': '系统配置表',
   'deposits': '付款凭证表',
+  'app_settings': '键值设置表',
+  'profile_drafts': '档案草稿表',
+  'payment_orders': '在线收款订单表',
   'creator_works': '创作者作品表',
 };
 
@@ -297,6 +314,7 @@ var COLUMN_COMMENTS = {
     'feedback_down': '差评数',
     'created_at': '创建时间',
     'source_key': '内置规则标识（空=手工新建）',
+    'evidence_level': '依据档位（A国标/B实证/C体系/D命理）',
   },
   // rule_conditions 规则条件表
   'rule_conditions': {
@@ -554,6 +572,40 @@ var COLUMN_COMMENTS = {
     'created_at': '提交时间',
     'reviewed_at': '审核时间',
   },
+  // user_accounts 正式账号表
+  'user_accounts': {
+    'id': '主键ID',
+    'phone': '手机号',
+    'password_hash': '登录密码(加密串)',
+    'user_id': '关联用户ID',
+    'created_at': '注册时间',
+  },
+  // app_settings 键值设置表(收款标价这类后台可改的配置都存这里)
+  'app_settings': {
+    'key': '设置项',
+    'value': '设置值',
+    'updated_at': '更新时间',
+  },
+  // profile_drafts 档案草稿表(用户填一半没提交的内容，按人覆盖)
+  'profile_drafts': {
+    'user_id': '用户ID',
+    'form_json': '表单内容(JSON)',
+    'updated_at': '保存时间',
+  },
+  // payment_orders 在线收款订单表
+  'payment_orders': {
+    'id': '主键ID',
+    'out_trade_no': '我方订单号',
+    'user_id': '用户ID',
+    'description': '商品说明',
+    'amount_fen': '金额(分)',
+    'status': '订单状态',
+    'transaction_id': '渠道流水号',
+    'code_url': '下单返回链接',
+    'paid_at': '到账时间',
+    'notify_raw': '渠道回调原文',
+    'created_at': '下单时间',
+  },
 };
 
 /* 获取字段中文注释 */
@@ -565,10 +617,32 @@ function getColumnComment(tableName, columnName) {
   return '';
 }
 
-/* 表名 → 中文显示(中文优先,括号附英文原名) */
+/* 表名 → 中文显示（无映射时退回原表名兜底，不再附英文原名） */
 function tableLabel(name) {
-  var label = TABLE_LABELS[name];
-  return label ? label + ' (' + name + ')' : name;
+  return TABLE_LABELS[name] || name;
+}
+
+/* 列类型 → 中文显示，长度/精度原样保留（VARCHAR(50) → 文本(50)） */
+var TYPE_LABELS = { TEXT: '文本', INTEGER: '整数', REAL: '小数', BLOB: '二进制', NUMERIC: '数值' };
+function columnTypeLabel(type) {
+  var m = /^([A-Za-z]+)\s*(\([\s\d,]+\))?$/.exec(String(type || '').trim());
+  if (!m) return String(type || '');
+  return (TYPE_LABELS[m[1].toUpperCase()] || m[1]) + (m[2] || '');
+}
+
+/**
+ * UTC 时间串 → 北京时间「年-月-日 时:分:秒」
+ * 库里 *_at 一律写 UTC（schema 默认 datetime('now')、代码里 toISOString()），所以固定 +8 不猜时区。
+ * 认不出来就返回 null，让调用方原样显示。
+ */
+function formatUtcAsBeijing(s) {
+  var m = /^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})(?::(\d{2}))?/.exec(String(s));
+  if (!m) return null;
+  var t = new Date(Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +(m[6] || 0)) + 8 * 3600 * 1000);
+  if (isNaN(t.getTime())) return null;
+  function p(n) { return (n < 10 ? '0' : '') + n }
+  return t.getUTCFullYear() + '-' + p(t.getUTCMonth() + 1) + '-' + p(t.getUTCDate()) +
+    ' ' + p(t.getUTCHours()) + ':' + p(t.getUTCMinutes()) + ':' + p(t.getUTCSeconds());
 }
 
 /* ── 工具函数 ── */
@@ -612,7 +686,13 @@ function fetchJSON(url, options) {
       window.location.replace('/admin/login');
       throw new Error('登录已过期');
     }
-    return r.json();
+    // 后端失败体是 {success:false, error:{code,message}}，调用方一律读 res.message，在这里补平
+    return r.json().then(function(body) {
+      if (body && body.success === false && body.message === undefined) {
+        body.message = (body.error && (body.error.message || body.error.code)) || ('HTTP ' + r.status);
+      }
+      return body;
+    });
   });
 }
 
@@ -635,7 +715,13 @@ function apiCall(url, method, data) {
       window.location.replace('/admin/login');
       throw new Error('登录已过期');
     }
-    return r.json();
+    // 后端失败体是 {success:false, error:{code,message}}，调用方一律读 res.message，在这里补平
+    return r.json().then(function(body) {
+      if (body && body.success === false && body.message === undefined) {
+        body.message = (body.error && (body.error.message || body.error.code)) || ('HTTP ' + r.status);
+      }
+      return body;
+    });
   });
 }
 
@@ -655,7 +741,7 @@ function switchSection(section) {
 
   if (section === 'rules') loadRules();
   if (section === 'inventory') loadInventory();
-  if (section === 'payments') loadDeposits();
+  if (section === 'payments') { loadDeposits(); loadPrice(); }
   if (section === 'creator') loadCreatorWorks();
   if (section === 'members') loadAccounts();
   if (section === 'models') loadModels();

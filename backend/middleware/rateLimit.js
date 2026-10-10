@@ -9,13 +9,21 @@
  *   windowMs  — 时间窗口（毫秒），默认 60 秒
  *   max       — 窗口内最大请求数，默认 20
  *   keyFn     — 自定义 key 函数，默认用 IP
- *   message   — 超限时的错误消息
+ *   message   — 超限时的错误消息，可以是字符串，也可以是 sendError 那种
+ *               { error: { code, message } } 结构（server.js 的全局闸就是后者）
  */
 function rateLimit(options = {}) {
   const windowMs = options.windowMs || 60 * 1000
   const max = options.max || 20
   const keyFn = options.keyFn || ((req) => req.ip || req.socket?.remoteAddress || 'unknown')
-  const message = options.message || '请求过于频繁，请稍后再试'
+
+  const fallback = '请求过于频繁，请稍后再试'
+  const msgOpt = options.message || fallback
+  // 两种入参都归一成 { code, message }：直接塞 message 会让对象入参变成
+  // data.error.error.message，调用方按统一形状读就永远读不到文案
+  const limitCode = typeof msgOpt === 'string' ? 'RATE_LIMITED' : msgOpt.error?.code || 'RATE_LIMITED'
+  const limitMessage =
+    typeof msgOpt === 'string' ? msgOpt : msgOpt.error?.message || fallback
 
   // Map<键, { count: 计数, resetTime: 重置时间 }>
   const buckets = new Map()
@@ -57,7 +65,7 @@ function rateLimit(options = {}) {
       res.setHeader('Retry-After', retryAfter)
       return res.status(429).json({
         success: false,
-        error: message,
+        error: { code: limitCode, message: limitMessage },
         retry_after: retryAfter,
       })
     }

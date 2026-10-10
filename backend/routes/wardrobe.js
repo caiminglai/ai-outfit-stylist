@@ -7,7 +7,8 @@
 const express = require('express')
 const db = require('../db/init')
 const { sendSuccess, sendError } = require('../utils/response')
-const { buildRecommendation } = require('../services/recommendEngine')
+const { buildRecommendation, recommendationBodyDeviation } = require('../services/recommendEngine')
+const { topFitBody, isTopCategory } = require('../services/topFitBody')
 const { getSessionId, parseJsonField, getCurrentSeason } = require('../utils/common')
 const { rateLimit } = require('../middleware/rateLimit')
 
@@ -19,6 +20,18 @@ const writeLimiter = rateLimit({ windowMs: 60000, max: 30, message: '操作过�
 // ============================================================
 // 辅助函数
 // ============================================================
+
+/**
+ * 版型与面料厚薄两档只认死值，认不到就当没填（缺测不编造，见 docs/依据/08 §10.1）。
+ * 值域按 Sakata/Kim/Takatera 2020 实测的两种剪裁走向 + 常用厚薄三档。
+ */
+const FIT_STYLE_VALUES = ['合体', '宽松']
+const FABRIC_WEIGHT_VALUES = ['薄', '中', '厚']
+
+function sanitizeEnum(val, allowedVals) {
+  const v = typeof val === 'string' ? val.trim() : ''
+  return allowedVals.includes(v) ? v : null
+}
 
 /** 规范化衣橱单品记录（解析 JSON 字段） */
 function normalizeItem(row) {
@@ -335,9 +348,10 @@ router.post('/items', writeLimiter, (req, res) => {
       .prepare(
         `INSERT INTO user_wardrobe
         (session_id, name, category, sub_category, color, color_tags, pattern,
+         fit_style, fabric_weight,
          style_tags, season_tags, occasion_tags, fit_body_types, fit_skin_tones,
          \`condition\`, price, image_url)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         sessionId,
@@ -347,6 +361,8 @@ router.post('/items', writeLimiter, (req, res) => {
         data.color || null,
         JSON.stringify(data.color_tags || []),
         data.pattern || null,
+        sanitizeEnum(data.fit_style, FIT_STYLE_VALUES),
+        sanitizeEnum(data.fabric_weight, FABRIC_WEIGHT_VALUES),
         JSON.stringify(data.style_tags || []),
         JSON.stringify(data.season_tags || []),
         JSON.stringify(data.occasion_tags || []),
@@ -400,6 +416,8 @@ router.put('/items/:itemId', writeLimiter, (req, res) => {
       color: 'color',
       color_tags: 'color_tags',
       pattern: 'pattern',
+      fit_style: 'fit_style',
+      fabric_weight: 'fabric_weight',
       style_tags: 'style_tags',
       season_tags: 'season_tags',
       occasion_tags: 'occasion_tags',
@@ -429,7 +447,11 @@ router.put('/items/:itemId', writeLimiter, (req, res) => {
             ? data[key]
               ? 1
               : 0
-            : data[key]
+            : key === 'fit_style'
+              ? sanitizeEnum(data[key], FIT_STYLE_VALUES)
+              : key === 'fabric_weight'
+                ? sanitizeEnum(data[key], FABRIC_WEIGHT_VALUES)
+                : data[key]
         updates.push(`${col} = ?`)
         params.push(val)
       }
@@ -769,6 +791,10 @@ router.post('/recommend', (req, res) => {
           name: i.name,
           category: i.category,
           color: i.color,
+          pattern: i.pattern,
+          // 版型与厚薄两格要带到下游才谈得上"引擎读衣柜真字段"（上衣打分走 /wardrobe/top-fit）
+          fit_style: i.fit_style,
+          fabric_weight: i.fabric_weight,
           style_tags: i.style_tags || [],
           season_tags: i.season_tags || [],
           occasion_tags: i.occasion_tags || [],
@@ -814,7 +840,90 @@ router.post('/recommend', (req, res) => {
 })
 
 // ============================================================
-// 九、衣橱状态统计
+// 九、衣橱上衣按身材打分（不看脸；docs/依据/08 §5 的偏差向量匹配）
+// ============================================================
+
+/** 算这一维要用的上衣字段：真字段优先，其余由 topFitBody 的词典从名称里认（C 档，只贴标签不改文案） */
+function toTopDescriptor(row) {
+  return {
+    id: row.id,
+    name: row.name,
+    sub_category: row.sub_category,
+    category: row.category,
+    color: row.color,
+    pattern: row.pattern,
+    fit_style: row.fit_style,
+    fabric_weight: row.fabric_weight,
+    style_tags: row.style_tags || [],
+  }
+}
+
+router.post('/top-fit', (req, res) => {
+  try {
+    const sessionId = getSessionId(req)
+    if (!sessionId) {
+      return sendError(res, '缺少 X-Session-Id', 400)
+    }
+    const profile = (req.body || {}).profile || {}
+
+    // 现量：活库 category 是中文自由标签 ⇒ 判定交给 isTopCategory，SQL 里写死英文键会一条不中
+    const rows = db
+      .prepare(
+        'SELECT * FROM user_wardrobe WHERE session_id = ? ORDER BY created_at DESC',
+      )
+      .all(sessionId)
+      .filter((r) => isTopCategory(r.category))
+    const tops = rows.map((r) => toTopDescriptor(normalizeItem(r)))
+
+    const dev = recommendationBodyDeviation(profile)
+    // 摊平成和报告页 _computed.body_deviation 一个形状，前端只用一套键
+    const devFlat = { want: dev.want, notes: dev.notes }
+    for (const [k, v] of Object.entries(dev.measure)) if (v != null) devFlat[k] = v
+    if (dev.ease_window) devFlat.ease_window_cm = dev.ease_window
+    const scored = tops.map((t) => topFitBody(null, t, dev))
+    const ranked = []
+    const unscored = []
+    tops.forEach((t, i) => {
+      const r = scored[i]
+      if (!r) {
+        unscored.push({
+          id: t.id,
+          name: t.name,
+          reason: '这件上衣的版型/肩线/长短/颜色都没认出来，或你还没量够尺寸 ⇒ 不打分',
+        })
+        return
+      }
+      ranked.push({
+        id: t.id,
+        name: t.name,
+        score: r.score,
+        axes: r.axes,
+        axes_present: r.axes_present,
+        axes_missing: r.axes_missing,
+        top: { label: r.top.label, signals: r.top.signals, fit_style: r.top.fit_style, fabric_weight: r.top.fabric_weight },
+      })
+    })
+    ranked.sort((a, b) => b.score - a.score)
+
+    return sendSuccess(
+      res,
+      {
+        person_deviation: devFlat,
+        ranked,
+        unscored,
+        top_count: tops.length,
+        note: '这一分只比"这件上衣往哪修"和"你的比例偏差"对不对得上，缺的轴不计入；权重是手拍的标定值，不是判定',
+      },
+      '上衣身材适配排序已生成',
+    )
+  } catch (err) {
+    console.error('[衣橱] 上衣打分失败:', err)
+    return sendError(res, '打分失败', 500)
+  }
+})
+
+// ============================================================
+// 十、衣橱状态统计
 // ============================================================
 
 router.get('/status', (req, res) => {

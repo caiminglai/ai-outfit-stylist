@@ -87,6 +87,11 @@ export const HIDDEN_FIELDS = [
   'score',
   'feedback',
   'explanation',
+  // 这两样是派生元数据,由 RecommendationReport 单独渲染(依据徽章/贴合分行),不当结论行平铺
+  'evidence_level',
+  'color_fit',
+  // 身材贴合分同上:派生元数据,单独渲染,不平铺成"body_fit: [object Object]"
+  'body_fit',
 ]
 
 /** 根据 Tab key 获取中文标签 */

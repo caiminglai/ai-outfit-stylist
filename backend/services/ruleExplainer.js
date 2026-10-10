@@ -15,6 +15,11 @@
 // 1. 字段中文标签映射
 // ============================================================
 
+const { LABELS: EVIDENCE_LABELS, evidenceNote } = require('./evidenceLevels')
+
+/** 未标注（后台手工建的、或前缀认不出来的）统一显示成一句话，不留空白给前端猜 */
+const evidenceLabel = (level) => EVIDENCE_LABELS[level] || '未标注（按行业体系/经验对待）'
+
 /**
  * 规则条件 field → 中文标签
  * 这些 field 对应顾客档案里的填写项
@@ -61,6 +66,10 @@ const FIELD_LABELS = {
   leg_proportion: '腿身比（算出）',
   shoulder_frame: '肩宽比（算出）',
   waist_definition: '腰线（算出）',
+  // ↓ 第三批：八字五行(由出生日期+时辰算出,是"自身条件"之外的第二条判定依据)
+  day_master_element: '日主五行（算出）',
+  favorable_element: '喜用五行（算出）',
+  unfavorable_element: '忌用五行（算出）',
 }
 
 /**
@@ -328,6 +337,8 @@ function explainGroup(group, conditions) {
     适用性别: group.gender || null,
     匹配条件: userConditions.map((c) => explainCondition(c)),
     规则说明: group.description || '',
+    依据档位: evidenceLabel(group.evidence_level),
+    依据说明: evidenceNote(group.evidence_level),
     优先级: group.priority || 0,
   }
 }
@@ -356,6 +367,7 @@ function explainMatchedRecommendation(matched, allConditions) {
     匹配分: matched.score || 0,
     优先级: matched.priority || 0,
     规则说明: matched.group_name || '',
+    依据档位: evidenceLabel(matched.evidence_level),
   }
 }
 

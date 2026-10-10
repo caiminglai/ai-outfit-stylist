@@ -13,6 +13,7 @@ const {
   ACTION_LABELS,
 } = require('../services/ruleExplainer')
 const { buildRecommendation } = require('../services/recommendEngine')
+const { EVIDENCE_LEVELS, VALUES: EVIDENCE_VALUES } = require('../services/evidenceLevels')
 
 const router = express.Router()
 
@@ -27,12 +28,48 @@ const CONDITION_FIELDS = Object.keys(FIELD_LABELS)
 
 const CONDITION_OPERATORS = ['eq', 'in', 'ne']
 
+/**
+ * 依据分档写入端归一：只认 A/B/C/D，认不出的一律落 NULL(未标注)，
+ * 绝不在这里做二次判断——判档规则的唯一实现处是 services/evidenceLevels.js
+ */
+function normalizeEvidence(value) {
+  const v = String(value ?? '')
+    .trim()
+    .toUpperCase()
+  return EVIDENCE_VALUES.includes(v) ? v : null
+}
+
 /** 把用户填的值切成候选列表(支持中英文逗号/顿号) */
 function splitList(value) {
   return String(value)
     .split(/[、,，]/)
     .map((s) => s.trim())
     .filter(Boolean)
+}
+
+/**
+ * 规则来源体系：种子文件给每条规则带了 source_key（wuxing_mu_outfit / kibbe-gamine-outfit），
+ * 后台手工新建的没有。分隔符两种混用，取首个 _ 或 - 之前的那一段。
+ */
+const TAG_EXPR = `CASE WHEN source_key IS NULL OR source_key = '' THEN '' ELSE substr(source_key, 1, CASE
+    WHEN instr(source_key, '_') > 0 AND instr(source_key, '-') > 0 THEN MIN(instr(source_key, '_'), instr(source_key, '-')) - 1
+    WHEN instr(source_key, '_') > 0 THEN instr(source_key, '_') - 1
+    WHEN instr(source_key, '-') > 0 THEN instr(source_key, '-') - 1
+    ELSE length(source_key)
+  END) END`
+
+/** 「后台自建」这一档在查询串里的取值（空串要被当成"未选"，不能当选项值） */
+const TAG_NONE = 'none'
+
+const TAG_LABELS = {
+  wuxing: '八字五行',
+  color12: '十二季型色彩',
+  color: '四季色彩',
+  kibbe: 'Kibbe 风格型',
+  proportion: '身材比例',
+  dresscode: '场合着装',
+  metal: '金属色适配',
+  [TAG_NONE]: '后台自建',
 }
 
 /**
@@ -155,6 +192,28 @@ router.get('/schema', adminLoginRequired, (req, res) => {
       .all()
       .map((r) => r.scenario)
 
+    // 来源体系：只报现库真有的，条数为 0 的不进下拉；「后台自建」固定排最后
+    const tagRows = db
+      .prepare(`SELECT ${TAG_EXPR} AS value, COUNT(*) AS count FROM rule_groups GROUP BY value`)
+      .all()
+    const tags = tagRows
+      .filter((t) => t.value !== '')
+      .sort((a, b) => b.count - a.count)
+      .concat(tagRows.filter((t) => t.value === ''))
+      .map((t) => ({
+        value: t.value === '' ? TAG_NONE : t.value,
+        label: TAG_LABELS[t.value === '' ? TAG_NONE : t.value] || t.value,
+        count: t.count,
+      }))
+
+    // 部位/结论类型：动作表里在用的 action_type，中文名直接取可解释性那张标签表
+    const parts = db
+      .prepare(
+        'SELECT action_type AS value, COUNT(*) AS count FROM rule_actions GROUP BY value ORDER BY count DESC',
+      )
+      .all()
+      .map((p) => ({ value: p.value, label: ACTION_LABELS[p.value] || p.value, count: p.count }))
+
     return sendSuccess(res, {
       fields: CONDITION_FIELDS.map((f) => ({ value: f, label: FIELD_LABELS[f] })),
       operators: CONDITION_OPERATORS.map((o) => ({
@@ -164,6 +223,23 @@ router.get('/schema', adminLoginRequired, (req, res) => {
       actionTypes: Object.entries(ACTION_LABELS).map(([value, label]) => ({ value, label })),
       categories,
       scenarios,
+      tags,
+      parts,
+      // 依据分档：下拉项与条数同样后端下发，前端不写死（与 tags/parts 一个口径）
+      evidenceLevels: EVIDENCE_LEVELS.map((l) => ({
+        ...l,
+        count: db
+          .prepare('SELECT COUNT(*) AS c FROM rule_groups WHERE evidence_level = ?')
+          .get(l.value).c,
+      })).concat([
+        {
+          value: 'none',
+          label: '未标注(按 C 档对待)',
+          note: '后台手工建的规则、或种子前缀认不出来的规则',
+          count: db.prepare('SELECT COUNT(*) AS c FROM rule_groups WHERE evidence_level IS NULL').get()
+            .c,
+        },
+      ]),
     })
   } catch (err) {
     return sendError(res, '获取失败', 500)
@@ -173,17 +249,47 @@ router.get('/schema', adminLoginRequired, (req, res) => {
 /** 获取规则组列表(管理员) */
 router.get('/groups', adminLoginRequired, (req, res) => {
   try {
-    const { mode, category, enabled, hit } = req.query
-    let sql = 'SELECT * FROM rule_groups WHERE 1=1'
+    const { mode, category, enabled, hit, gender, scenario, tag, part, evidence } = req.query
+    let sql = `SELECT *, ${TAG_EXPR} AS tag FROM rule_groups WHERE 1=1`
     const params = []
 
+    // 依据分档筛选：'none' 对应库里 NULL；其余值（含认不出来的）一律落进 WHERE，
+    // 非法档位筛出 0 行、不报错——与 tag/part 同口径。悄悄返回全量会让人以为"筛过了"。
+    if (evidence === 'none') {
+      sql += ' AND evidence_level IS NULL'
+    } else if (evidence) {
+      sql += ' AND evidence_level = ?'
+      params.push(String(evidence).toUpperCase())
+    }
+
+    // mode='all'(门店+个人通用)在两边都算命中——与 recommendEngine.matchRules 的口径一致，
+    // 否则筛 store 时那 97 条 all 的种子规则会凭空消失（列表页、顾客端同一个坑）。
     if (mode) {
-      sql += ' AND mode = ?'
+      sql += " AND (mode = ? OR mode = 'all')"
       params.push(mode)
     }
     if (category) {
       sql += ' AND category = ?'
       params.push(category)
+    }
+    if (gender) {
+      sql += ' AND gender = ?'
+      params.push(gender)
+    }
+    if (scenario) {
+      sql += ' AND scenario = ?'
+      params.push(scenario)
+    }
+    if (tag === TAG_NONE) {
+      sql += " AND (source_key IS NULL OR source_key = '')"
+    } else if (tag) {
+      sql += ` AND ${TAG_EXPR} = ?`
+      params.push(tag)
+    }
+    if (part) {
+      sql +=
+        ' AND EXISTS (SELECT 1 FROM rule_actions ra WHERE ra.group_id = rule_groups.id AND ra.action_type = ?)'
+      params.push(part)
     }
     if (enabled !== undefined) {
       sql += ' AND enabled = ?'
@@ -256,6 +362,7 @@ router.post('/groups', adminLoginRequired, (req, res) => {
       description,
       priority,
       enabled,
+      evidence_level,
     } = req.body || {}
 
     if (!name || !category) {
@@ -275,8 +382,8 @@ router.post('/groups', adminLoginRequired, (req, res) => {
       const info = db
         .prepare(
           `INSERT INTO rule_groups
-        (name, mode, gender, category, scenario, region, age_range, description, priority, enabled)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        (name, mode, gender, category, scenario, region, age_range, description, priority, enabled, evidence_level)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         )
         .run(
           name,
@@ -289,6 +396,7 @@ router.post('/groups', adminLoginRequired, (req, res) => {
           description || null,
           priority || 0,
           enabled !== false ? 1 : 0,
+          normalizeEvidence(evidence_level),
         )
       replaceChildren(info.lastInsertRowid, children.conditions, children.actions)
       return info.lastInsertRowid
@@ -331,6 +439,10 @@ router.put('/groups/:id', adminLoginRequired, (req, res) => {
               body.enabled === 'false'
             ? 0
             : 1,
+      evidence_level:
+        body.evidence_level === undefined
+          ? existing.evidence_level
+          : normalizeEvidence(body.evidence_level),
     }
 
     // 只有请求真的带了条件/动作数组时才整体替换,避免部分更新把子表清空
@@ -352,7 +464,7 @@ router.put('/groups/:id', adminLoginRequired, (req, res) => {
       db.prepare(
         `UPDATE rule_groups SET
         name=?, mode=?, gender=?, category=?, scenario=?,
-        region=?, age_range=?, description=?, priority=?, enabled=?
+        region=?, age_range=?, description=?, priority=?, enabled=?, evidence_level=?
        WHERE id=?`,
       ).run(
         fields.name,
@@ -365,6 +477,7 @@ router.put('/groups/:id', adminLoginRequired, (req, res) => {
         fields.description || null,
         fields.priority,
         fields.enabled,
+        fields.evidence_level,
         id,
       )
       if (hasChildren) replaceChildren(id, children.conditions, children.actions)
@@ -452,8 +565,10 @@ router.get('/browse', (req, res) => {
     let sql = 'SELECT * FROM rule_groups WHERE enabled = 1'
     const params = []
 
+    // 顾客端这一页的用途是"看懂引擎会怎么用这些规则"，所以 mode 的口径必须跟
+    // recommendEngine.matchRules 一模一样：mode='all' 两边都算命中。
     if (mode) {
-      sql += ' AND mode = ?'
+      sql += " AND (mode = ? OR mode = 'all')"
       params.push(mode)
     }
     if (category) {

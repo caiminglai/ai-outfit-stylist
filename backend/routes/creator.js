@@ -215,8 +215,9 @@ router.get('/my', loginRequired, (req, res) => {
 router.get('/admin/list', adminLoginRequired, (req, res) => {
   try {
     const allowed = ['pending', 'approved', 'rejected']
-    let sql = `SELECT w.*, u.nickname, u.phone FROM creator_works w
-      LEFT JOIN users u ON w.user_id = u.id`
+    let sql = `SELECT w.*, u.nickname, ua.phone FROM creator_works w
+      LEFT JOIN users u ON w.user_id = u.id
+      LEFT JOIN user_accounts ua ON ua.user_id = w.user_id`
     const params = []
     if (allowed.includes(req.query.status)) {
       sql += ' WHERE w.status = ?'

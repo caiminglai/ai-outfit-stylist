@@ -109,7 +109,7 @@ function renderInventory(products) {
           '<div class="inv-product-name">' + escapeHtml(p.name) + ' ' + stockBadge + '</div>' +
           '<div class="inv-product-meta">' +
             (p.sku ? '<span style="font-size:11px;color:var(--muted);">SKU: ' + escapeHtml(p.sku) + '</span>' : '') +
-            (p.price != null ? '<span style="font-size:11px;color:var(--orange);">¥' + p.price + '</span>' : '') +
+            (p.price != null ? '<span style="font-size:11px;color:var(--orange);">¥' + Number(p.price).toFixed(2) + '</span>' : '') +
           '</div>' +
           (tagsHtml ? '<div class="inv-product-tags">' + tagsHtml + '</div>' : '') +
           (p.description ? '<div style="font-size:11px;color:var(--muted);margin-top:4px;">' + escapeHtml(p.description) + '</div>' : '') +
