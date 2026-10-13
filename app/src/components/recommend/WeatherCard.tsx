@@ -49,7 +49,9 @@ export default function WeatherCard({ onWeather }: WeatherCardProps) {
           value={location}
           onChange={(e) => setLocation(e.target.value)}
           onKeyDown={(e) => {
-            if (e.key === 'Enter') handleQuery()
+            // 与按钮的 disabled 同一条判断:按钮在 loading/空城市时点不动,但回车之前没挡,
+            // 长按 Enter 会连发 N 个 Open-Meteo 请求撞限流
+            if (e.key === 'Enter' && !loading && location.trim()) handleQuery()
           }}
           placeholder="输入城市名，如 北京 / 上海"
           className="form-input flex-1 text-xs"

@@ -17,13 +17,14 @@
  * 先说清楚没有的东西（措辞红线，见 docs/依据/05、06）：
  *  - 国内国外都**没有**任何国标／行标／学会标准规定"某人穿某件上衣好不好看"。
  *  - 能搬过来的只有：① 色差公式（A 档，GB/T 7921-2008／ISO-CIE 11664）；
- *    ② 若干"方向"级实证（B 档：肩腰比、松量-被评体宽、深色收缩、衣装明度对脸的对比效应）；
+ *    ② 若干"方向"级实证（B 档：肩宽侧更被偏好、松量-被评体宽、深色收缩、衣装明度对脸的对比效应）；
  *    ③ 行业体系的款式经验词（C 档：垫肩显肩、竖条显瘦之类）；
  *    ④ 本模块自己的**刻度、阈值、权重、款式词表**（C 档手拍，标定中）。
  *  ⇒ 所以每条处方都带 tier，对外不许说成"科学结论"，只许说"按 X 方向 + 我们的经验刻度"。
  *
  * 档位与出处（DOI 已于 10-08/10-09 逐条走 api.crossref.org 自核，记录在 docs/依据/06）：
- *  shoulder 方向 B —— Pazhoohi 2023, DOI 10.1007/s10508-023-02610-w
+ *  shoulder 方向 B —— Pazhoohi 2023, DOI 10.1007/s10508-023-02610-w（该文的 SHR＝肩围÷臀围；我们用不到肩围，
+ *           肩宽÷身高与肩宽÷腰围两根比值都只是借方向，带与刻度是 C 档手拍）
  *  waist    方向 B− —— 腰线/腰臀研究被 BMI 混淆（Singh 系与后续反驳，见 02）
  *  ease     方向 B —— Liu/Fan/Lau 2006, DOI 10.2466/pms.103.1.253-264；区间 B− —— Sakata 2020, DOI 10.1108/ijcst-03-2020-0031
  *  length   方向未闭合 B− —— Kiire 2016 与 Versluys 2018 结论相反
@@ -42,10 +43,15 @@ const NEUTRAL_BAND = 0.15
 /** 每根轴的方向句 + 该选的款式特征 / 该避的款式特征（词表是 C 档行业经验，不是标准） */
 const SPEC = {
   shoulder: {
-    tier: '方向 B（Pazhoohi 2023 肩宽侧更被偏好）／参考带 21~24% 与款式词 C 档手拍',
+    tier: '方向 B（Pazhoohi 2023 肩宽侧更被偏好；该文量的是肩围÷臀围）／参考带与款式词 C 档手拍',
     plus: {
       label: '把肩线做出来',
-      prefer: ['正肩线（肩缝落在肩点）', '轻微垫肩或袖山有支撑', '一字领／船领／方领', '袖笼不滑落'],
+      prefer: [
+        '正肩线（肩缝落在肩点）',
+        '轻微垫肩或袖山有支撑',
+        '一字领／船领／方领',
+        '袖笼不滑落',
+      ],
       avoid: ['落肩', '插肩 raglan', '细吊带', '领口宽到肩头以内'],
     },
     minus: {
@@ -53,18 +59,27 @@ const SPEC = {
       prefer: ['插肩／落肩（肩缝内收）', 'V 领把视线往中线拉', '肩头无装饰、无垫肩'],
       avoid: ['垫肩', '泡泡袖／羊腿袖', '一字领／船领', '肩部口袋与横向拼接线'],
     },
-    neutral: '肩宽÷身高在参考带内 ⇒ 这一维不推拉，按场合和喜好选就行',
+    neutral: '肩上的几条比值合出来接近 0 ⇒ 这一维不推拉，按场合和喜好选就行',
   },
   waist: {
     tier: '方向 B−（腰线研究被 BMI 混淆）／落差刻度与款式词 C 档手拍',
     plus: {
       label: '腰线明显 ⇒ 顺着身体把它做出来',
-      prefer: ['收腰／束腰剪裁', '腰线缝线落在自然腰（肚脐上方一指）', '上衣塞一角或短款到腰线', 'X 型外搭系带'],
+      prefer: [
+        '收腰／束腰剪裁',
+        '腰线缝线落在自然腰（肚脐上方一指）',
+        '上衣塞一角或短款到腰线',
+        'X 型外搭系带',
+      ],
       avoid: ['从上到下一样宽的直筒', 'oversize 盖住腰', '腰线缝线落在 hip 骨以下'],
     },
     minus: {
       label: '腰线偏平 ⇒ 别硬收，把线做在你想让人看的位置',
-      prefer: ['H 型／微直筒', '不强调腰线的合体剪裁', '要提腰就整件上移（高腰＋短款），别只在中间勒一道'],
+      prefer: [
+        'H 型／微直筒',
+        '不强调腰线的合体剪裁',
+        '要提腰就整件上移（高腰＋短款），别只在中间勒一道',
+      ],
       avoid: ['硬束腰／宽腰封', '在腰线处加抽绳、松紧带', '收腰缝线配厚面料（勒出不存在的折痕）'],
     },
     neutral: '腰沟接近参考中位 ⇒ 这一维不推拉，收不收都行',
@@ -105,13 +120,19 @@ const SPEC = {
   },
   pattern: {
     tier: 'B 档但文献结论互相冲突（4 篇方向不一）⇒ 只当低权重修正，不许当判定',
+    // 文案方向必须跟打分一致，否则顾客看到的理由和推荐排序是两回事：
+    // describeTop 里竖条=+1、横条=-1（topFitBody.js:432-433），而 want.pattern 直接
+    // 取 want.volume（:221）⇒ 想加体量（want>0）的人被抬高的是**竖条**，想收（want<0）
+    // 的是**横条**。原来这两句 label 把目标说反（plus 写"你想收窄时…选竖向"），
+    // 而 plus 分支只会落在偏瘦的人身上（BMI<24 ⇒ want.volume>0），报告当场自相矛盾。
     plus: {
-      label: '条纹只在你想收窄时用，且选竖向',
+      label:
+        '想显得饱满一点 ⇒ 可用竖条（方向取自 Koutsoumpis 配对任务，与常见说法相反，只是低权重修正）',
       prefer: ['细竖条（条宽窄、间距密）', '竖向拼接线'],
       avoid: ['横条（尤其在大面积、浅色、宽条时）', '大格与横向拼接线'],
     },
     minus: {
-      label: '要加体量时，横向与大图案可以用',
+      label: '想收一点 ⇒ 可用横条（同一篇文献的配对结果，BMI 一到 25 这条就不再采用）',
       prefer: ['横条／宽间距条', '大尺度图案'],
       avoid: ['密细竖条'],
     },
@@ -229,7 +250,9 @@ function axisSpecs(person, dev) {
         })
         continue
       }
-      out.push(specRow(key, want, side, spec, dev, { gated: 'BMI<25 才用这一条；文献本身结论不一致' }))
+      out.push(
+        specRow(key, want, side, spec, dev, { gated: 'BMI<25 才用这一条；文献本身结论不一致' }),
+      )
       continue
     }
     if (side === 0) {
@@ -275,11 +298,25 @@ function basedOn(key, dev) {
     case 'shoulder': {
       const parts = []
       if (m.shoulder_ratio != null) {
-        const inBand = m.shoulder_ratio >= 21 && m.shoulder_ratio <= 24
-        parts.push(`肩宽÷身高 = ${m.shoulder_ratio}%（参考带 21~24%${inBand ? '，在带内' : ''}）`)
+        // 带宽从 BODY_REF.shoulder_band 取，别再抄一遍 21/24 的字面量：
+        // 上面那个常量一改，这句"参考带 21~24%"就会变成一句对着旧带说的假话
+        const [lo, hi] = BODY_REF.shoulder_band
+        const inBand = m.shoulder_ratio >= lo && m.shoulder_ratio <= hi
+        parts.push(
+          `肩宽÷身高 = ${m.shoulder_ratio}%（参考带 ${lo}~${hi}%${inBand ? '，在带内' : ''}）`,
+        )
+      }
+      if (m.shoulder_waist_ratio != null) {
+        const [lo, hi] = BODY_REF.shr_band
+        const inBand = m.shoulder_waist_ratio >= lo && m.shoulder_waist_ratio <= hi
+        parts.push(
+          `肩宽÷腰围 = ${m.shoulder_waist_ratio}（站内比值，参考带 ${lo}~${hi}${inBand ? '，在带内' : ''}；不是论文那个肩围÷臀围）`,
+        )
       }
       if (m.bust_hip_diff != null)
-        parts.push(`胸围−臀围 = ${m.bust_hip_diff} cm${m.bust_hip_diff < 0 ? '（下身比上身宽 ⇒ 往加肩修）' : ''}`)
+        parts.push(
+          `胸围−臀围 = ${m.bust_hip_diff} cm${m.bust_hip_diff < 0 ? '（下身比上身宽 ⇒ 往加肩修）' : ''}`,
+        )
       return parts.join('；')
     }
     case 'waist': {
@@ -303,7 +340,8 @@ function basedOn(key, dev) {
 /** 这一维需要的实测数在不在场（在＝算过只是落在带内；不在＝真没量） */
 function measurePresent(key, dev) {
   const m = (dev && dev.measure) || {}
-  if (key === 'shoulder') return m.shoulder_ratio != null || m.bust_hip_diff != null
+  if (key === 'shoulder')
+    return m.shoulder_ratio != null || m.shoulder_waist_ratio != null || m.bust_hip_diff != null
   if (key === 'waist') return m.waist_groove_cm != null
   if (key === 'length') return m.leg_ratio != null
   if (key === 'volume') return m.bmi != null
@@ -313,11 +351,15 @@ function measurePresent(key, dev) {
 
 function missingReason(key, dev) {
   const m = (dev && dev.measure) || {}
-  if (key === 'shoulder') return m.shoulder_ratio == null ? '肩宽或身高没量' : '臀胸差也没量'
+  if (key === 'shoulder')
+    return m.shoulder_ratio == null && m.shoulder_waist_ratio == null
+      ? '肩宽没量 ⇒ 肩宽÷身高与肩宽÷腰围都算不出'
+      : '臀胸差也没量'
   if (key === 'waist') return '胸围／腰围／臀围没量齐 ⇒ 腰沟算不出'
   if (key === 'length') return m.leg_ratio == null ? '腿长（或身高）没量 ⇒ 腿身比算不出' : ''
   if (key === 'volume') return m.bmi == null ? '身高体重没量 ⇒ BMI 算不出' : ''
-  if (key === 'pattern') return m.bmi == null ? '没量 BMI ⇒ 闸门无法判' : 'BMI≥25 ⇒ 闸门关闭，这条不采用'
+  if (key === 'pattern')
+    return m.bmi == null ? '没量 BMI ⇒ 闸门无法判' : 'BMI≥25 ⇒ 闸门关闭，这条不采用'
   return '没量'
 }
 
@@ -348,12 +390,14 @@ function colorSpec(person) {
   }
   const rows = []
   for (const name of Object.keys(COLOR_NAME_HEX)) {
-    const fits = anchors
-      .map((an) => ({ an, fit: colorFit(an.lab, name) }))
-      .filter((x) => x.fit)
+    const fits = anchors.map((an) => ({ an, fit: colorFit(an.lab, name) })).filter((x) => x.fit)
     if (fits.length === 0) continue
     const worst = fits.reduce((a, b) => (b.fit.score < a.fit.score ? b : a))
-    rows.push({ ...worst.fit, score: Math.min(...fits.map((x) => x.fit.score)), limit_field: worst.an.field })
+    rows.push({
+      ...worst.fit,
+      score: Math.min(...fits.map((x) => x.fit.score)),
+      limit_field: worst.an.field,
+    })
   }
   if (rows.length === 0) {
     return { present: false, reason: '词表里的颜色一个都没法算色差 ⇒ 颜色段不出' }
@@ -373,8 +417,7 @@ function colorSpec(person) {
     skin_lab: { L: primary.lab.L, a: primary.lab.a, b: primary.lab.b },
     anchor_count: anchors.length,
     scoring: anchors.length > 1 ? 'min' : 'single',
-    tier:
-      'A 色差公式（GB/T 7921-2008／ISO-CIE 11664）＋ B 方向（Schloss & Palmer 2011 图形色-背景分离、Zhang 2025 DOI 10.1111/cote.12828 衣装明度）＋ C 合成分权重（手拍）',
+    tier: 'A 色差公式（GB/T 7921-2008／ISO-CIE 11664）＋ B 方向（Schloss & Palmer 2011 图形色-背景分离、Zhang 2025 DOI 10.1111/cote.12828 衣装明度）＋ C 合成分权重（手拍）',
     prefer: uniq.slice(0, COLOR_TOP_N).map((r) => ({
       name: r.top_label,
       hex: r.top_hex,
@@ -384,7 +427,9 @@ function colorSpec(person) {
       dL: r.dL,
       limit_field: r.limit_field,
     })),
-    avoid: uniq.slice(-COLOR_AVOID_N).map((r) => ({ name: r.top_label, hex: r.top_hex, score: r.score })),
+    avoid: uniq
+      .slice(-COLOR_AVOID_N)
+      .map((r) => ({ name: r.top_label, hex: r.top_hex, score: r.score })),
     note:
       anchors.length > 1
         ? '这几个色是"跟你的肤色在色度学上分离得开"的排序，深浅与冷暖两个口径都算、取更低那个分。分只保证同一个人内部的相对次序，不是"好不好看"的判定'

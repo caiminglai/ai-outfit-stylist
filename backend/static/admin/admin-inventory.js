@@ -20,13 +20,20 @@ document.getElementById('inv-search').addEventListener('input', function() {
 function loadCategories() {
   return fetchJSON(INV_API + '/categories').then(function(res) {
     if (res.success) {
-      State.categories = res.data;
+      // 后端 data 可能是 null（空表/异常），原来直接 forEach 会 TypeError 且被 Promise 吞掉
+      var list = res.data || [];
+      State.categories = list;
       var filter = document.getElementById('inv-filter-category');
       filter.innerHTML = '<option value="">全部分类</option>';
-      res.data.forEach(function(c) {
+      list.forEach(function(c) {
         filter.innerHTML += '<option value="' + c.id + '">' + escapeHtml(c.name) + '</option>';
       });
+    } else {
+      showToast('分类加载失败: ' + res.message, 'error');
     }
+  }).catch(function(e) {
+    // 原来没有 catch：服务没起来时这一句直接进 unhandled rejection，页面既不报错也不出下拉
+    showToast('分类加载失败: ' + e.message, 'error');
   });
 }
 
@@ -48,7 +55,7 @@ function loadInventory() {
   fetchJSON(url).then(function(res) {
     if (!res.success) throw new Error(res.message);
     var search = document.getElementById('inv-search').value.trim().toLowerCase();
-    var products = res.data;
+    var products = res.data || [];
     if (search) {
       products = products.filter(function(p) {
         return (p.name || '').toLowerCase().includes(search) || (p.sku || '').toLowerCase().includes(search);
@@ -73,7 +80,10 @@ function renderInventory(products) {
     return;
   }
 
-  var grouped = {};
+  // 分组键是后台自由填写的分类名 ⇒ 必须无原型对象：叫 'constructor' 的分类会让
+  // `if (!grouped[catName])` 顺着原型链拿到 Object 构造器（truthy 挡不住）再去 .push，
+  // 整页库存渲染直接 TypeError；'__proto__' 更会把原型改掉。
+  var grouped = Object.create(null);
   products.forEach(function(p) {
     var catName = '未分类';
     if (p.category_id) {
@@ -126,6 +136,16 @@ function renderInventory(products) {
 }
 
 /* ── 商品编辑模态框 ── */
+
+/* 上架复选框的勾选判定。
+   库里 inventory_products.enabled 是 INTEGER(0/1)，better-sqlite3 交回的是数字。
+   原来写 `!p || p.enabled !== false`：0 !== false 成立 ⇒ 已下架的商品打开编辑框是勾上的，
+   管理员只改描述/价格保存，送 enabled:true，后端 PUT 认成 1 ⇒ 这件商品被悄悄重新上架。 */
+function isOnSale(p) {
+  if (!p) return true; // 新增商品默认上架
+  return !(p.enabled === false || p.enabled === 0 || p.enabled === '0' || p.enabled === 'false');
+}
+
 function openProductModal(productId) {
   State.editingProductId = productId;
   var title = document.getElementById('product-modal-title');
@@ -152,7 +172,7 @@ function openProductModal(productId) {
     '<div class="form-row">' +
     '<div class="form-group"><label>分类 <span class="req">*</span></label><select id="pf-category">' + catOptions + '</select></div>' +
     '<div class="form-group"><label>库存数量</label><input type="number" id="pf-stock" value="' + (p ? (p.stock || 0) : 0) + '"></div>' +
-    '<div class="form-group"><label>价格 (¥)</label><input type="number" id="pf-price" value="' + (p ? (p.price || '') : '') + '" step="0.01"></div>' +
+    '<div class="form-group"><label>价格 (¥)</label><input type="number" id="pf-price" value="' + (p && p.price !== null && p.price !== undefined ? p.price : '') + '" step="0.01"></div>' +
     '</div>' +
     '<div class="form-group"><label>风格标签 (逗号分隔)</label><input type="text" id="pf-style" value="' + escapeHtml((p && p.style_tags) ? p.style_tags.join(', ') : '') + '" placeholder="通勤, 简约, 正式"></div>' +
     '<div class="form-group"><label>颜色标签 (逗号分隔)</label><input type="text" id="pf-color" value="' + escapeHtml((p && p.color_tags) ? p.color_tags.join(', ') : '') + '" placeholder="白色, 蓝色"></div>' +
@@ -162,7 +182,7 @@ function openProductModal(productId) {
     '</div>' +
     '<div class="form-group"><label>商品图片URL</label><input type="text" id="pf-image" value="' + escapeHtml(p ? (p.image_url || '') : '') + '"></div>' +
     '<div class="form-group"><label>商品描述</label><textarea id="pf-desc">' + escapeHtml(p ? (p.description || '') : '') + '</textarea></div>' +
-    '<div class="form-group"><label><input type="checkbox" id="pf-enabled"' + (!p || p.enabled !== false ? ' checked' : '') + '> 上架销售</label></div>';
+    '<div class="form-group"><label><input type="checkbox" id="pf-enabled"' + (isOnSale(p) ? ' checked' : '') + '> 上架销售</label></div>';
 
   document.getElementById('product-modal').classList.add('open');
 }
@@ -172,21 +192,43 @@ function closeProductModal() {
   State.editingProductId = null;
 }
 
+/* 在飞闸：同一次操作没回来之前，同一个按钮只认第一次点击（连点＝重复提交） */
+var _invBusy = {};
+
+function invBusy(key) {
+  if (_invBusy[key]) return true;
+  _invBusy[key] = true;
+  return false;
+}
+
+function invFree(key) {
+  delete _invBusy[key];
+}
+
 /* ── 保存商品 ── */
 document.getElementById('product-save-btn').addEventListener('click', function() {
   var name = document.getElementById('pf-name').value.trim();
   var categoryId = document.getElementById('pf-category').value;
   if (!name) { showToast('商品名称不能为空', 'error'); return; }
   if (!categoryId) { showToast('请选择分类', 'error'); return; }
+  // 分类下拉在"一个分类都没有"时是空的，parseInt(undefined) 会把 NaN 送进后端，
+  // 后端回的是"name 与 category_id 为必填"，看着像名字没填 ⇒ 这里当场说清楚
+  var catIdNum = parseInt(categoryId, 10);
+  if (!Number.isFinite(catIdNum)) { showToast('还没有商品分类，请先新建分类', 'error'); return; }
+  var priceRaw = document.getElementById('pf-price').value.trim();
+  var priceNum = priceRaw === '' ? null : parseFloat(priceRaw);
+  if (priceNum !== null && !Number.isFinite(priceNum)) { showToast('价格要填数字', 'error'); return; }
 
   function parseTags(str) { return str.split(',').map(function(s) { return s.trim(); }).filter(function(s) { return s; }); }
 
   var data = {
     name: name,
-    category_id: parseInt(categoryId),
+    category_id: catIdNum,
     sku: document.getElementById('pf-sku').value.trim() || null,
     stock: parseInt(document.getElementById('pf-stock').value) || 0,
-    price: document.getElementById('pf-price').value ? parseFloat(document.getElementById('pf-price').value) : null,
+    // 空串才是"没定价"；0 是有效的免费价格，原来 `value ? ... : null` 靠渲染层的
+    // `p.price || ''` 已经把 0 变成空框，存回去就成了 NULL（NULL 在前端不显示价格徽章）
+    price: priceNum,
     style_tags: parseTags(document.getElementById('pf-style').value),
     color_tags: parseTags(document.getElementById('pf-color').value),
     fit_skin_tones: parseTags(document.getElementById('pf-skin').value),
@@ -199,20 +241,29 @@ document.getElementById('product-save-btn').addEventListener('click', function()
   var method = State.editingProductId ? 'PUT' : 'POST';
   var url = State.editingProductId ? INV_API + '/products/' + State.editingProductId : INV_API + '/products';
 
+  // 在飞闸：inventory_products.name 没有唯一约束，连点两次"新增"就是两条同名商品
+  var saveBtn = document.getElementById('product-save-btn');
+  if (saveBtn.disabled) return;
+  saveBtn.disabled = true;
+  var unlock = function() { saveBtn.disabled = false; };
+
   apiCall(url, method, data).then(function(res) {
+    unlock();
     if (res.success) {
       showToast(State.editingProductId ? '商品更新成功' : '商品创建成功', 'success');
       closeProductModal(); loadInventory(); loadStats();
     } else { showToast('保存失败: ' + res.message, 'error'); }
-  }).catch(function(e) { showToast('保存失败: ' + e.message, 'error'); });
+  }).catch(function(e) { unlock(); showToast('保存失败: ' + e.message, 'error'); });
 });
 
 function deleteProduct(productId) {
   if (!confirm('确定删除此商品？')) return;
+  if (invBusy('p-del-' + productId)) return;
   apiCall(INV_API + '/products/' + productId, 'DELETE').then(function(res) {
+    invFree('p-del-' + productId);
     if (res.success) { showToast('商品已删除', 'success'); loadInventory(); loadStats(); }
     else { showToast('删除失败: ' + res.message, 'error'); }
-  });
+  }).catch(function(e) { invFree('p-del-' + productId); showToast('删除失败: ' + e.message, 'error'); });
 }
 
 /* ── 分类管理 ── */
@@ -232,7 +283,7 @@ function loadCategoryList() {
   fetchJSON(INV_API + '/categories').then(function(res) {
     if (!res.success) throw new Error(res.message);
     var html = '<div id="cat-list">';
-    res.data.forEach(function(c) {
+    (res.data || []).forEach(function(c) {
       html += '<div class="condition-row" style="margin-bottom:6px;" data-cat-id="' + c.id + '">' +
         '<input type="text" class="cat-name" value="' + escapeHtml(c.name) + '" style="flex:1;" placeholder="分类名称">' +
         '<input type="text" class="cat-code" value="' + escapeHtml(c.code) + '" style="flex:0 0 100px;" placeholder="代码">' +
@@ -260,11 +311,13 @@ function createCategory() {
   var code = document.getElementById('new-cat-code').value.trim();
   var sort = parseInt(document.getElementById('new-cat-sort').value) || 0;
   if (!name || !code) { showToast('名称和代码不能为空', 'error'); return; }
+  if (invBusy('cat-new')) return;
 
   apiCall(INV_API + '/categories', 'POST', { name: name, code: code, sort_order: sort }).then(function(res) {
+    invFree('cat-new');
     if (res.success) { showToast('分类创建成功', 'success'); loadCategoryList(); loadCategories(); loadStats(); }
     else { showToast('创建失败: ' + res.message, 'error'); }
-  });
+  }).catch(function(e) { invFree('cat-new'); showToast('创建失败: ' + e.message, 'error'); });
 }
 
 function updateCategory(catId, btn) {
@@ -273,16 +326,24 @@ function updateCategory(catId, btn) {
   var code = row.querySelector('.cat-code').value.trim();
   var sort = parseInt(row.querySelector('.cat-sort').value) || 0;
 
+  if (!name || !code) { showToast('名称和代码不能为空', 'error'); return; }
+  if (invBusy('cat-' + catId)) return;
+  btn.disabled = true;
+
   apiCall(INV_API + '/categories/' + catId, 'PUT', { name: name, code: code, sort_order: sort }).then(function(res) {
-    if (res.success) { showToast('分类更新成功', 'success'); loadCategories(); }
+    invFree('cat-' + catId);
+    btn.disabled = false;
+    if (res.success) { showToast('分类更新成功', 'success'); loadCategories(); loadCategoryList(); }
     else { showToast('更新失败: ' + res.message, 'error'); }
-  });
+  }).catch(function(e) { invFree('cat-' + catId); btn.disabled = false; showToast('更新失败: ' + e.message, 'error'); });
 }
 
 function deleteCategory(catId) {
   if (!confirm('确定删除此分类？需先清空该分类下的商品。')) return;
+  if (invBusy('cat-del-' + catId)) return;
   apiCall(INV_API + '/categories/' + catId, 'DELETE').then(function(res) {
+    invFree('cat-del-' + catId);
     if (res.success) { showToast('分类已删除', 'success'); loadCategoryList(); loadCategories(); loadStats(); }
     else { showToast('删除失败: ' + res.message, 'error'); }
-  });
+  }).catch(function(e) { invFree('cat-del-' + catId); showToast('删除失败: ' + e.message, 'error'); });
 }

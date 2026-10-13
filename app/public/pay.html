@@ -279,6 +279,9 @@ document.getElementById('submit').addEventListener('click', async function () {
   var btn = this;
   var file = document.getElementById('proof').files[0];
   if (!file) return setMsg('请先选择付款截图', 'err');
+  // 与后端 middleware/upload.js 同一条上限（multer memoryStorage 10MB）：本机先挡住，
+  // 免得整张手机截图传上去才换一句 400。accept 已经限了 jpeg/png/webp，这里只补体积。
+  if (file.size > 10 * 1024 * 1024) return setMsg('截图超过 10 MB，请压缩后再传', 'err');
   btn.disabled = true;
   setMsg('上传中…');
   try {

@@ -137,6 +137,18 @@ export default function ExhibitionHall() {
     }, 1500)
   }, [])
 
+  // 卸载时把还没到点的防抖定时器收掉：不然 1.5 秒内切走页面，这次 saveProfileArchive
+  // 仍会带着已卸载表单的数据打后端（后写覆盖先写），控制台还会留一个对已销毁组件 setState 的警告
+  useEffect(
+    () => () => {
+      if (draftTimer.current) {
+        window.clearTimeout(draftTimer.current)
+        draftTimer.current = null
+      }
+    },
+    [],
+  )
+
   const handleSync = useCallback(async () => {
     if (!sessionId) return
     setSyncing(true)
@@ -151,16 +163,29 @@ export default function ExhibitionHall() {
     }
   }, [sessionId])
 
+  /**
+   * 清掉内存里那三份"预填/展示用的档案"。
+   * 单独抽出来是因为有两个入口都要它：整屏重置，以及账号面板里点"删除我的全部数据"
+   * （那条走的是 AccountEntry，够不着这里的 state，只能由上层把回调传下去）。
+   */
+  const clearArchiveMemory = useCallback(() => {
+    setArchiveProfile(null)
+    setArchiveUsed([])
+    setProfileTags([])
+  }, [])
+
   const resetToStandby = useCallback(() => {
     setStage('standby')
     setProfile(null)
     setSessionId(null)
     setRecommendation(null)
-    setArchiveUsed([])
-    setProfileTags([])
+    // 预填源必须一起清：档案/会话数据删掉之后 archiveProfile 还留在内存里，
+    // 两个表单的 `initial={profile || archiveProfile}` 会继续把刚删掉的身体数据填回去
+    // （不刷新页面就一直如此，用户看到"已删除"却还能再存一遍）
+    clearArchiveMemory()
     setSynced(false)
     setReportTab('recommendation')
-  }, [])
+  }, [clearArchiveMemory])
 
   const handleDelete = useCallback(async () => {
     if (!sessionId) return
@@ -308,6 +333,7 @@ export default function ExhibitionHall() {
                 onDraft={handleDraft}
                 onSync={handleSync}
                 onDelete={handleDelete}
+                onArchiveCleared={clearArchiveMemory}
                 onBack={handleBack}
                 onSelectMode={selectMode}
                 onReset={resetToStandby}
@@ -368,6 +394,7 @@ export default function ExhibitionHall() {
           onDraft={handleDraft}
           onSync={handleSync}
           onDelete={handleDelete}
+          onArchiveCleared={clearArchiveMemory}
           onBack={handleBack}
           onSelectMode={selectMode}
           onReset={resetToStandby}
@@ -402,7 +429,7 @@ function ModelViewer({
 }
 
 // ============ 付款 / 创作者入驻卡片(仅模式选择页,不浮在3D展示层上)============
-function ServiceLinkCards() {
+function ServiceLinkCards({ onArchiveCleared }: { onArchiveCleared?: () => void }) {
   const cards = [
     {
       href: '/pay.html',
@@ -449,17 +476,18 @@ function ServiceLinkCards() {
         </a>
       ))}
 
-      <AccountEntry />
+      <AccountEntry onArchiveCleared={onArchiveCleared} />
     </div>
   )
 }
 
 function maskPhone(phone: string): string {
-  return phone.length === 11 ? `${phone.slice(0, 3)}****${phone.slice(7)}` : phone
+  const p = String(phone || '')
+  return p.length === 11 ? `${p.slice(0, 3)}****${p.slice(7)}` : p
 }
 
 // ============ 我的账号:登录 / 注册(覆盖在 3D 展示上,不跳页)============
-function AccountEntry() {
+function AccountEntry({ onArchiveCleared }: { onArchiveCleared?: () => void }) {
   const [open, setOpen] = useState(false)
   const [tab, setTab] = useState<'login' | 'register'>('login')
   const [phone, setPhone] = useState('')
@@ -542,6 +570,11 @@ function AccountEntry() {
       )
       setOpen(false)
       setStored(null)
+      // 后端已经把身体档案／标签全删了，上层内存里那三份预填源必须一起清掉：
+      // 两个表单的预填取的是 `profile || archiveProfile`，不清就等于刚点完"已删除"，
+      // 再进表单还是带着那份被删掉的身体数据，用户点一次生成又把它存回库里。
+      // 这三份 state 在 ExhibitionHall 上，AccountEntry 够不着，只能回上去让上层清。
+      onArchiveCleared?.()
     } catch (e) {
       toast.error(e instanceof Error ? e.message : '删除失败,请重试')
     } finally {
@@ -788,6 +821,8 @@ interface ServicePanelProps {
   onDraft: (p: CustomerProfile) => void
   onSync: () => void
   onDelete: () => void
+  /** 账号面板里"删除我的全部数据"成功后，要由上层把内存里那三份档案预填源一起清掉 */
+  onArchiveCleared: () => void
   onBack: () => void
   onSelectMode: (mode: ServiceMode) => void
   onReset: () => void
@@ -812,6 +847,7 @@ function ServicePanel(props: ServicePanelProps) {
     onDraft,
     onSync,
     onDelete,
+    onArchiveCleared,
     onBack,
     onSelectMode,
     onReset,
@@ -934,7 +970,7 @@ function ServicePanel(props: ServicePanelProps) {
           </button>
         </div>
 
-        <ServiceLinkCards />
+        <ServiceLinkCards onArchiveCleared={onArchiveCleared} />
 
         {/* 规则说明入口:让用户在填表前先了解规则引擎,理解"填什么能匹配到什么" */}
         <div className="mt-4 pt-3 text-center" style={{ borderTop: '1px dashed var(--line)' }}>

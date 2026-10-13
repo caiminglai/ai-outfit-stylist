@@ -20,6 +20,7 @@ const fs = require('fs')
 const path = require('path')
 const { FIELD_LABELS, ACTION_LABELS } = require('../services/ruleExplainer')
 const { evidenceOf } = require('../services/evidenceLevels')
+const { ownValue } = require('../utils/common')
 
 const SEED_DIR = path.join(__dirname, 'seed')
 const SEED_FILE_RE = /^rules-.*\.json$/
@@ -44,7 +45,7 @@ function splitList(value) {
 function normalizeCondition(cond) {
   const field = String(cond.field || '').trim()
   const operator = String(cond.operator || 'eq').trim()
-  if (!FIELD_LABELS[field]) {
+  if (!ownValue(FIELD_LABELS, field)) {
     return { error: `条件字段无效: ${field || '(空)'}` }
   }
   if (!VALID_OPERATORS.includes(operator)) {
@@ -52,9 +53,17 @@ function normalizeCondition(cond) {
   }
   let value = cond.value
   if (value && typeof value === 'object' && !Array.isArray(value)) {
-    value = field in value ? value[field] : Object.values(value)[0]
+    // ownValue：种子 {"value":{"constructor":...}} 这类键不能从原型上捞出来当匹配值
+    const picked = ownValue(value, field)
+    value = picked === undefined ? Object.values(value)[0] : picked
   }
   if (value === null || value === undefined || String(value).trim() === '') {
+    // 'in' 缺候选值不能填 'all'：引擎那句 `condVal === 'all'` 只对 eq/ne 生效，
+    // 'in' 会被存成 ['all'] ⇒ 与任何档案值都不相等，整组规则永不命中，
+    // 而下面那条"缺少候选值"的守卫因为长度=1 永远走不到（写了等于没写）。
+    if (operator === 'in') {
+      return { error: `条件「属于」缺少候选值: ${field}` }
+    }
     value = 'all'
   }
   const stored =
@@ -64,7 +73,11 @@ function normalizeCondition(cond) {
   if (operator === 'in' && stored[field].length === 0) {
     return { error: `条件「属于」缺少候选值: ${field}` }
   }
-  const weight = Number(cond.weight) > 0 ? Number(cond.weight) : 3
+  // 没声明权重的种子条件按 1 存。原来这里填 3，而后台新增条件(routes/rules.js:89)、
+  // 后台编辑器初值(admin-rules.js:430)、引擎取不到权重时(recommendEngine.js:302 兜底的 `: 1`)
+  // 三处都是 1 ⇒ 同一句"这条条件没说权重"在两条路径下意思相反，
+  // 走种子进来的规则天生比手写的重 3 倍。
+  const weight = Number(cond.weight) > 0 ? Number(cond.weight) : 1
   return { value: JSON.stringify(stored), weight }
 }
 
@@ -72,7 +85,9 @@ function normalizeCondition(cond) {
 function normalizeAction(action, idx) {
   const type = String(action.type || action.action_type || '').trim()
   const content = String(action.content || '').trim()
-  if (!ACTION_LABELS[type]) {
+  // ownValue：种子写成 {"type":"constructor",...} 时 `ACTION_LABELS[type]` 能从原型上
+  // 捞到一个函数（truthy），这条本该判废的动作就混进库了，前端还显示成空标签
+  if (!ownValue(ACTION_LABELS, type)) {
     return { error: `第 ${idx + 1} 条动作类型没有中文标签: ${type || '(空)'}` }
   }
   if (!content) {
@@ -216,7 +231,9 @@ function applyRuleSeeds(db) {
   // 后台手工建的规则 source_key 为 NULL，永远不会被这里碰到；已在后台改过档位的也不覆盖。
   try {
     const pending = db
-      .prepare('SELECT id, source_key FROM rule_groups WHERE evidence_level IS NULL AND source_key IS NOT NULL')
+      .prepare(
+        'SELECT id, source_key FROM rule_groups WHERE evidence_level IS NULL AND source_key IS NOT NULL',
+      )
       .all()
     const setLevel = db.prepare('UPDATE rule_groups SET evidence_level = ? WHERE id = ?')
     let filled = 0

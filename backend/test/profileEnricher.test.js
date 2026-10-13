@@ -52,18 +52,22 @@ test('computeBmi: 肥胖', () => {
   assert.strictEqual(r.bmi_status, 'danger')
 })
 
-test('computeBmi: 非法输入兜底默认值', () => {
-  // 身高 0 或负数 → 返回默认 BMI 22.0
-  const r1 = computeBmi(0, 65)
-  assert.strictEqual(r1.bmi, 22.0)
-  assert.strictEqual(r1.bmi_level, '正常')
-
-  const r2 = computeBmi(-170, 65)
-  assert.strictEqual(r2.bmi, 22.0)
-
-  // 体重 0
-  const r3 = computeBmi(170, 0)
-  assert.strictEqual(r3.bmi, 22.0)
+test('computeBmi: 身高或体重缺测时不出分（不再编 22.0/正常）', () => {
+  // 22.0 是 18.5~24 档的中位假想值，不是任何人的实测值；
+  // 量都没量就返回"正常"等于给顾客贴一个没测过的健康标签
+  for (const args of [
+    [0, 65],
+    [-170, 65],
+    [170, 0],
+    [170, null],
+    [null, null],
+    [170, 'abc'],
+  ]) {
+    const r = computeBmi(...args)
+    assert.deepStrictEqual(r, {}, `computeBmi(${args.join(',')}) 应返回空对象`)
+    assert.strictEqual(r.bmi, undefined)
+    assert.strictEqual(r.bmi_level, undefined)
+  }
 })
 
 test('computeBmi: BMI 保留 1 位小数', () => {
@@ -305,7 +309,14 @@ test('enrichProfile: 完整档案计算正确', () => {
 test('enrichProfile: 部分字段缺失不报错', () => {
   const r = enrichProfile({ height: 170 })
   // 只有 height 没有 weight → 不计算 BMI(enrichProfile 不强制兜底)
-  // 这里只验证函数不抛错并返回对象
   assert.ok(typeof r === 'object')
   assert.ok(!Array.isArray(r), '应返回对象而非数组')
+  assert.strictEqual(r.bmi, undefined, '缺体重不得产出 BMI')
+  assert.strictEqual(r.bmi_level, undefined, '缺体重不得产出 BMI 档位')
+})
+
+test('enrichProfile: 身高体重都填了才产出 BMI 与档位', () => {
+  const r = enrichProfile({ height: 170, weight: 60 })
+  assert.ok(Number.isFinite(r.bmi), 'BMI 要算出来')
+  assert.ok(r.bmi_level, '档位要跟着出来')
 })

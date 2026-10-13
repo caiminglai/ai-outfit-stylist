@@ -17,6 +17,7 @@
  */
 const fs = require('fs')
 const crypto = require('crypto')
+const { beijingStamp } = require('../utils/beijingTime')
 
 const API_HOST = 'https://api.mch.weixin.qq.com'
 // 回调/应答时间戳允许的偏差，超出按重放处理
@@ -157,10 +158,15 @@ async function request(method, urlPath, payload) {
   }
   if (bodyStr) headers['Content-Type'] = 'application/json'
 
+  // 没有 signal 的 fetch 在 TCP 连上但对端不回时永远不 settle：routes/payment.js 的
+  // try/catch 等的是一个不会发生的 reject ⇒ 顾客点"生成二维码"那个请求一直挂着，
+  // 既不出 502 也不出结果，只能靠浏览器/代理自己断。services/weatherService.js 的 fetch
+  // 早就带了同样的 10 秒 AbortSignal.timeout，这两条支付线一直是漏的。
   const res = await fetch(API_HOST + urlPath, {
     method,
     headers,
     body: bodyStr || undefined,
+    signal: AbortSignal.timeout(10000),
   })
   const text = await res.text()
 
@@ -190,10 +196,9 @@ async function request(method, urlPath, payload) {
 
 /** 商户订单号：S3 + 14 位时间 + 8 位随机，24 字符，落在微信要求的 6~32 内 */
 function newOutTradeNo() {
-  const d = new Date()
-  const p = (n, w = 2) => String(n).padStart(w, '0')
-  const stamp = `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`
-  return `S3${stamp}${crypto.randomBytes(4).toString('hex').toUpperCase()}`
+  // 时间戳走 utils/beijingTime：容器没设 TZ ⇒ Date 是 UTC，
+  // 北京时间 00:00~07:59 下的单会挂上前一天的日期，按单号前缀对账会漏
+  return `S3${beijingStamp()}${crypto.randomBytes(4).toString('hex').toUpperCase()}`
 }
 
 /** Native 下单，成功返回 { code_url } */

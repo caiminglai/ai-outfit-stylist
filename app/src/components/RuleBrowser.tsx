@@ -9,7 +9,7 @@
  *
  * 支持筛选:类别(穿搭/妆容/发型/配饰)、性别、场景,帮助用户聚焦相关规则.
  */
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { browseRules } from '../api'
 import type { RuleBrowseItem, RuleBrowseQuery } from '../types'
 import EvidenceTag, { type EvidenceLevel } from './recommend/EvidenceTag'
@@ -36,6 +36,7 @@ const CATEGORY_OPTIONS = [
   { value: '妆容', label: '💄 妆容' },
   { value: '发型', label: '💇 发型' },
   { value: '配饰', label: '💎 配饰' },
+  { value: '姿势', label: '📷 姿势' },
 ] as const
 
 /** 性别筛选选项 */
@@ -80,7 +81,10 @@ export default function RuleBrowser({
   const [error, setError] = useState<string | null>(null)
 
   /** 加载规则数据(筛选变化时触发) */
+  // 连点筛选时两次请求会并行，先发的可能后到 ⇒ 用自增号只认最后那一次的结果
+  const reqSeq = useRef(0)
   const loadRules = useCallback(async () => {
+    const seq = ++reqSeq.current
     setLoading(true)
     setError(null)
     try {
@@ -89,12 +93,14 @@ export default function RuleBrowser({
       if (gender) query.gender = gender
       if (scenario) query.scenario = scenario
       const data = await browseRules(query)
+      if (seq !== reqSeq.current) return
       setRules(data.rules ?? [])
     } catch (e: unknown) {
+      if (seq !== reqSeq.current) return
       setError(e instanceof Error ? e.message : '加载规则失败')
       setRules([])
     } finally {
-      setLoading(false)
+      if (seq === reqSeq.current) setLoading(false)
     }
   }, [initialMode, category, gender, scenario])
 

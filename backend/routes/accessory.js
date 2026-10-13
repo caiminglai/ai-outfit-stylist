@@ -7,13 +7,43 @@
 const express = require('express')
 const db = require('../db/init')
 const { sendSuccess, sendError } = require('../utils/response')
-const { getSessionId, parseJsonField } = require('../utils/common')
+const {
+  getSessionId,
+  parseJsonField,
+  asText,
+  asNumber,
+  asFilters,
+  firstBadScalar,
+  tally,
+  asId,
+} = require('../utils/common')
+const { countByBucket, accessoryGapBucket } = require('../services/categoryBuckets')
 const { rateLimit } = require('../middleware/rateLimit')
 
 const router = express.Router()
 
 // 写操作限流：每分钟最多 30 次
 const writeLimiter = rateLimit({ windowMs: 60000, max: 30, message: '操作过于频繁，请稍后再试' })
+
+/**
+ * 直接绑进 user_accessories 的可空标量列。
+ * 布尔开关（allergy_safe / is_favorite）先转 0/1、JSON 列表字段先 stringify，
+ * 都不在这张表里——这里只列"原样绑"的那些，进门用 firstBadScalar 挡一次。
+ */
+const ACCESSORY_SCALARS = [
+  'name',
+  'brand',
+  'category',
+  'material',
+  'metal_color',
+  'gem_color',
+  'shape',
+  'length',
+  'allergy_notes',
+  'condition',
+  'price',
+  'image_url',
+]
 
 // ============================================================
 // 辅助函数
@@ -41,12 +71,14 @@ function normalizeItem(row) {
 // - 戒指2枚：日常 + 个性款（手部美学比例研究）
 // - 手链1条：手腕装饰平衡
 // - 胸针1枚：提升正式场合精致度（Vogue配饰指南）
+// 键＝缺口 type 去掉 category_ 前缀后的桶名（见 services/categoryBuckets.js 的 ACCESSORY_BUCKETS）。
+// 原先写的是中文叶子名，而库里 category 什么写法都有（'耳钉'≠'耳饰'）⇒ 归桶前先按叶子名计数会漏。
 const REQUIRED_CATEGORIES = {
-  项链: { min: 2, label: '项链', type: 'category_necklace' },
-  耳饰: { min: 2, label: '耳饰', type: 'category_earring' },
-  戒指: { min: 2, label: '戒指', type: 'category_ring' },
-  手链: { min: 1, label: '手链', type: 'category_bracelet' },
-  胸针: { min: 1, label: '胸针', type: 'category_brooch' },
+  necklace: { min: 2, label: '项链', type: 'category_necklace' },
+  earring: { min: 2, label: '耳饰', type: 'category_earring' },
+  ring: { min: 2, label: '戒指', type: 'category_ring' },
+  bracelet: { min: 1, label: '手链', type: 'category_bracelet' },
+  brooch: { min: 1, label: '胸针', type: 'category_brooch' },
 }
 
 /** 配饰柜缺口分析
@@ -61,22 +93,31 @@ const REQUIRED_CATEGORIES = {
  */
 function analyzeAccessoryGaps(profile, sessionId) {
   const items = db
-    .prepare('SELECT * FROM user_accessories WHERE session_id = ? AND `condition` != ?')
+    // `condition` 为空（没填 / PUT 传 null 清成 NULL）的必须算在柜内：
+    // SQLite 里 `NULL != '已淘汰'` 的回值是 NULL 而不是 true ⇒ 原写法把这些行整条筛掉，
+    // 10-13 现量：插一条 condition=NULL 的配饰，列表能看到、缺口分析里 0 件。
+    .prepare(
+      'SELECT * FROM user_accessories WHERE session_id = ? AND (`condition` IS NULL OR `condition` != ?)',
+    )
     .all(sessionId, '已淘汰')
 
-  const byCategory = {}
+  const byCategory = tally()
   for (const item of items) {
     const cat = item.category || '未分类'
     byCategory[cat] = (byCategory[cat] || 0) + 1
   }
 
   const gaps = []
+  // 同 cosmetic/wardrobe：库里的 category（'耳钉'/'手表'）与这张表的键不是一套写法，
+  // 先归桶再计数，否则 byCategory['耳饰'] 对 '耳钉' 恒不命中 ⇒ 缺口永远报 0 件
+  const bucketCounts = countByBucket(byCategory, accessoryGapBucket)
   for (const [cat, req] of Object.entries(REQUIRED_CATEGORIES)) {
-    const count = byCategory[cat] || 0
+    const count = bucketCounts[cat] || 0
     if (count < req.min) {
       const shortage = req.min - count
       gaps.push({
         type: req.type,
+        label: req.label,
         priority: count === 0 ? 'high' : 'medium',
         message: `${req.label}仅${count}件，推荐至少${req.min}件`,
         suggestions: [
@@ -142,8 +183,11 @@ function analyzeAccessoryGaps(profile, sessionId) {
 /** 购物评估 */
 function evaluateAccessoryPurchase(profile, sessionId, candidate) {
   const gaps = analyzeAccessoryGaps(profile, sessionId)
-  // g.type 格式为 category_head / category_neck 等，需匹配 candidate.category
-  const matchingGap = gaps.gaps.find((g) => g.type === 'category_' + candidate.category)
+  // 同衣橱：candidate.category 是叶子标签或表单英文 value，先归桶再和 category_xxx 比
+  const candidateBucket = accessoryGapBucket(candidate.category)
+  const matchingGap = candidateBucket
+    ? gaps.gaps.find((g) => g.type === 'category_' + candidateBucket)
+    : undefined
 
   let score = 50
   const reasons = []
@@ -200,7 +244,8 @@ function suggestAccessoryPurchases(profile, sessionId) {
   }))
 
   const priorityOrder = { high: 0, medium: 1, low: 2 }
-  suggestions.sort((a, b) => (priorityOrder[a.priority] || 3) - (priorityOrder[b.priority] || 3))
+  // 必须用 ??：priorityOrder.high === 0，`0 || 3` 会把 high 打成 3（与衣橱柜同一处修法）
+  suggestions.sort((a, b) => (priorityOrder[a.priority] ?? 3) - (priorityOrder[b.priority] ?? 3))
 
   return { suggestions, total_suggestions: suggestions.length }
 }
@@ -215,7 +260,10 @@ router.get('/items', (req, res) => {
     const sessionId = getSessionId(req)
     if (!sessionId) return sendError(res, '缺少 X-Session-Id', 400)
 
-    const { category, condition } = req.query
+    // 过 asText：`?category[]=耳饰` 会被 Express 解析成数组，原样绑参 ⇒ better-sqlite3 抛
+    // RangeError ⇒ 列表页 500。非文本当"没有这个筛选"，而不是当"筛选空字符串"（那会永远查不到）。
+    const category = asText(req.query.category)
+    const condition = asText(req.query.condition)
     let query = 'SELECT * FROM user_accessories WHERE session_id = ?'
     const params = [sessionId]
 
@@ -246,9 +294,14 @@ router.post('/items', writeLimiter, (req, res) => {
     if (!sessionId) return sendError(res, '缺少 X-Session-Id', 400)
 
     const data = req.body || {}
-    const name = (data.name || '').trim()
-    const category = (data.category || '').trim()
+    const name = asText(data.name)
+    const category = asText(data.category)
     if (!name || !category) return sendError(res, 'name 和 category 为必填字段', 400)
+
+    // 下面这些列是原样绑进去的可空标量：传成布尔/对象/数组时 better-sqlite3 当场抛，
+    // 路由的 catch 会把一个"字段类型写错"回成 500。⇒ 进门先挡成 400
+    const bad = firstBadScalar(data, ACCESSORY_SCALARS)
+    if (bad) return sendError(res, `${bad} 只能是文本或数字`, 400)
 
     const result = db
       .prepare(
@@ -278,7 +331,8 @@ router.post('/items', writeLimiter, (req, res) => {
         JSON.stringify(data.style_tags || []),
         JSON.stringify(data.season_tags || []),
         data.condition || '良好',
-        data.price || null,
+        // 0 元是真实价格（赠品/自制），`|| null` 会把它记成"没填"⇒ 统计里凭空少一件有价物
+        asNumber(data.price, null),
         data.image_url || null,
       )
 
@@ -298,7 +352,8 @@ router.get('/items/:itemId', (req, res) => {
     const sessionId = getSessionId(req)
     if (!sessionId) return sendError(res, '缺少 X-Session-Id', 400)
 
-    const itemId = parseInt(req.params.itemId, 10)
+    const itemId = asId(req.params.itemId)
+    if (itemId === null) return sendError(res, 'itemId 必须是正整数', 400)
     const item = db
       .prepare('SELECT * FROM user_accessories WHERE id = ? AND session_id = ?')
       .get(itemId, sessionId)
@@ -317,8 +372,13 @@ router.put('/items/:itemId', writeLimiter, (req, res) => {
     const sessionId = getSessionId(req)
     if (!sessionId) return sendError(res, '缺少 X-Session-Id', 400)
 
-    const itemId = parseInt(req.params.itemId, 10)
+    const itemId = asId(req.params.itemId)
+    if (itemId === null) return sendError(res, 'itemId 必须是正整数', 400)
     const data = req.body || {}
+
+    // 与 POST 同一把闸门：下面按 allowedFields 原样绑值，类型写错就该 400 而不是 500
+    const bad = firstBadScalar(data, ACCESSORY_SCALARS)
+    if (bad) return sendError(res, `${bad} 只能是文本或数字`, 400)
 
     const jsonFields = [
       'face_shape_fit',
@@ -358,6 +418,9 @@ router.put('/items/:itemId', writeLimiter, (req, res) => {
         let val = data[key]
         if (jsonFields.includes(key)) val = JSON.stringify(val || [])
         if (key === 'allergy_safe' || key === 'is_favorite') val = val ? 1 : 0
+        // price 列是 REAL：与 POST 同一把尺子过 asNumber，0 保住、'1,200' 这类脏值归 NULL，
+        // 不再让字符串躺在数值列里（crossCabinet 的 priceRange 一算就废）
+        if (key === 'price') val = asNumber(val, null)
         const col = key === 'condition' ? '`condition`' : key
         updates.push(`${col} = ?`)
         params.push(val)
@@ -388,7 +451,8 @@ router.delete('/items/:itemId', writeLimiter, (req, res) => {
     const sessionId = getSessionId(req)
     if (!sessionId) return sendError(res, '缺少 X-Session-Id', 400)
 
-    const itemId = parseInt(req.params.itemId, 10)
+    const itemId = asId(req.params.itemId)
+    if (itemId === null) return sendError(res, 'itemId 必须是正整数', 400)
     const result = db
       .prepare('DELETE FROM user_accessories WHERE id = ? AND session_id = ?')
       .run(itemId, sessionId)
@@ -426,11 +490,15 @@ router.get('/gaps', (req, res) => {
     const sessionId = getSessionId(req)
     if (!sessionId) return sendError(res, '缺少 X-Session-Id', 400)
 
+    // 这四格会被当成档案值去和 fit_* 列表做 includes 比对：`?face_shape[]=鹅蛋脸` 传进来
+    // 是个数组，判真后 includes 永远不命中 ⇒ 缺口分析平白多报一条"脸型不匹配"。
+    // 过 asText 后非文本＝没填＝用默认值，与 POST 的档案口径一致。
+    const q = asFilters(req.query, ['face_shape', 'skin_tone', 'neck_length', 'occasion'])
     const profile = {
-      face_shape: req.query.face_shape || '鹅蛋脸',
-      skin_tone: req.query.skin_tone || '自然',
-      neck_length: req.query.neck_length || '中',
-      occasion: req.query.occasion || '上班通勤',
+      face_shape: q.face_shape || '鹅蛋脸',
+      skin_tone: q.skin_tone || '自然',
+      neck_length: q.neck_length || '中',
+      occasion: q.occasion || '上班通勤',
     }
     const result = analyzeAccessoryGaps(profile, sessionId)
     return sendSuccess(res, result)
@@ -484,10 +552,13 @@ router.get('/suggest', (req, res) => {
     const sessionId = getSessionId(req)
     if (!sessionId) return sendError(res, '缺少 X-Session-Id', 400)
 
+    // 过 asFilters：`?skin_tone[]=白皮` 这类数组查询串当"没填"，回落默认值。
+    // 不归一的话数组会原样进 profile，下游 `profile.skin_tone === '白皮'` 恒 false ⇒ 推荐悄悄变味。
+    const q = asFilters(req.query, ['face_shape', 'skin_tone', 'occasion'])
     const profile = {
-      face_shape: req.query.face_shape || '鹅蛋脸',
-      skin_tone: req.query.skin_tone || '自然',
-      occasion: req.query.occasion || '上班通勤',
+      face_shape: q.face_shape || '鹅蛋脸',
+      skin_tone: q.skin_tone || '自然',
+      occasion: q.occasion || '上班通勤',
     }
     const result = suggestAccessoryPurchases(profile, sessionId)
     return sendSuccess(res, result.suggestions)

@@ -261,7 +261,11 @@ test('buildRecommendation: 没有肤色档 ⇒ 一律不给 color_fit(空柜不�
   delete p.skin_tone
   const r = buildRecommendation(p, 'personal', false)
   const withFit = (r['穿搭'] || []).filter((e) => e.color_fit)
-  assert.strictEqual(withFit.length, 0, `缺肤色还出分就是编造: ${JSON.stringify(withFit.map((e) => e.group_name))}`)
+  assert.strictEqual(
+    withFit.length,
+    0,
+    `缺肤色还出分就是编造: ${JSON.stringify(withFit.map((e) => e.group_name))}`,
+  )
 })
 
 // ============================================================
@@ -295,21 +299,26 @@ test('buildRecommendation: 同一句上衣结论,换一个人身材 ⇒ body_fit
   const a = buildRecommendation(slim, 'personal', false)
   const b = buildRecommendation(broad, 'personal', false)
   const pair = (r) =>
-    (r['穿搭'] || [])
-      .filter((e) => e.body_fit)
-      .map((e) => [e.group_name, e.body_fit.score])
+    (r['穿搭'] || []).filter((e) => e.body_fit).map((e) => [e.group_name, e.body_fit.score])
   const la = new Map(pair(a))
   const diffs = pair(b)
     .filter(([name, s]) => la.has(name) && la.get(name) !== s)
     .map(([name, s]) => `${name}: ${la.get(name)} → ${s}`)
-  assert.ok(diffs.length >= 1, `两条链路的上衣分数完全一样 ⇒ 这一维还跟人无关:\n${[...la].map(([n, s]) => `${n}=${s}`).join(' / ')}`)
+  assert.ok(
+    diffs.length >= 1,
+    `两条链路的上衣分数完全一样 ⇒ 这一维还跟人无关:\n${[...la].map(([n, s]) => `${n}=${s}`).join(' / ')}`,
+  )
 })
 
 test('buildRecommendation: 一个尺寸都没量 ⇒ 全场没有 body_fit(缺测不出分)', () => {
   const bare = { gender: '女', scenario: '通勤', skin_tone: '白皙' }
   const r = buildRecommendation(bare, 'personal', false)
   const withBody = (r['穿搭'] || []).filter((e) => e.body_fit)
-  assert.strictEqual(withBody.length, 0, `没量尺寸还出分就是编造: ${JSON.stringify(withBody.map((e) => e.group_name))}`)
+  assert.strictEqual(
+    withBody.length,
+    0,
+    `没量尺寸还出分就是编造: ${JSON.stringify(withBody.map((e) => e.group_name))}`,
+  )
   assert.ok(!r._computed.body_deviation, '偏差向量也该整块缺席,前端才有"还打不了分"的判据')
 })
 
@@ -322,11 +331,20 @@ test('buildRecommendation: 每条穿搭都带 evidence_level 字段(A/B/C/D 或 
       'evidence_level' in e,
       `${e.group_name} 缺 evidence_level 字段(前端要按 null 显示"未标注")`,
     )
-    assert.ok([null, 'A', 'B', 'C', 'D'].includes(e.evidence_level), `${e.group_name} 档位非法: ${e.evidence_level}`)
+    assert.ok(
+      [null, 'A', 'B', 'C', 'D'].includes(e.evidence_level),
+      `${e.group_name} 档位非法: ${e.evidence_level}`,
+    )
   })
   // 现场:比例类规则应是 A/B,四季色彩应是 C
-  assert.ok(list.some((e) => e.evidence_level === 'A' || e.evidence_level === 'B'), '比例类规则应带 A/B 档')
-  assert.ok(list.some((e) => e.evidence_level === 'C'), '色彩季型类规则应带 C 档')
+  assert.ok(
+    list.some((e) => e.evidence_level === 'A' || e.evidence_level === 'B'),
+    '比例类规则应带 A/B 档',
+  )
+  assert.ok(
+    list.some((e) => e.evidence_level === 'C'),
+    '色彩季型类规则应带 C 档',
+  )
 })
 
 test('buildRecommendation: 腿长留空就不匹配腿身比规则(阈值改造后的负向断言)', () => {
@@ -339,8 +357,13 @@ test('buildRecommendation: 腿长留空就不匹配腿身比规则(阈值改造�
     `没量腿长却命中了腿身比规则: ${names.join(' / ')}`,
   )
   // 对照组:量了腿长(0.545 判标准)就该命中"标准"那组
-  const names2 = (buildRecommendation(FIT_PROFILE, 'personal', false)['穿搭'] || []).map((e) => e.group_name || '')
-  assert.ok(names2.some((n) => n.includes('腿身比标准')), `0.545 应判标准: ${names2.join(' / ')}`)
+  const names2 = (buildRecommendation(FIT_PROFILE, 'personal', false)['穿搭'] || []).map(
+    (e) => e.group_name || '',
+  )
+  assert.ok(
+    names2.some((n) => n.includes('腿身比标准')),
+    `0.545 应判标准: ${names2.join(' / ')}`,
+  )
 })
 
 // ============================================================
@@ -370,7 +393,11 @@ test('buildRecommendation: 只量了身高与净胸围 ⇒ 处方仍出，但只
   const s = buildRecommendation({ gender: '男', height: 172, bust: 92 }, 'personal', false).top_spec
   assert.ok(s, '号型算得出来就该出，这一层不等修形层')
   assert.ok(s.fit.present)
-  assert.strictEqual(s.fit.size_label, '170/92', `号 172→170、型 92 已是 4 的倍数：${s.fit.size_label}`)
+  assert.strictEqual(
+    s.fit.size_label,
+    '170/92',
+    `号 172→170、型 92 已是 4 的倍数：${s.fit.size_label}`,
+  )
   assert.strictEqual(s.axes.length, 0, '腰围体重肩宽都没量 ⇒ 修形层一条不许编')
   assert.strictEqual(s.colour.present, false)
 })

@@ -13,17 +13,20 @@
  *               { error: { code, message } } 结构（server.js 的全局闸就是后者）
  */
 function rateLimit(options = {}) {
-  const windowMs = options.windowMs || 60 * 1000
-  const max = options.max || 20
+  // 不能写 `options.windowMs || 60000`：显式传 0（"每秒只准 0 次"这类封停用例）
+  // 会被 || 当成没传，静默变成 20 次/60 秒——限制比配置的还松，且没有任何提示。
+  const windowMs =
+    Number.isFinite(options.windowMs) && options.windowMs > 0 ? options.windowMs : 60 * 1000
+  const max = Number.isFinite(options.max) && options.max >= 0 ? options.max : 20
   const keyFn = options.keyFn || ((req) => req.ip || req.socket?.remoteAddress || 'unknown')
 
   const fallback = '请求过于频繁，请稍后再试'
   const msgOpt = options.message || fallback
   // 两种入参都归一成 { code, message }：直接塞 message 会让对象入参变成
   // data.error.error.message，调用方按统一形状读就永远读不到文案
-  const limitCode = typeof msgOpt === 'string' ? 'RATE_LIMITED' : msgOpt.error?.code || 'RATE_LIMITED'
-  const limitMessage =
-    typeof msgOpt === 'string' ? msgOpt : msgOpt.error?.message || fallback
+  const limitCode =
+    typeof msgOpt === 'string' ? 'RATE_LIMITED' : msgOpt.error?.code || 'RATE_LIMITED'
+  const limitMessage = typeof msgOpt === 'string' ? msgOpt : msgOpt.error?.message || fallback
 
   // Map<键, { count: 计数, resetTime: 重置时间 }>
   const buckets = new Map()

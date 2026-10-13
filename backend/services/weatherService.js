@@ -2,6 +2,7 @@
  * Open-Meteo 天气服务模块
  * 使用 Node.js 原生 fetch (v18+) 异步获取天气数据
  */
+const { ownValue } = require('../utils/common')
 
 // 城市名称 -> (纬度, 经度) 映射
 const CITY_GEO = {
@@ -22,6 +23,25 @@ const API_URL = 'https://api.open-meteo.com/v1/forecast'
 // 内存缓存: { location: { result, timestamp } }
 const cache = new Map()
 const CACHE_TTL = 600 * 1000 // 600 秒
+
+/** 上游字段可能缺、可能是字符串、可能是 null：读得出有限数就用，读不出给 null（绝不静默变假值） */
+function _readNumber(val) {
+  if (val === null || val === undefined || val === '') return null
+  const n = Number(val)
+  return Number.isFinite(n) ? n : null
+}
+
+/**
+ * 带 HTTP 状态码的天气错误
+ * status 给路由用（404 城市没收录 / 502 上游数据不全 / 503 上游不可用），
+ * isWeatherError 是给下面那个 catch 认出自己刚抛的错的标记，免得被改写成 503。
+ */
+function weatherError(message, status) {
+  const err = new Error(message)
+  err.status = status
+  err.isWeatherError = true
+  return err
+}
 
 // WMO 天气代码 -> 中文描述
 const WMO_CONDITIONS = {
@@ -82,10 +102,15 @@ async function getWeather(location) {
     return cached.result
   }
 
-  const coords = CITY_GEO[location]
+  // 城市表按用户传来的字符串查：`CITY_GEO['toString']` / `['constructor']` 会拿到
+  // Object.prototype 上的函数，coords[0] 变 undefined，请求带着"latitude=undefined"发出去。
+  // ownValue 只认这张表自己的键，认不到就走下面的明确报错分支
+  const coords = ownValue(CITY_GEO, location)
   if (!coords) {
-    console.warn(`[天气] 不支持的城市: ${location}，返回默认值`)
-    return defaultWeather()
+    // 取不到就如实报错。原来这里回 defaultWeather()（22°C / 湿度 60 / 风力 2 级），
+    // 前端拿到假数照样生成穿衣策略 ⇒ 把"这个城市没收录"说成"今天体感 22 度"。
+    const supported = Object.keys(CITY_GEO).join('、')
+    throw weatherError(`暂不支持「${String(location).slice(0, 40)}」，可选城市：${supported}`, 404)
   }
 
   const params = new URLSearchParams({
@@ -103,27 +128,36 @@ async function getWeather(location) {
     const data = await response.json()
     const current = data.current || {}
 
-    const temperature = parseFloat(current.temperature_2m || 22)
-    const feelsLike = parseFloat(current.apparent_temperature || 22)
-    const humidity = parseInt(current.relative_humidity_2m || 60, 10)
-    const weatherCode = parseInt(current.weather_code || 0, 10)
-    const windSpeed = parseFloat(current.wind_speed_10m || 0)
-    const windDeg = parseFloat(current.wind_direction_10m || 0)
+    // 上游少回一个字段就当这次取数失败，不再 `|| 22` / `|| 60` 补一个假值。
+    // temperature 与 apparent_temperature 尤其致命：穿衣策略整条按 feelsLike 分档，
+    // 补 22 等于替用户决定"今天不用穿外套"。
+    const temperature = _readNumber(current.temperature_2m)
+    const feelsLike = _readNumber(current.apparent_temperature)
+    const humidity = _readNumber(current.relative_humidity_2m)
+    if (temperature === null || feelsLike === null) {
+      throw weatherError('天气服务返回的数据不完整，请稍后再试', 502)
+    }
+    const weatherCode = _readNumber(current.weather_code)
+    const windSpeed = _readNumber(current.wind_speed_10m)
+    const windDeg = _readNumber(current.wind_direction_10m)
 
     const result = {
-      temperature,
-      feelsLike,
-      condition: WMO_CONDITIONS[weatherCode] || '未知',
-      humidity,
-      windDir: degToWindDir(windDeg),
-      windScale: windSpeedToScale(windSpeed),
+      temperature: Math.round(temperature * 10) / 10,
+      feelsLike: Math.round(feelsLike * 10) / 10,
+      condition: (weatherCode === null ? null : ownValue(WMO_CONDITIONS, weatherCode)) || '未知',
+      // 湿度/风缺测只影响那一格显示，不改穿衣判断，所以留 null 让前端显示"—"
+      humidity: humidity === null ? null : Math.round(humidity),
+      windDir: windDeg === null ? '未知' : degToWindDir(windDeg),
+      windScale: windSpeed === null ? null : windSpeedToScale(windSpeed),
     }
 
     cache.set(location, { result, timestamp: now })
     return result
   } catch (err) {
-    console.warn(`[天气] Open-Meteo API 请求失败: ${err.message}，返回默认值`)
-    return defaultWeather()
+    // 自己抛的那两条带 status 的错误原样往上送，别把"502 数据不完整"洗成 500
+    if (err && err.isWeatherError) throw err
+    console.warn(`[天气] Open-Meteo API 请求失败: ${err.message}`)
+    throw weatherError('天气服务暂时不可用，请稍后再试', 503)
   }
 }
 
@@ -189,18 +223,6 @@ function windSpeedToScale(speed) {
     if (speed < threshold) return level
   }
   return 12
-}
-
-/** 默认天气数据 */
-function defaultWeather() {
-  return {
-    temperature: 22,
-    feelsLike: 22,
-    condition: '未知',
-    humidity: 60,
-    windDir: '未知',
-    windScale: 2,
-  }
 }
 
 module.exports = { getWeather, buildTemperatureProfile }

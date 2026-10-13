@@ -9,6 +9,33 @@
 const crypto = require('crypto')
 const db = require('../db/init')
 const { getSessionId } = require('../utils/common')
+const { sendError } = require('../utils/response')
+
+/**
+ * 滚动记录会话活跃时间（users.last_active_at）
+ *
+ * users.session_id 原来是永久 bearer token：拿到 id 就永远有效，对比
+ * customer_sessions 有 expires_at，这张什么都没有。本轮只把"最后一次被
+ * 认证命中"的时间记下来，不做任何拦截——现在就按空数据执法等于把所有
+ * 老账号当场踢下线，那是事故不是修复。执法留到下一轮：数据攒够后按
+ * "超过 N 天无活跃即失效"收紧。
+ *
+ * 每小时最多写一次：认证是每次请求都过的热路径，逐请求 UPDATE 的写放大
+ * 在 WAL 单写锁下不划算；活跃判定精确到小时足够。
+ * try/catch 兜底：记活跃度失败（列缺失/锁冲突）绝不能反过来拖垮认证本身。
+ */
+function touchSessionActivity(userId) {
+  try {
+    db.prepare(
+      `UPDATE users
+       SET last_active_at = datetime('now')
+       WHERE id = ?
+         AND (last_active_at IS NULL OR last_active_at < datetime('now', '-1 hour'))`,
+    ).run(userId)
+  } catch {
+    /* 观测数据没记上而已，认证照常 */
+  }
+}
 
 /**
  * 获取当前用户（通过 X-Session-Id）
@@ -17,7 +44,9 @@ const { getSessionId } = require('../utils/common')
 function getCurrentUser(req) {
   const sessionId = getSessionId(req)
   if (!sessionId) return null
-  return db.prepare('SELECT * FROM users WHERE session_id = ?').get(sessionId) || null
+  const user = db.prepare('SELECT * FROM users WHERE session_id = ?').get(sessionId) || null
+  if (user) touchSessionActivity(user.id)
+  return user
 }
 
 /**
@@ -35,11 +64,9 @@ function ensureGuestUser(sessionId) {
 function loginRequired(req, res, next) {
   const user = optionalUser(req)
   if (!user) {
-    return res.status(401).json({
-      success: false,
-      data: null,
-      message: '未授权访问，请先登录或提供有效的 X-Session-Id',
-    })
+    // 统一形状：这里是全仓最后一处把 message 放在顶层的 401，
+    // 前端按 error.message 读 ⇒ 认证失败时提示是空的
+    return sendError(res, '未授权访问，请先登录或提供有效的 X-Session-Id', 401)
   }
   req.user = user
   next()
@@ -102,20 +129,37 @@ function verifyAdminToken(token) {
     if (!secret) return false
     const tokenStr = Buffer.from(token, 'base64url').toString('utf-8')
     const parts = tokenStr.split(':')
-    if (parts.length !== 3) return false
+    if (parts.length < 3) return false
 
-    const [username, timestamp, signature] = parts
+    // 签名是 hex（不含冒号），时间戳是纯数字，所以从右往左数两段才是它们。
+    // 原来 `parts.length !== 3` 直接拒：管理员账号名里带一个冒号就永远登录不了
+    // （generateAdminToken 拼出来的 token 会变成 4 段）。
+    const signature = parts[parts.length - 1]
+    const timestamp = parts[parts.length - 2]
+    const username = parts.slice(0, -2).join(':')
     const payload = `${username}:${timestamp}`
 
     const expectedSig = crypto.createHmac('sha256', secret).update(payload).digest('hex')
 
     // 常量时间比较，防止时序攻击
-    if (!crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expectedSig))) {
+    // 先比长度：长度不等时 timingSafeEqual 是直接抛 RangeError 的，原来这条抛出去
+    // 由最外层 catch 折成 false。结果没变（还是拒），但"拒绝"是靠异常兜出来的——
+    // 同一个 catch 还兜着 JSON.parse、DB 查询等真故障，将来谁在这些地方改了抛法，
+    // 这里就会被当成"签名不对"静默放行成 401。长度这一眼不是安全判断，直接 return。
+    const sigBuf = Buffer.from(signature)
+    if (sigBuf.length !== expectedSig.length) return false
+    if (!crypto.timingSafeEqual(sigBuf, Buffer.from(expectedSig))) {
       return false
     }
 
     // 检查有效期（24小时）
-    const tokenTime = new Date(parseInt(timestamp) * 1000)
+    // 时间戳必须是正整数秒：parseInt 认不出来时原来是 NaN ⇒ new Date(NaN) 是 Invalid Date
+    // ⇒ `now - tokenTime` 为 NaN ⇒ `NaN > 86400000` 是 false ⇒ 24 小时上限被悄悄跳过，
+    // 这样一个持密钥方签出的"永不过期"token 就一直能用。
+    const tokenSeconds = Number.parseInt(timestamp, 10)
+    if (!Number.isInteger(tokenSeconds) || tokenSeconds <= 0) return false
+    const tokenTime = new Date(tokenSeconds * 1000)
+    if (!Number.isFinite(tokenTime.getTime())) return false
     const now = new Date()
     if (now - tokenTime > 24 * 60 * 60 * 1000) return false
 
@@ -125,7 +169,7 @@ function verifyAdminToken(token) {
       .get(username)
     if (!account) return false
     // 改过密码则更早签发的 token 全部作废；NULL=从没改过，不能因此把已登录的后台踢下线
-    if (account.password_changed_at > Number(timestamp)) return false
+    if (account.password_changed_at > tokenSeconds) return false
     return true
   } catch {
     return false
@@ -138,20 +182,12 @@ function verifyAdminToken(token) {
 function adminLoginRequired(req, res, next) {
   const authHeader = req.headers['authorization'] || ''
   if (!authHeader.startsWith('Bearer ')) {
-    return res.status(401).json({
-      success: false,
-      data: null,
-      message: '未授权，请提供管理员 Token',
-    })
+    return sendError(res, '未授权，请提供管理员 Token', 401)
   }
 
   const token = authHeader.slice(7)
   if (!verifyAdminToken(token)) {
-    return res.status(401).json({
-      success: false,
-      data: null,
-      message: 'Token 无效或已过期',
-    })
+    return sendError(res, 'Token 无效或已过期', 401)
   }
 
   next()

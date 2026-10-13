@@ -101,6 +101,17 @@ function HealthDetailCard({ icon, label, detail }: HealthDetailCardProps) {
         <span style={{ fontSize: 24, fontWeight: 700, color }}>{score}</span>
         <span style={{ fontSize: 12, color: 'var(--muted)' }}>共 {d.total ?? 0} 件</span>
       </div>
+      {/* 已有品类:后端每条都算了 categories,老代码只渲染"缺少"那一半,
+          用户看不到"它凭什么说缺",也就没法判断是自己漏填还是分类起名没认出来 */}
+      {d.categories && d.categories.length > 0 && (
+        <div className="flex flex-wrap gap-1.5 mb-2">
+          {d.categories.map((c, i) => (
+            <span key={i} className="pill-tag" style={{ color: 'var(--muted)' }}>
+              {c}
+            </span>
+          ))}
+        </div>
+      )}
       {d.missing_essentials && d.missing_essentials.length > 0 && (
         <div className="flex flex-col gap-1">
           {d.missing_essentials.map((item, i) => (

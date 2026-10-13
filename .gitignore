@@ -71,3 +71,27 @@ AppData/
 CLAUDE.md
 # Office 锁文件（Word/Excel 打开时同目录生成的 ~$xxx.docx，162B 垃圾件，永不入库）
 ~$*
+
+# 六本"书"的扫描件（z-library 入口下载，本机留作措辞原文证据，永不入库）：
+# ① 版权不是我方的通俗出版物，公开仓库里放整本＝替人分发；② 六本合计 164,533,393 B（＝164.5 MB(10^6)／156.9 MiB），单本 97.5 MiB 已越过 GitHub 50 MiB 警告线，
+# 进一次库就永久留在历史里，clone 再也甩不掉。国标/论文原文另算，papers/ 里那 60 份仍跟踪。
+# 引用它们的行都在 docs/依据/10（按文件名 + md5 逐字登记），路径不变 ⇒ 指针不受这条影响。
+docs/依据/papers/Color me beautiful  discover your natural beauty through the colors that make you look great  feel fabulous (Jackson, Carole, 1942-) (z-library.sk, 1lib.sk, z-lib.sk).pdf
+docs/依据/papers/THE SCIENCE OF SEXY.pdf
+docs/依据/papers/完美形体服饰搭配圣经 (布拉德利·拜尤) (z-library.sk, 1lib.sk, z-lib.sk).pdf
+# 2026-10-11 第三十五轮又落进来三本（同一条口径：本机留证、永不入库；合计 34,213,186 B）：
+docs/依据/papers/Dressing your truth  discover your type of beauty (Tuttle, Carol, author) (z-library.sk, 1lib.sk, z-lib.sk).pdf
+docs/依据/papers/Dressing Your Truth Discover Your Type of Beauty (Carol Tuttle) (z-library.sk, 1lib.sk, z-lib.sk).pdf
+docs/依据/papers/The triumph of individual style  a guide to dressing your body, your beauty, your self (Mathis, Carla Mason, Connor, Helen Villa) (z-library.sk, 1lib.sk, z-lib.sk).pdf
+
+# 🔴 2026-10-13 补：上面那六条逐字路径已经全部失效——文件在盘上被改成了带序号的名字（`ls` 现量：旧名 0 个在场，
+# 新名 7 个在场，合计 199,415,427 B＝190.2 MiB），于是这七份又变回"未跟踪"，`git add -A` 会把
+# 102,273,583 B 那一本（`3.完美形体服饰搭配圣经.pdf`）一次吸进历史 ⇒ GitHub 单文件 100 MiB 是硬拒，
+# 整次 push 直接被弹回，本机历史里还甩不掉。旧六条留着不删（历史出处），新七条逐字列出：
+docs/依据/papers/1.The Science of Sexy.pdf
+docs/依据/papers/2.Color me beautiful.pdf
+docs/依据/papers/3.Dressing Your Truth Discover Your Personal of Beauty Profile.pdf
+docs/依据/papers/3.完美形体服饰搭配圣经.pdf
+docs/依据/papers/4.这样穿很美 平价搭出时尚范 (（日）典子，杨孟芳译).pdf
+docs/依据/papers/5.The Triumph of Individual Style.pdf
+docs/依据/papers/专业色彩搭配设计师必备宝典 (第二版).pdf

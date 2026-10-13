@@ -142,8 +142,8 @@ export default function RecommendationReport({
             暂无{TAB_LABEL(activeTab)}推荐数据,请补充更多个人信息
           </div>
         ) : (
-          items.map((item) => (
-            <div key={item.group_id} className="glass-card p-3">
+          items.map((item, i) => (
+            <div key={`${activeTab}-${item.group_id ?? i}`} className="glass-card p-3">
               {item.group_name && (
                 <div
                   className="flex items-center gap-2 mb-2 pb-2"
@@ -209,8 +209,8 @@ export default function RecommendationReport({
                   />
                   <span>
                     上衣贴合度 {item.color_fit.score}/100 · {item.color_fit.top_label}
-                    （与肤色色差 ΔE00 {item.color_fit.deltaE00}、色相角差 {item.color_fit.dHue}°、明度差{' '}
-                    {item.color_fit.dL}）
+                    （与肤色色差 ΔE00 {item.color_fit.deltaE00}、色相角差 {item.color_fit.dHue}
+                    °、明度差 {item.color_fit.dL}）
                   </span>
                 </div>
               )}

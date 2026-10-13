@@ -16,6 +16,7 @@ const {
 } = require('./profileEnricher')
 const { explainMatchedRecommendation, CATEGORY_CN_TO_EN } = require('./ruleExplainer')
 const { colorFit } = require('./colorMetrics')
+const { asText, ownValue } = require('../utils/common')
 const { topFitBody, bodyDeviation } = require('./topFitBody')
 const { topSpec } = require('./topFromBody')
 
@@ -150,7 +151,11 @@ function getRecommendations(skinTone, faceShape, scenario) {
     ],
   }
 
-  return defaults[scenario] || defaults['休闲']
+  // scenario 来自请求体（buildRecommendation 里是 profile.scenario），
+  // 写 defaults[scenario] 时 scenario='constructor' 会拿到 Object 构造函数，
+  // 调用方 `for (const item of fallback)` 立刻 TypeError ⇒ 推荐接口回 500。
+  const fallbackList = ownValue(defaults, asText(scenario)) || ownValue(defaults, '休闲')
+  return fallbackList
 }
 
 // ============================================================
@@ -209,27 +214,40 @@ function checkSingleCondition(condition, profile) {
   const field = condition.field
   const operator = condition.operator
 
-  const profileVal = profile[field]
+  // 两处取值都不许顺原型链：condition.field 是库里的自由 TEXT，
+  // 一行写成 'constructor' 时 `profile['constructor']` 拿到的是 Object 函数而不是"没填"，
+  // 后面所有 String() 比较都拿它当档案值；`field in parsed` 同样会把继承键当成条件值。
+  // ownValue 认不出继承键 ⇒ 一律当缺测，与"这个字段顾客没填"同一口径。
+  const profileVal = ownValue(profile, field)
 
   // 从 parsed 中取出匹配值
   let condVal
-  if (parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed) && field in parsed) {
-    condVal = parsed[field]
+  if (
+    parsed !== null &&
+    typeof parsed === 'object' &&
+    !Array.isArray(parsed) &&
+    ownValue(parsed, field) !== undefined
+  ) {
+    condVal = ownValue(parsed, field)
   } else {
     condVal = parsed
   }
 
   // 别名归一(pose → posture 等)
-  const alias = COND_VALUE_ALIASES[field]
-  if (alias && typeof condVal === 'string' && alias[condVal]) {
-    condVal = alias[condVal]
+  const alias = ownValue(COND_VALUE_ALIASES, field)
+  if (alias && typeof condVal === 'string') {
+    const mapped = ownValue(alias, condVal)
+    if (mapped) condVal = mapped
   }
 
   // "all" 表示不限,始终命中
   if (condVal === 'all') return true
 
-  // profile 中该字段为空时,只有 "all" 才能命中
+  // profile 中该字段为空时,只有 "all" 才能命中。
+  // 空串（表单留空、门店端没录）也必须算空：否则 ne 条件的 `'' !== '无'` 恒真，
+  // 库里 allergy_metal ne "无" 这一条会给"没填过敏史"的人当成"有过敏"，凭空推无镍饰品。
   if (profileVal === null || profileVal === undefined) return false
+  if (typeof profileVal === 'string' && profileVal.trim() === '') return false
 
   if (operator === 'eq') {
     return String(profileVal) === String(condVal)
@@ -275,7 +293,13 @@ function evaluateGroup(group, conditions, profile) {
   for (const cond of conditions) {
     const matched = checkSingleCondition(cond, profile)
     if (matched) {
-      scoredWeight += cond.weight || 1
+      // 权重必须收成一个数。weight 列是自由 TEXT：原来 `cond.weight || 1` 只挡 falsy，
+      // 'abc' 是 truthy 就一路加进 scoredWeight ⇒ NaN，比较器 `b.score - a.score` 回 NaN
+      // （排序退化成"按数据库返回序"），而 JSON.stringify 把 NaN 打成 null，
+      // 顾客报告里的"匹配分"直接变 null。另外 weight=0 是合法的"不计分软信号"，
+      // 原来被 `|| 1` 抬成 1 分。0 合法 ⇒ 判据只能是"是不是有限数"，不能是 truthy。
+      const w = Number(cond.weight)
+      scoredWeight += Number.isFinite(w) && w >= 0 ? w : 1
     } else {
       allMatched = false
     }
@@ -302,21 +326,35 @@ function matchRules(profile, mode = 'store', category = null, incrementHitCount 
   // 构建查询
   // mode='all' 表示门店与个人通用(第二批色彩/比例类规则不分两套口径)
   let query = "SELECT * FROM rule_groups WHERE enabled = 1 AND (mode = ? OR mode = 'all')"
-  const params = [mode]
+  // mode / gender / scenario 都是从请求体一路传下来的自由值：对象、数组绑进 SQL
+  // 是 RangeError/TypeError ⇒ 整个推荐接口回 500，而它本该只是"这个筛选项没匹配上"。
+  // 统一过 asText（非文本当没填），认不出的值仍按原口径只命中 mode='all' 的规则。
+  const params = [asText(mode) || 'store']
 
   // 按 gender 筛选
-  const gender = profile.gender
+  const gender = asText(profile.gender)
   if (gender) {
     query += ' AND (gender = ? OR gender IS NULL)'
     params.push(gender)
   }
 
   // 按 scenario 筛选(姿势类按拍照场景分档,优先用 photo_scene)
-  const scenarioKey =
-    category === '姿势' ? profile.photo_scene || profile.scenario : profile.scenario
+  const scenarioRaw =
+    category === '姿势'
+      ? asText(profile.photo_scene) || asText(profile.scenario)
+      : asText(profile.scenario)
+  // 先归一成规范值，再拿它去预筛。原来这里直接用原始值：
+  // 顾客传 scenario='上班通勤' 时 aliases=SCENARIO_ALIASES['上班通勤']=undefined ⇒ 只放进
+  // scenario='上班通勤' 那 3 组（10-13 现量线上：group.scenario 写成别名的共 10 行，
+  // 上班通勤 3／约会聚会 4／派对 3），而这 3 组的条件值同样写 '上班通勤'，
+  // 到 checkSingleCondition 里被归成 '通勤' 再和 profile 的 '上班通勤' 比 ⇒ 不等，
+  // 于是这一路一条都不命中，整屏退回硬编码的"休闲"套。归一放在入口，两侧才是同一把尺子。
+  const scenarioKey = ownValue(SCENARIO_ALIAS_TO_CANON, scenarioRaw) || scenarioRaw
   if (scenarioKey) {
     // 别名一起放行:老规则里把场合写成表单原始选项的,归一后会对不上 SQL 预筛
-    const aliases = SCENARIO_ALIASES[scenarioKey] || []
+    // ownValue：scenarioKey 是自由文本，'toString' 这类原型键会查出函数，
+    // 下一行的 `...aliases` 展开函数直接 TypeError ⇒ 推荐接口 500。
+    const aliases = ownValue(SCENARIO_ALIASES, scenarioKey) || []
     query += ` AND (scenario IS NULL OR scenario = ?${' OR scenario = ?'.repeat(aliases.length)})`
     params.push(scenarioKey, ...aliases)
   }
@@ -362,13 +400,16 @@ function matchRules(profile, mode = 'store', category = null, incrementHitCount 
     const evalProfile = {
       ...profile,
       scenario: scenarioKey,
-      category: CATEGORY_CN_TO_EN[group.category] || group.category,
+      category: ownValue(CATEGORY_CN_TO_EN, group.category) || group.category,
     }
     const [hit, score, conditionDetails] = evaluateGroup(group, conditions, evalProfile)
 
     if (hit) {
       // 使用预加载的 actions
-      const actions = {}
+      // 必须用无原型对象：action_type 是库里的自由 TEXT，一行 'x' 写成 __proto__ 时，
+      // `actions['__proto__'] = content` 改的是原型而不是自有键 ⇒ 这条动作文案静默消失，
+      // 推荐结果和文字报告里都少一项，且不报错、日志无痕。
+      const actions = Object.create(null)
       for (const action of actionsByGroup[group.id] || []) {
         actions[action.action_type] = action.content
       }
@@ -408,8 +449,12 @@ function matchRules(profile, mode = 'store', category = null, incrementHitCount 
     }
   }
 
-  // 排序:priority 降序,score 降序
-  matched.sort((a, b) => b.priority - a.priority || b.score - a.score)
+  // 排序:priority 降序,score 降序,最后按 id 升序兜底。
+  // 前两级之后还剩多少并列，10-13 现量线上：enabled=1 的组里 priority=25 就有 79 组、
+  // priority=5 有 76 组，而同一个 mode+category+priority 键下最多 68 组同分 ⇒
+  // 只排两级时，并列的先后完全由 SELECT 的返回序决定（这条 SQL 没有 ORDER BY），
+  // 而报告端只取前 3 条 ⇒ 重建一次库、top3 可能整体换人。id 兜底把顺序定死成建规先后。
+  matched.sort((a, b) => b.priority - a.priority || b.score - a.score || a.group_id - b.group_id)
 
   return matched
 }

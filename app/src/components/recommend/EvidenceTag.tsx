@@ -69,7 +69,9 @@ export default function EvidenceTag({ level, withNote = false }: EvidenceTagProp
   if (withNote) {
     return (
       <div className="text-[11px]" style={{ color: 'var(--muted)', lineHeight: '1.5' }}>
-        <span style={{ color: meta.color }}>依据 {level || '未标注'} · {meta.short}</span>
+        <span style={{ color: meta.color }}>
+          依据 {level || '未标注'} · {meta.short}
+        </span>
         <span> —— {meta.note}</span>
       </div>
     )

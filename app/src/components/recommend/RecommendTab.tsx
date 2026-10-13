@@ -22,6 +22,12 @@ export const FIELD_LABELS: Record<string, string> = {
   color_combo: '配色',
   reason: '推荐理由',
   outerwear: '外套',
+  // 兜底硬编码那四条:规则引擎没命中时引擎直接给 outfit_ 前缀的键(见 recommendEngine.js 兜底分支),
+  // 库里 47 种 action_type 这边全覆盖,漏了这四个就会把英文原键糊在卡片上
+  outfit_top: '上装',
+  outfit_bottom: '下装',
+  outfit_color: '配色',
+  outfit_reason: '推荐理由',
   // 妆容类
   妆容风格: '妆容风格',
   lip_color: '唇妆',

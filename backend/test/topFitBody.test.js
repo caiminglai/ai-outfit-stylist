@@ -84,6 +84,34 @@ test('topFitBody: 肩窄的人给垫肩上衣加分，肩宽的人给落肩上�
   assert.ok(pad.score > drop.score, `甲：垫肩${pad.score} 应高于落肩${drop.score}`)
 })
 
+// ---- 肩宽÷腰围（站内比值；Pazhoohi 2023 的 SHR 是肩围÷臀围，本机量不到肩围）----
+
+test('bodyDeviation: 肩宽÷腰围算得出来，落在参考带内时明确写"不推拉"', () => {
+  const d = bodyDeviation(JIA) // 36/70 = 0.514
+  assert.strictEqual(d.measure.shoulder_waist_ratio, 0.51)
+  assert.ok(
+    d.notes.some((n) => n.includes('肩宽÷腰围 0.51 在参考带内')),
+    `带内要给一条 note：${d.notes.join(' | ')}`,
+  )
+})
+
+test('bodyDeviation: 肩宽÷腰围偏低⇒往加肩修，偏高⇒收；肩宽÷身高那条留在带内不干扰', () => {
+  const narrow = bodyDeviation({ height: 170, shoulder: 38, waist: 92 }) // 22.4% 带内；0.41 出带下侧
+  assert.strictEqual(narrow.measure.shoulder_ratio, 22.4)
+  assert.strictEqual(narrow.measure.shoulder_waist_ratio, 0.41)
+  assert.ok(narrow.want.shoulder > 0, `比值低应想加肩：${narrow.want.shoulder}`)
+
+  const wide = bodyDeviation({ height: 170, shoulder: 38, waist: 60 }) // 0.63 出带上侧
+  assert.ok(wide.want.shoulder < 0, `比值高应收：${wide.want.shoulder}`)
+})
+
+test('bodyDeviation: 没量腰围就不算这条比值，缺测不兜底', () => {
+  const d = bodyDeviation({ height: 170, shoulder: 38 }) // 只有身高+肩宽
+  assert.strictEqual(d.measure.shoulder_waist_ratio, null)
+  assert.strictEqual(d.measure.shoulder_ratio, 22.4)
+  assert.ok(!d.notes.some((n) => n.includes('肩宽÷腰围')), '没量到就不该出现这条 note')
+})
+
 // ============================================================
 // 2. 松量 × BMI（Liu 2006 的方向 + Sakata 2020 的区间先验）
 // ============================================================
@@ -149,14 +177,21 @@ test('topFitBody: BMI≥25 时条纹轴直接缺席，不进入总分', () => {
   // 闸门关上时人的偏差向量里也不许留"条纹想收"，否则界面挂着这条却一维都没算它
   const dev = bodyDeviation(heavy)
   assert.strictEqual(dev.want.pattern, null, 'BMI≥25 ⇒ want.pattern 必须是 null')
-  assert.ok(dev.notes.some((n) => n.includes('条纹方向这条不采用')), 'notes 要写明为什么不用')
+  assert.ok(
+    dev.notes.some((n) => n.includes('条纹方向这条不采用')),
+    'notes 要写明为什么不用',
+  )
   assert.ok(bodyDeviation(heavy).measure.bmi >= BODY_REF.stripe_bmi_max)
   // 拿"黑色横条纹T恤"当样本：体量这一维在场，才能看清条纹那一维是被闸门关掉的
   const r = score(heavy, '黑色横条纹T恤')
   assert.ok(r.axes_present.includes('volume'), '体量轴应在场，否则这条断言看不出闸门生效')
   assert.ok(!r.axes_present.includes('pattern'), 'BMI 闸门没生效')
   assert.ok(r.axes_missing.includes('pattern'))
-  assert.strictEqual(AXIS_WEIGHTS.pattern, Math.min(...Object.values(AXIS_WEIGHTS)), '条纹必须是最低权重')
+  assert.strictEqual(
+    AXIS_WEIGHTS.pattern,
+    Math.min(...Object.values(AXIS_WEIGHTS)),
+    '条纹必须是最低权重',
+  )
 })
 
 test('topFitBody: 条纹轴只在文本里真的出现"条"时才有，且给的是修正分不是判定', () => {
@@ -269,9 +304,19 @@ test('rankTopsByBody: 空衣柜返回空表不报错', () => {
 test('isTopCategory: 认活库里真实存在的中文品类，也认英文键；下装/鞋不算上衣', () => {
   // 现量 10-09：user_wardrobe.category 存的是中文自由标签（'衬衫'/'开衫'/'外套'/'裤子'/'未分类'）
   // ⇒ 判定只按英文键写死会一条不中，这条锁住中文口径
-  ;['衬衫', '开衫', '外套', '西装', '卫衣', 'T恤', '针织衫', '毛衣', '风衣', '夹克', '大衣'].forEach((c) =>
-    assert.ok(isTopCategory(c), `中文品类该认出来: ${c}`),
-  )
+  ;[
+    '衬衫',
+    '开衫',
+    '外套',
+    '西装',
+    '卫衣',
+    'T恤',
+    '针织衫',
+    '毛衣',
+    '风衣',
+    '夹克',
+    '大衣',
+  ].forEach((c) => assert.ok(isTopCategory(c), `中文品类该认出来: ${c}`))
   ;['top', 'outerwear', 'Top', 'OUTERWEAR'].forEach((c) =>
     assert.ok(isTopCategory(c), `英文键该认出来: ${c}`),
   )

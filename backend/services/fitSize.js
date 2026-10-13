@@ -33,6 +33,8 @@
  */
 
 const { meas, easeWindowFor, BODY_REF } = require('./topFitBody')
+const { bmiValue, gbBand, GB_BANDS } = require('./bmi')
+const { ownValue } = require('../utils/common')
 
 const r1 = (v) => Math.round(v * 10) / 10
 
@@ -67,21 +69,13 @@ const SIZE_STEPS = {
 }
 
 /**
- * 胖瘦程度档（另一条轴，与 Y/A/B/C 并存）。出处：GB/T 31901-2024 附录 A 表 A.2〔规范性〕成人栏，
+ * 胖瘦程度档（另一条轴，与 Y/A/B/C 并存）。表本身搬进 services/bmi.js 的 GB_BANDS，
+ * 这里只留一个同名出口给报告与测试用。出处：GB/T 31901-2024 附录 A 表 A.2〔规范性〕成人栏，
  * 逐字「偏胖 BMI≥24」「正常 18.5≤BMI<24」「偏瘦 BMI＜18.5」，脚注公式 BMI＝体重(kg)/身高(m)²。
  * ⚠️ 该版 2026-12-01 才实施 ⇒ 现在只当内部口径；`cn` 是表 A.2 的用词，对外要带日期限定。见 `10` §2f。
  */
-const BMI_BANDS = [
-  { cn: '偏瘦', lo: 0, hi: 18.5 },
-  { cn: '正常', lo: 18.5, hi: 24 },
-  { cn: '偏胖', lo: 24, hi: Infinity },
-]
-
 function bmiBand(bmi) {
-  const b = Number(bmi)
-  if (!Number.isFinite(b) || b <= 0) return null
-  const band = BMI_BANDS.find((x) => b >= x.lo && b < x.hi) || BMI_BANDS[BMI_BANDS.length - 1]
-  return { cn: band.cn, band: [band.lo, band.hi === Infinity ? null : band.hi] }
+  return gbBand(bmi)
 }
 
 /** 胸腰差（净胸围−净腰围）分四体型。区间边界包含在内；男女四档均已对本机原文逐字核对（10 §2 第 2 行、§2b 第 1 行） */
@@ -119,7 +113,9 @@ function bodyTypeOf(drop, gender) {
   const top = bands[0]
   const bottom = bands[bands.length - 1]
   if (drop > top.hi)
-    return { reason: `胸腰差 ${r1(drop)} cm 高于 Y 档上界 ${top.hi} cm ⇒ 超出号型分档表，体型位不替你编` }
+    return {
+      reason: `胸腰差 ${r1(drop)} cm 高于 Y 档上界 ${top.hi} cm ⇒ 超出号型分档表，体型位不替你编`,
+    }
   if (drop < bottom.lo)
     return {
       reason: `胸腰差 ${r1(drop)} cm 低于 C 档下界 ${bottom.lo} cm（腰围接近或超过胸围）⇒ 体型位不替你编`,
@@ -162,7 +158,11 @@ function checkBustEase(bust, easeWindow) {
     key: 'bust_ease',
     name_cn: CHECK_CN.bust_ease,
     verdict: t,
-    target: { 净胸围_cm: r1(bust), 松量_cm: easeWindow, 成衣胸围_cm: [r1(bust + lo), r1(bust + hi)] },
+    target: {
+      净胸围_cm: r1(bust),
+      松量_cm: easeWindow,
+      成衣胸围_cm: [r1(bust + lo), r1(bust + hi)],
+    },
     why:
       `买衣服看的是**成品胸围**，不是 S/M/L。你的净胸围 ${r1(bust)}cm，合适松量 ${lo}~${hi}cm ` +
       `⇒ 成衣胸围落在 ${r1(bust + lo)}~${r1(bust + hi)}cm 那一件才是合身的。` +
@@ -262,7 +262,10 @@ function fitLayer(person, dev) {
   const waist = meas(p.waist)
   const shoulder = meas(p.shoulder)
   const weight = meas(p.weight)
-  const bmi = height > 0 && weight > 0 ? weight / ((height / 100) * (height / 100)) : 0
+  // 算式只在 services/bmi.js 有一份；量不到 ⇒ null（原来这里回 0，
+  // 0 会顺着 `bmi > 0 ? r1(bmi) : null` 变 null，但 easeWindowFor(0) 那条分支读的是"数"，
+  // 用 null 走同一道守卫更直白）
+  const bmi = bmiValue(height, weight)
   const easeWindow = (d && d.ease_window) || easeWindowFor(bmi)
 
   const guide = { measure_guide: MEASURE_GUIDE }
@@ -278,8 +281,7 @@ function fitLayer(person, dev) {
       blocking,
       missing_input: ['身高', '净胸围'].filter((_, i) => (i === 0 ? !height : !bust)),
       ...guide,
-      note:
-        '这一层判不了，先按下面的方法把这两个数量出来。**没有这两个数，任何"你该穿几号"的话都是猜的。**',
+      note: '这一层判不了，先按下面的方法把这两个数量出来。**没有这两个数，任何"你该穿几号"的话都是猜的。**',
       evidence:
         'GB/T 1335.1-2008／1335.2-2008 号型系列（现行；5cm/4cm 分档与 Y/A/B/C 差数区间已对本机 PDF 逐字核对【官方原文·文本层逐字】，见 docs/依据/10 §2、§2b）＋ GB/T 16160-2017 测量方法（正文在本机【官方原文·现行】）',
     }
@@ -290,9 +292,17 @@ function fitLayer(person, dev) {
   const hasType = Boolean(bt.code)
 
   // 常用档系按性别取表；体型代号出来了再按体型那一列收窄（原文的系列表本来就是分体型列的）
-  const sc = SIZE_STEPS.scope[p.gender] || null
+  // 必须只认表自己的键：gender 是自由 TEXT 列（normalizeGender 认不出来就原样留着），
+  // SIZE_STEPS.scope['constructor'] 会顺原型链拿到 Object 构造器（truthy ⇒ 过不了 `|| null`），
+  // 下一行 `sc.chest[bt.code]` 就在 undefined 上取属性 ⇒ 整份合身层抛 TypeError、接口回 500。
+  // 同函数上面的 bodyTypeOf 一直是按 `=== '男' || === '女'` 硬判的，这里不能比它松。
+  const sc = ownValue(SIZE_STEPS.scope, p.gender) || null
   const heightRange = sc ? sc.height : SIZE_STEPS.height_range
-  const chestRange = sc ? (hasType ? sc.chest[bt.code] || sc.chest.all : sc.chest.all) : SIZE_STEPS.chest_range
+  const chestRange = sc
+    ? hasType
+      ? sc.chest[bt.code] || sc.chest.all
+      : sc.chest.all
+    : SIZE_STEPS.chest_range
   const sizeRef = sc ? sc.ref : 'GB/T 1335.1／1335.2-2008 两册并集（性别没填 ⇒ 只能给并集）'
   const hao = nearestStep(height, SIZE_STEPS.height, heightRange)
   const xing = nearestStep(bust, SIZE_STEPS.chest, chestRange)
@@ -316,15 +326,13 @@ function fitLayer(person, dev) {
         : `号 ${hao.value}／型 ${xing.value} 超出 ${sizeRef} 的档系表列（号 ${heightRange.join('~')}、型 ${chestRange.join('~')}）⇒ 就近换算，不是标准档`,
     drop_cm: drop,
     drop_reason: hasType ? null : bt.reason,
-    bmi: bmi > 0 ? r1(bmi) : null,
+    bmi: bmi === null ? null : r1(bmi),
     bmi_band: bmiBand(bmi),
     bmi_band_note:
       '胖瘦程度是**另一条轴**：Y/A/B/C 按胸腰差（体型），胖瘦程度按 BMI（GB/T 31901-2024 附录 A 表 A.2〔规范性〕：偏瘦 BMI＜18.5／正常 18.5≤BMI＜24／偏胖 BMI≥24，BMI＝体重 kg÷身高 m²）。' +
       '国标自己就是两个轴并用，所以这一档不替换、也不推翻上面的体型代号。' +
       '⚠️ 2024 版 2026-12-01 才实施 ⇒ 现在只当内部口径，对外引用必须带这个日期。',
-    target_finished_bust: easeWindow
-      ? [r1(bust + easeWindow[0]), r1(bust + easeWindow[1])]
-      : null,
+    target_finished_bust: easeWindow ? [r1(bust + easeWindow[0]), r1(bust + easeWindow[1])] : null,
     ease_window_cm: easeWindow || null,
     checks: [
       checkBustEase(bust, easeWindow),
@@ -351,7 +359,9 @@ module.exports = {
   nearestStep,
   SIZE_STEPS,
   DROP_BANDS,
-  BMI_BANDS,
+  // 表本体已并入 services/bmi.js（一条 BMI 算式与两张档表只留一份）；
+  // 这里继续导出同一引用，别的地方按 GB_BANDS 取
+  GB_BANDS,
   bmiBand,
   SHOULDER_TOLERANCE,
   MEASURE_GUIDE,

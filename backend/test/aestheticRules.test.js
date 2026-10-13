@@ -63,6 +63,7 @@ const REACHABLE_VALUES = {
   shoulder_frame: ['偏窄', '标准', '偏宽'],
   waist_definition: ['明显', '中等', '模糊'],
   skin_tone: ['暖皮', '冷皮', '自然', '白皙', '自然白', '偏黄', '小麦色', '古铜色'],
+  height_range: ['150-160', '160-170', '170-180', '180+'],
   scenario: [
     '通勤',
     '约会',
@@ -97,6 +98,61 @@ test('rules-aesthetic.json: 条件取值都算得出来(防死规则)', () => {
       for (const v of values) {
         assert.ok(allowed.includes(v), `${r.key}: ${c.field}="${v}" 不是算得出的取值`)
       }
+    }
+  }
+})
+
+// 反方向：算得出的取值，有没有至少一条规则真的会命中它。
+// 上面那条只查"规则里写的值算不算得出来"（防死规则），查不到"某个档位没人管"。
+// 10-12 全量审计就是靠这条才发现 height_range 少 170-180 一档：170~179cm 的人
+// 命不中任何按身高分档的规则组，而库里 180+ 那组的 reason 原文写的是「高个子（>170cm）」。
+// 语料＝三个种子文件（applyRuleSeeds 每次启动按 key 补）＋ db/seed/rules.json
+//（rules.json 是 export-rules.js 导出的整库快照，add-rules.js 那批老规则没有 source_key，只在这里能查到）。
+const COVERAGE_FILES = [
+  'db/seed/rules-aesthetic.json',
+  'db/seed/rules-aesthetic-2.json',
+  'db/seed/rules-wuxing.json',
+  'db/seed/rules.json',
+]
+
+/** 把一条条件的存值切成候选值数组：种子写 "春型" 或 ["春型","夏型"]，库里存 {"field":...} 或 JSON 串 */
+function conditionCandidates(cond) {
+  let v = cond.value
+  if (typeof v === 'string') {
+    try {
+      v = JSON.parse(v)
+    } catch {
+      /* 不是 JSON，原样当字符串 */
+    }
+  }
+  if (v && typeof v === 'object' && !Array.isArray(v)) {
+    v = Object.prototype.hasOwnProperty.call(v, cond.field) ? v[cond.field] : Object.values(v)[0]
+  }
+  return String(Array.isArray(v) ? v.join('、') : v)
+    .split(/[、,，]/)
+    .map((s) => String(s).trim())
+    .filter(Boolean)
+}
+
+test('每个算得出的分档取值至少被一条规则命中(反向防漏档)', () => {
+  const conditions = []
+  for (const rel of COVERAGE_FILES) {
+    const data = JSON.parse(fs.readFileSync(path.join(__dirname, '..', rel), 'utf-8'))
+    const rows = Array.isArray(data.rules)
+      ? data.rules.flatMap((r) => r.conditions || [])
+      : data.rule_conditions || []
+    for (const c of rows) conditions.push({ ...c, __from: rel })
+  }
+  for (const [field, values] of Object.entries(REACHABLE_VALUES)) {
+    for (const value of values) {
+      // ne 是"排除"，它命中不了某个具体档位，不能拿来充覆盖
+      const hit = conditions.filter(
+        (c) => c.field === field && c.operator !== 'ne' && conditionCandidates(c).includes(value),
+      )
+      assert.ok(
+        hit.length > 0,
+        `${field}="${value}" 是 profileEnricher 算得出的取值，却没有任何规则按它分档（漏档）`,
+      )
     }
   }
 })

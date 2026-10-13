@@ -6,6 +6,7 @@
  * 搬动只改归属，不改任何输出字节；段序（合身→修形→颜色）的验收在 test/recommendReportText.test.js。
  */
 const { ACTION_LABELS } = require('./ruleExplainer')
+const { ownValue, asNumber } = require('../utils/common')
 const { AXIS_CN } = require('./topFitBody')
 
 /**
@@ -22,9 +23,19 @@ function generateStructuredText(recommendation, weather, mode) {
   }
 
   // 天气信息
-  if (weather && weather.temp != null) {
+  // 前端 WeatherData 的键是 temperature / feelsLike / condition / humidity，
+  // 这里原来读的是 weather.temp 与 weather.description——那两个键在请求体里根本不存在，
+  // 所以"今日天气"这一节从写下起就没进过任何一份报告（不是偶发，是恒不触发）。
+  const t = asNumber(ownValue(weather, 'temperature'))
+  if (t !== null) {
+    const feels = asNumber(ownValue(weather, 'feelsLike'))
+    const cond = ownValue(weather, 'condition')
+    const hum = asNumber(ownValue(weather, 'humidity'))
     lines.push(`## 今日天气\n`)
-    lines.push(`气温 ${weather.temp}°C，${weather.description || '天气良好'}。\n`)
+    lines.push(
+      `- 气温 ${t}°C${feels !== null ? `（体感 ${feels}°C）` : ''}，${typeof cond === 'string' && cond ? cond : '天气状况未知'}${hum !== null ? `，湿度 ${hum}%` : ''}。`,
+    )
+    lines.push('')
   }
 
   // 各类别建议(引擎返回的顶层键是中文类别名,动作键是 action_type)
@@ -42,14 +53,18 @@ function generateStructuredText(recommendation, weather, mode) {
   ]
   const categoryTitles = ['穿搭', '妆容', '发型', '配饰', '姿势']
   for (const cat of categoryTitles) {
-    const items = recommendation[cat] || []
-    if (items.length === 0) continue
+    // 必须是数组才当列表渲染：这一份 recommendation 是从 /enhance 请求体一路传进来的，
+    // 写成字符串 '一二三四五' 时 `items.length` 有值、slice 也切得动，
+    // for...of 就逐字循环，Object.entries('一') 打出 `- **0**: 一` 这种垃圾行还回 200；
+    // 写成数字 5 时更直接——5 没有 slice ⇒ TypeError ⇒ 整份报告 500。
+    const items = recommendation[cat]
+    if (!Array.isArray(items) || items.length === 0) continue
     lines.push(`## ${cat}建议\n`)
     for (const item of items.slice(0, 3)) {
       lines.push(`### ${item.group_name || '推荐方案'}\n`)
       for (const [key, val] of Object.entries(item)) {
         if (META_KEYS.includes(key) || !val) continue
-        lines.push(`- **${ACTION_LABELS[key] || key}**: ${val}`)
+        lines.push(`- **${ownValue(ACTION_LABELS, key) || key}**: ${val}`)
       }
       if (item.color_fit) {
         const f = item.color_fit
@@ -59,11 +74,11 @@ function generateStructuredText(recommendation, weather, mode) {
       }
       if (item.body_fit) {
         const b = item.body_fit
-        const detail = b.axes
-          .map((a) => `${a.name_cn} ${Math.round(a.score * 100)}`)
-          .join(' / ')
+        const detail = b.axes.map((a) => `${a.name_cn} ${Math.round(a.score * 100)}`).join(' / ')
         const skipped = b.axes_missing.length
-          ? `；未计入:${b.axes_missing.map((k) => AXIS_CN[k] || k).join('、')}(缺测或没认出来)`
+          ? `；未计入:${b.axes_missing
+              .map((k) => ownValue(AXIS_CN, k) || k)
+              .join('、')}(缺测或没认出来)`
           : ''
         lines.push(`- **上衣身材适配度**: ${b.score}/100(${detail})${skipped}`)
       }
@@ -80,10 +95,14 @@ function generateStructuredText(recommendation, weather, mode) {
     const fit = spec.fit
     lines.push(`### 第 0 层 · 合身(尺寸)\n`)
     if (fit.present) {
-      lines.push(`- **号型**: ${fit.size_label}${fit.size_scope === 'near' ? `（${fit.size_scope_note}）` : ''}`)
+      lines.push(
+        `- **号型**: ${fit.size_label}${fit.size_scope === 'near' ? `（${fit.size_scope_note}）` : ''}`,
+      )
       lines.push(
         `  - 号=身高就近 5cm 一档、型=净胸围就近 4cm 一档、体型按胸腰差分 Y/A/B/C${
-          fit.drop_cm ? `（你的胸腰差 ${fit.drop_cm}cm${fit.size.体型档 ? `，落在 ${fit.size.体型中文} ${fit.size.体型档.join('~')}cm 档` : ''}）` : ''
+          fit.drop_cm != null
+            ? `（你的胸腰差 ${fit.drop_cm}cm${fit.size.体型档 ? `，落在 ${fit.size.体型中文} ${fit.size.体型档.join('~')}cm 档` : ''}）`
+            : ''
         }`,
       )
       if (fit.drop_reason) lines.push(`  - 体型位没出的原因: ${fit.drop_reason}`)
@@ -120,8 +139,20 @@ function generateStructuredText(recommendation, weather, mode) {
 
     lines.push(`### 第 1 层 · 修形(显不显瘦那一类)\n`)
     for (const a of spec.axes) {
+      // 方向只在"确实量出来"时才写：原来这条三元是 window / 0 / >0 三档之外的全部情况
+      // 都落 '(想收)'，所以 side 缺测（undefined/null）会被印成"想收"，
+      // 顾客看到的是一条没量过却带方向的建议。'window' 与非负数走原口径，其余一律不写方向。
+      const side = a.side
       const dir =
-        a.side === 'window' ? '' : a.side === 0 ? '(不推拉)' : a.side > 0 ? '(想加)' : '(想收)'
+        side === 'window'
+          ? ''
+          : typeof side === 'number' && Number.isFinite(side)
+            ? side > 0
+              ? '(想加)'
+              : side < 0
+                ? '(想收)'
+                : '(不推拉)'
+            : ''
       lines.push(`- **${a.name_cn}**${dir}: ${a.label}`)
       if (a.prefer.length) lines.push(`  - 要选: ${a.prefer.join('；')}`)
       if (a.avoid.length) lines.push(`  - 要避: ${a.avoid.join('；')}`)
@@ -169,10 +200,15 @@ function generateStructuredText(recommendation, weather, mode) {
   const computed = recommendation._computed
   if (computed) {
     lines.push('## 您的数据概览\n')
-    if (computed.bmi) lines.push(`- BMI: ${computed.bmi}（${computed.bmi_level || '正常'}）`)
+    // 档位缺失就只写数字：`|| '正常'` 会把"没算出档位"显示成"档位=正常"，
+    // 而 wh_status 在缺性别时本来就是不出的（computeWhRatio 只回比值）。
+    if (computed.bmi)
+      lines.push(`- BMI: ${computed.bmi}${computed.bmi_level ? `（${computed.bmi_level}）` : ''}`)
     if (computed.body_shape) lines.push(`- 体型: ${computed.body_shape}`)
     if (computed.wh_ratio)
-      lines.push(`- 腰臀比: ${computed.wh_ratio}（${computed.wh_status || '正常'}）`)
+      lines.push(
+        `- 腰臀比: ${computed.wh_ratio}${computed.wh_status ? `（${computed.wh_status}）` : ''}`,
+      )
     lines.push('')
   }
 

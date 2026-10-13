@@ -239,6 +239,9 @@ textarea { resize: vertical; min-height: 60px; }
 .loading { color: var(--muted); text-align: center; padding: 40px; }
 .error-msg { color: var(--red); padding: 14px; background: var(--red-dim); border-radius: 8px; }
 .success-msg { color: var(--green); padding: 10px 14px; background: var(--green-dim); border-radius: 8px; margin-bottom: 12px; }
+/* showToast(msg,'info') 的第三条腿：以前没有这个类，'info' 会掉进 success 分支显示成绿色，
+   "正在加载中/请稍候"这类中性提示看着像已经做完了。 */
+.info-msg { color: var(--accent); padding: 10px 14px; background: var(--accent-dim); border-radius: 8px; margin-bottom: 12px; }
 
 /* ── 规则编辑器专用 ── */
 .rules-toolbar {

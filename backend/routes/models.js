@@ -15,6 +15,7 @@ const path = require('path')
 const fs = require('fs')
 const db = require('../db/init')
 const { sendSuccess, sendError } = require('../utils/response')
+const { firstBadScalar, asId } = require('../utils/common')
 const { adminLoginRequired } = require('../middleware/auth')
 const {
   ICON_MAP,
@@ -23,6 +24,9 @@ const {
   shouldSkipDir,
   isSkippedPath,
   resolvePathIgnoringCase,
+  isDisabledPmxPath,
+  setDisabledPmxRefresher,
+  resetDisabledPmxCache,
   BROKEN_DIR_NAME,
 } = require('../utils/model-utils')
 
@@ -30,6 +34,26 @@ const router = express.Router()
 
 // models 目录绝对路径
 const MODELS_DIR = path.join(__dirname, '..', '..', 'models')
+
+// ============================================================
+// 已禁用模型的下载闸门
+// 展厅列表按 enabled=1 过滤，但文件口原先不看 enabled：后台点「禁用」只是从列表里消失，
+// 拿到 URL 照样匿名拖走（10-11 线上实测已下架模型 200 / 1,288,441B）。
+// 更糟的是「删行」也拦不住：启动扫描按 (folder,file) 判重，行没了而 .pmx 还在盘上，
+// 下一次重启就当新模型重新入库——服务器上当轮 4 行 disabled 里有 2 行就是这么复活的。
+// 所以「下架」这件事必须由文件口来兑现，而不是靠删库里的行。
+// 缓存与匹配形状都在 utils/model-utils.js：`/api/models/file/*` 与 server.js 的
+// `app.use('/models')` 静态口是两条匿名下载口，必须共用同一份禁用集，否则堵住一条另一条照放。
+// 这一侧带库，所以由这里把"取 enabled=0 那些行"的函数注入进去。
+// ============================================================
+setDisabledPmxRefresher(() =>
+  db.prepare('SELECT folder, file FROM model_configs WHERE enabled = 0').all(),
+)
+
+/** 库里的 enabled 一改就丢掉缓存，否则下架要等 60 秒 TTL 才生效 */
+function invalidateDisabledPmxCache() {
+  resetDisabledPmxCache()
+}
 
 // 模型文件扩展名 → MIME 类型(用于 .gz 预压缩响应时设置正确的 Content-Type)
 // .pmx/.vmd 等无标准 MIME,统一用 application/octet-stream
@@ -45,6 +69,8 @@ const MODEL_FILE_MIME = {
   '.bmp': 'image/bmp',
   '.jpg': 'image/jpeg',
   '.jpeg': 'image/jpeg',
+  '.gif': 'image/gif',
+  '.webp': 'image/webp',
 }
 
 // ============================================================
@@ -64,15 +90,6 @@ function rowToAdminModel(row) {
     exposure: row.exposure ?? 0.3,
     sort_order: row.sort_order ?? 0,
     image_preview: row.image_preview || '',
-    scale: row.scale ?? 1.0,
-    pos_x: row.pos_x ?? 0,
-    pos_y: row.pos_y ?? 0,
-    pos_z: row.pos_z ?? 0,
-    rot_x: row.rot_x ?? 0,
-    rot_y: row.rot_y ?? 0,
-    rot_z: row.rot_z ?? 0,
-    camera_distance: row.camera_distance ?? 5.0,
-    ambient_light: row.ambient_light ?? 0.6,
   }
 }
 
@@ -87,7 +104,6 @@ function rowToGalleryModel(row) {
     icon: row.icon || '🎭',
     preview: row.image_preview || '',
     exposure: row.exposure ?? 0.3,
-    scale: row.scale ?? 1.0,
   }
 }
 
@@ -203,12 +219,15 @@ router.post('/admin/scan', adminLoginRequired, (req, res) => {
       }
     }
 
+    // ★ 先清理(删残缺 + .pmx 已不存在的记录),再查列表返回:否则 scan 响应会把
+    //    本轮刚删掉的记录照样吐回去,stats.cleanedUp 却在对它们计数 ⇒ 列表与数字自相矛盾。
+    const cleanedUp = cleanupMissingRecords()
+    // 清理会删行,禁用集要跟着丢,否则缓存里还留着已经不存在的 (folder,file)
+    invalidateDisabledPmxCache()
+
     // 返回完整的模型列表 + 统计信息
     const rows = db.prepare('SELECT * FROM model_configs ORDER BY sort_order, id').all()
     const models = rows.map(rowToAdminModel)
-
-    // ★ 扫描后顺便清理:删除残缺模型记录 + .pmx 文件缺失的记录
-    const cleanedUp = cleanupMissingRecords()
 
     return sendSuccess(res, {
       models,
@@ -269,17 +288,29 @@ function cleanupMissingRecords() {
 // ============================================================
 router.post('/admin/:id/toggle', adminLoginRequired, (req, res) => {
   try {
-    const id = parseInt(req.params.id, 10)
-    const row = db.prepare('SELECT * FROM model_configs WHERE id = ?').get(id)
-
-    if (!row) {
+    const id = asId(req.params.id)
+    if (id === null) return sendError(res, 'id 必须是正整数', 400)
+    // 原来先 SELECT 再按刚读到的值写回：连点两下时两个请求可能都读到 enabled=1、
+    // 都写 0 ⇒ 第二次点击被整个吞掉，界面停在"已禁用"。翻转交给 SQLite 在同一笔
+    // 写里自己算（CASE WHEN enabled=1 THEN 0 ELSE 1 END），谁先谁后都是净翻两次；
+    // ELSE 走 1 是为了把 NULL／历史脏值一并收回 0/1 两档，不再出现 1-2=-1 这种值。
+    const info = db
+      .prepare(
+        `UPDATE model_configs
+         SET enabled = CASE WHEN enabled = 1 THEN 0 ELSE 1 END,
+             updated_at = datetime('now')
+       WHERE id = ?`,
+      )
+      .run(id)
+    if (info.changes === 0) {
       return sendError(res, '模型不存在', 404)
     }
+    // 下架要当场生效,不能等重启:缓存必须在这一笔写之后丢掉
+    invalidateDisabledPmxCache()
 
-    const newEnabled = row.enabled === 1 ? 0 : 1
-    db.prepare(
-      "UPDATE model_configs SET enabled = ?, updated_at = datetime('now') WHERE id = ?",
-    ).run(newEnabled, id)
+    // 回给前端的是这一行此刻的真值（并发下只用于显示，不参与判定，翻转本身已经原子）
+    const after = db.prepare('SELECT enabled FROM model_configs WHERE id = ?').get(id)
+    const newEnabled = after && after.enabled === 1 ? 1 : 0
 
     return sendSuccess(
       res,
@@ -293,37 +324,45 @@ router.post('/admin/:id/toggle', adminLoginRequired, (req, res) => {
 })
 
 // ============================================================
-// PUT /admin/:id — 更新模型设置(name, desc, exposure, sort_order, source, icon, image_preview, scale, pos_x/y/z, rot_x/y/z, camera_distance, ambient_light)
+// PUT /admin/:id — 更新模型设置(name, desc, exposure, sort_order, source, icon, image_preview)
+// ⛔ 展厅不读的 9 个调参列(scale / pos_x-y-z / rot_x-y-z / camera_distance / ambient_light)自 2026-10-11
+//    起不再接收:后台编辑框已于 2026-10-03 那轮(b32c848)删净,前端零引用,取景由 Box3 自动算。
+//    数据库列保留不动(删列要迁移且无收益),只是写入口关掉,传了也不生效。
 // ============================================================
 router.put('/admin/:id', adminLoginRequired, (req, res) => {
   try {
-    const id = parseInt(req.params.id, 10)
+    const id = asId(req.params.id)
+    if (id === null) return sendError(res, 'id 必须是正整数', 400)
     const row = db.prepare('SELECT * FROM model_configs WHERE id = ?').get(id)
 
     if (!row) {
       return sendError(res, '模型不存在', 404)
     }
 
-    const {
-      name,
-      desc,
-      exposure,
-      sort_order,
-      source,
-      icon,
-      image_preview,
-      scale,
-      pos_x,
-      pos_y,
-      pos_z,
-      rot_x,
-      rot_y,
-      rot_z,
-      camera_distance,
-      ambient_light,
-    } = req.body
+    const { name, desc, exposure, sort_order, source, icon, image_preview } = req.body
     const updates = []
     const params = []
+
+    // better-sqlite3 绑到对象/数组/布尔都会抛（对象是 RangeError、布尔是 TypeError），
+    // 被外层 catch 抹成 500 就是假故障：这类请求本质是"字段类型写错了"，该回 400。
+    // 原来这里只挡 `typeof v === 'object'`，漏了布尔 ⇒ {"name":true} 一路跑到 UPDATE 才炸。
+    // 口径与 cosmetics/photos 用同一把尺子（utils/common.js:214 firstBadScalar：只认文本与数字，
+    // null/undefined 放行——null 是合法绑定值，用来清列）。
+    const badScalar = firstBadScalar(req.body, [
+      'name',
+      'desc',
+      'exposure',
+      'sort_order',
+      'source',
+      'icon',
+      'image_preview',
+    ])
+    if (badScalar) return sendError(res, `${badScalar} 只能是文本或数字`, 400)
+
+    // name 是 `TEXT NOT NULL`（schema.sql:467）：firstBadScalar 按约定放行 null（它用来清列），
+    // 但这一列清不得 ⇒ `{"name":null}` 会在 UPDATE 上抛 SQLITE_CONSTRAINT_NOTNULL，
+    // 被外层 catch 抹成 500。空名是入参错，当场 400。
+    if (name === null) return sendError(res, 'name 不能为空', 400)
 
     if (name !== undefined) {
       updates.push('name = ?')
@@ -334,12 +373,26 @@ router.put('/admin/:id', adminLoginRequired, (req, res) => {
       params.push(desc)
     }
     if (exposure !== undefined) {
+      // 同一把尺子：exposure 是 REAL（schema.sql:475），展厅拿它做光照乘法，
+      // 存成 '0.3x' 这种收不进实数的文本 ⇒ 前端算出来是 NaN，画面黑掉却没有任何报错。
+      const e = Number(exposure)
+      if (exposure === null || !Number.isFinite(e)) {
+        return sendError(res, 'exposure 只能是数字', 400)
+      }
       updates.push('exposure = ?')
-      params.push(exposure)
+      params.push(e)
     }
     if (sort_order !== undefined) {
+      // 列是 INTEGER（schema.sql:476），取数用的是 `ORDER BY sort_order, id`。
+      // 整型亲和会把 '5' 收成 5，但 'abc' 这类收不动的会原样存成 TEXT，
+      // 而 SQLite 排序是 NULL < 数字 < 文本 ⇒ 这一行悄悄掉到列表末尾（或最前），
+      // 后台看不出任何错误。表单上来本就是字符串，所以这里统一收数、收不成就 400。
+      const n = Number(sort_order)
+      if (sort_order === null || !Number.isInteger(n)) {
+        return sendError(res, 'sort_order 只能是整数', 400)
+      }
       updates.push('sort_order = ?')
-      params.push(sort_order)
+      params.push(n)
     }
     if (source !== undefined) {
       updates.push('source = ?')
@@ -352,42 +405,6 @@ router.put('/admin/:id', adminLoginRequired, (req, res) => {
     if (image_preview !== undefined) {
       updates.push('image_preview = ?')
       params.push(image_preview)
-    }
-    if (scale !== undefined) {
-      updates.push('scale = ?')
-      params.push(scale)
-    }
-    if (pos_x !== undefined) {
-      updates.push('pos_x = ?')
-      params.push(pos_x)
-    }
-    if (pos_y !== undefined) {
-      updates.push('pos_y = ?')
-      params.push(pos_y)
-    }
-    if (pos_z !== undefined) {
-      updates.push('pos_z = ?')
-      params.push(pos_z)
-    }
-    if (rot_x !== undefined) {
-      updates.push('rot_x = ?')
-      params.push(rot_x)
-    }
-    if (rot_y !== undefined) {
-      updates.push('rot_y = ?')
-      params.push(rot_y)
-    }
-    if (rot_z !== undefined) {
-      updates.push('rot_z = ?')
-      params.push(rot_z)
-    }
-    if (camera_distance !== undefined) {
-      updates.push('camera_distance = ?')
-      params.push(camera_distance)
-    }
-    if (ambient_light !== undefined) {
-      updates.push('ambient_light = ?')
-      params.push(ambient_light)
     }
 
     if (updates.length === 0) {
@@ -409,16 +426,31 @@ router.put('/admin/:id', adminLoginRequired, (req, res) => {
 
 // ============================================================
 // DELETE /admin/:id — 删除模型配置(管理员)
+// ⚠️ 只删库里这一行,盘上的 .pmx 一个字都不动 ⇒ 下一次启动扫描按 (folder,file) 判重时
+//    找不到行,会把它当"新模型"重新入库(10-11 服务器上手工删的 4 行有 2 行就是这么复活的)。
+//    真要下架请用 POST /admin/:id/toggle 禁用:文件口现在认 enabled=0,当场 404。
 // ============================================================
 router.delete('/admin/:id', adminLoginRequired, (req, res) => {
   try {
-    const id = parseInt(req.params.id, 10)
+    const id = asId(req.params.id)
+    if (id === null) return sendError(res, 'id 必须是正整数', 400)
     const row = db.prepare('SELECT * FROM model_configs WHERE id = ?').get(id)
     if (!row) {
       return sendError(res, '模型不存在', 404)
     }
     db.prepare('DELETE FROM model_configs WHERE id = ?').run(id)
-    return sendSuccess(res, null, '模型已删除')
+    // 删的可能正是一条 enabled=0 的行:缓存不丢的话,重启后扫进来的那条同 (folder,file)
+    // 的启用记录会被旧键误拦最多 60 秒
+    invalidateDisabledPmxCache()
+    // 文件还在盘上就如实说清楚"这条记录没了、模型还在",别让人以为删行就是下架
+    const stillOnDisk = fs.existsSync(path.join(MODELS_DIR, row.folder, row.file))
+    return sendSuccess(
+      res,
+      { file_still_on_disk: stillOnDisk },
+      stillOnDisk
+        ? '记录已删除,但模型文件仍在 models/ 目录里,重启扫描会重新入库;要下架请点「禁用」'
+        : '模型已删除',
+    )
   } catch (err) {
     console.error('[模型] 删除失败:', err)
     return sendError(res, '删除失败', 500)
@@ -445,11 +477,25 @@ router.get('/file/*', (req, res, next) => {
     }
 
     // 安全检查:防止目录遍历(去除 ../ 前缀)
-    const safePath = path.normalize(relPath).replace(/^(\.\.[/\\])+/, '')
+    // ★ 尾部分隔符必须在这里就砍掉:实测 `GET /file/<folder>/<file>.pmx/`(结尾多一个 /)
+    //   会原样进 req.params[0]，path.normalize 在 POSIX 下**保留尾斜杠**，
+    //   于是闸门里的 `lower.endsWith('.pmx')` 不成立 ⇒ 禁用判定整个跳过，
+    //   而下面的 path.join 又把尾斜杠抹掉、照样命中真实文件 —— 后台点了「禁用」的模型，
+    //   任何人加一个尾斜杠就能继续匿名整文件下载（10-13 现量：裸路径 404、带尾斜杠 200 发出 8.9MB 的 pmx）。
+    const safePath = path
+      .normalize(relPath)
+      .replace(/^(\.\.[/\\])+/, '')
+      .replace(/[/\\]+$/, '')
 
     // 扫描时不入库的目录(zip备份/残缺模型/_bak_*)一律不下发。
     // 本路由既不带鉴权也不限流,放行就等于 models/ 下的原始压缩包可被匿名直连拖走。
     if (isSkippedPath(safePath)) {
+      return sendError(res, '文件不存在', 404)
+    }
+
+    // 后台点了「禁用」的 .pmx 同样不下发:展厅早就把它过滤掉了,文件口不看 enabled
+    // 就等于"下架"只下架了列表,文件 URL 照旧能匿名拖走。
+    if (isDisabledPmxPath(safePath)) {
       return sendError(res, '文件不存在', 404)
     }
 
@@ -483,7 +529,11 @@ router.get('/file/*', (req, res, next) => {
       } catch {
         continue
       }
-      if (!realCandidate.startsWith(realModelsDir)) {
+      // 只比 startsWith 会漏掉分隔符边界：realModelsDir="…/models" 时,
+      // 兄弟目录 "…/models_backup/xxx" 也满足前缀, traversal 闸门形同虚设。
+      // 用 path.relative 判"是否真在 models 目录内"(空/以 .. 开头/绝对＝越界)。
+      const relToModels = path.relative(realModelsDir, realCandidate)
+      if (relToModels === '' || relToModels.startsWith('..') || path.isAbsolute(relToModels)) {
         return sendError(res, '非法路径', 403)
       }
       if (!targetPath) targetPath = candidate
@@ -508,6 +558,22 @@ router.get('/file/*', (req, res, next) => {
     // ★ 加速优化:优先发送 .gz 预压缩文件
     const acceptsGzip = (req.get('Accept-Encoding') || '').includes('gzip')
     const ext = path.extname(fullPath).toLowerCase()
+
+    // ★ .gz 只在"不比源文件旧"时才下发（与 server.js 里 /models 静态挂载同一口径，审计第 7 条）。
+    //   原来这里只看"有没有 .gz"：源文件（模型／纹理）改过而预压缩没重跑时，客户拿到的是旧字节，
+    //   而下面这条分支给非纹理写 max-age=3600，页面上没有任何入口能强制重拉，只能等一小时。
+    //   盘上只有 .gz、没有源文件可比对的情况线上确实存在（有些纹理就压了一份），那种照旧下发。
+    let gzIsFresh = false
+    if (acceptsGzip && fs.existsSync(gzPath)) {
+      gzIsFresh = true
+      if (targetPath === fullPath) {
+        try {
+          gzIsFresh = fs.statSync(gzPath).mtimeMs >= fs.statSync(fullPath).mtimeMs
+        } catch {
+          gzIsFresh = false
+        }
+      }
+    }
 
     // 只有 .gz 时无法下发给不接受 gzip 的客户端(裸 .gz 字节它解不开)
     if (targetPath !== fullPath && !acceptsGzip) {
@@ -546,7 +612,7 @@ router.get('/file/*', (req, res, next) => {
 
     if (isTexture) {
       const mimeType = MODEL_FILE_MIME[ext] || 'image/png'
-      if (acceptsGzip && fs.existsSync(gzPath)) {
+      if (gzIsFresh) {
         return res.sendFile(
           gzPath,
           {
@@ -573,7 +639,7 @@ router.get('/file/*', (req, res, next) => {
     }
 
     // 非纹理文件:正常处理
-    if (acceptsGzip && fs.existsSync(gzPath)) {
+    if (gzIsFresh) {
       const mimeType = MODEL_FILE_MIME[ext] || 'application/octet-stream'
       // sendFile 会自动生成 ETag(基于 .gz 内容)和处理 304 条件请求
       // headers 中设置的 Content-Type 会覆盖 sendFile 基于 .gz 扩展名的默认推断

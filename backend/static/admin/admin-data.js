@@ -22,10 +22,12 @@ function loadTables() {
 
   fetchJSON(API_BASE + '/tables').then(function(res) {
     if (!res.success) throw new Error(res.message);
-    State.tables = res.data;
-    renderTables(res.data);
-    renderSidebarTables(res.data);
-    renderTableSelect(res.data);
+    // 兜成数组再存：admin-utils.js 的 switchSection 里 `State.tables.length === 0`
+    // 不在任何 Promise 链上，一旦这里存进 null，切到"数据表"就直接 TypeError 白屏
+    State.tables = res.data || [];
+    renderTables(State.tables);
+    renderSidebarTables(State.tables);
+    renderTableSelect(State.tables);
   }).catch(function(e) {
     container.className = '';
     container.innerHTML = '<div class="error-msg">加载失败: ' + escapeHtml(e.message) + '</div>';
@@ -159,7 +161,12 @@ function renderStoreFilter(data) {
   select.style.display = '';
 }
 
+// 「下一页」连点、或翻页途中切表/切门店，都会有多条响应同时在路上，而回来的先后顺序不保证：
+// 慢的那条（前一页的数据）后到就把后发的那页覆盖掉，而分页条上的"第 N 页"跟着 data.page 走，
+// 于是出现"页码写着 3、表格里是第 2 页的数据"。走公共 seqGate，只认最新一次。
+var _dataGate = seqGate();
 function loadTableData() {
+  var tok = _dataGate.begin();
   var container = document.getElementById('data-container');
   var pagination = document.getElementById('data-pagination');
 
@@ -175,10 +182,12 @@ function loadTableData() {
   if (State.storeId) url += '&store_id=' + encodeURIComponent(State.storeId);
 
   fetchJSON(url).then(function(res) {
+    if (!_dataGate.isCurrent(tok)) return;
     if (!res.success) throw new Error(res.message);
     renderStoreFilter(res.data);
     renderTableData(res.data);
   }).catch(function(e) {
+    if (!_dataGate.isCurrent(tok)) return;
     container.className = '';
     container.innerHTML = '<div class="error-msg">加载失败: ' + escapeHtml(e.message) + '</div>';
   });
@@ -253,10 +262,11 @@ function renderTableData(data) {
             var parsed = JSON.parse(val);
             var parts = [];
             Object.keys(parsed).forEach(function(k) {
-              var fieldLabel = (VALUE_LABELS['rule_conditions.field'] || {})[k] || k;
+              // ownLabel：k 是库里 JSON 的键，写成 constructor 时普通查法会拿到原型上的函数
+              var fieldLabel = ownLabel(VALUE_LABELS['rule_conditions.field'], k) || k;
               var valueLabels = COND_VALUE_LABELS[k] || {};
               var raw = Array.isArray(parsed[k]) ? parsed[k] : [parsed[k]];
-              parts.push(fieldLabel + '=' + raw.map(function(x) { return valueLabels[x] || x }).join('、'));
+              parts.push(fieldLabel + '=' + raw.map(function(x) { return ownLabel(valueLabels, x) || x }).join('、'));
             });
             val = '<span style="color:var(--accent)">' + escapeHtml(parts.join('，')) + '</span>';
           } catch(e) {
@@ -299,10 +309,13 @@ function loadFunctions() {
 
   fetchJSON(API_BASE + '/functions').then(function(res) {
     if (!res.success) throw new Error(res.message);
-    State.functions = res.data;
-    renderFunctions(res.data);
-    renderSidebarModules(res.data);
-    renderSourceSelect(res.data);
+    // 后端 data 为 null 时（没有任何模块可解析）下面三处 forEach 会 TypeError，
+    // 且被同一个 Promise 链的 catch 显示成「加载失败」，读起来像接口坏了
+    var modules = res.data || [];
+    State.functions = modules;
+    renderFunctions(modules);
+    renderSidebarModules(modules);
+    renderSourceSelect(modules);
   }).catch(function(e) {
     container.className = '';
     container.innerHTML = '<div class="error-msg">加载失败: ' + escapeHtml(e.message) + '</div>';
@@ -359,7 +372,7 @@ function renderFunctions(modules) {
           html += '</div>';
         });
       }
-      if (!mod.classes.length && !mod.functions.length) {
+      if (!(mod.classes || []).length && !(mod.functions || []).length) {
         html += '<div style="color:var(--muted);font-size:12px;">无公开函数或类</div>';
       }
       body.innerHTML = html;
@@ -431,7 +444,7 @@ function loadRoutes() {
 
   fetchJSON(API_BASE + '/routes').then(function(res) {
     if (!res.success) throw new Error(res.message);
-    renderRoutes(res.data);
+    renderRoutes(res.data || []);
   }).catch(function(e) {
     container.className = '';
     container.innerHTML = '<div class="error-msg">加载失败: ' + escapeHtml(e.message) + '</div>';

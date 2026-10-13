@@ -45,6 +45,7 @@ interface AccessoryTabProps {
 
 const ACCESSORY_FORM_DEFAULT = {
   name: '',
+  brand: '',
   category: 'earring' as string,
   material: '',
   metal_color: '',
@@ -56,13 +57,23 @@ const ACCESSORY_FORM_DEFAULT = {
    兼容后端新旧两种 gap 数据格式
    ================================================================ */
 
+/**
+ * 缺口类型中文兜底名:category_* 后端带 label(项链/耳饰…),脸型/金属色这类只给 type,
+ * 不映射就会把 'face_shape_mismatch'/'tone_mismatch' 这类英文码糊在 pill 上。
+ */
+const ACCESSORY_GAP_TYPE_LABELS: Record<string, string> = {
+  face_shape_mismatch: '脸型不匹配',
+  tone_mismatch: '肤色不匹配',
+}
+
 /** 规范化缺口数据，兼容后端新旧格式 */
 function normalizeGapResult(raw: Record<string, unknown> | null): AccessoryGapResult | null {
   if (!raw || typeof raw !== 'object') return null
 
   const rawGaps = Array.isArray(raw.gaps) ? raw.gaps : []
   const gaps: AccessoryGap[] = rawGaps.map((g: Record<string, unknown>) => ({
-    type: (g.type as string) ?? (g.category as string) ?? (g.label as string) ?? '未知类型',
+    type: (g.type as string) ?? (g.category as string) ?? '未知类型',
+    label: (g.label as string) ?? undefined,
     priority: (g.priority as 'high' | 'medium' | 'low') ?? 'medium',
     message: (g.message as string) ?? (g.reason as string) ?? '',
     suggestions: Array.isArray(g.suggestions) ? (g.suggestions as string[]) : [],
@@ -105,6 +116,7 @@ export default function AccessoryTab({ profile, compact }: AccessoryTabProps) {
   const [gapsLoading, setGapsLoading] = useState(false)
   const [suggestions, setSuggestions] = useState<ShoppingWishlistItem[] | null>(null)
   const [suggestionsLoading, setSuggestionsLoading] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
 
   const [form, setForm] = useState(ACCESSORY_FORM_DEFAULT)
   /** 非空 = 表单正在改这一条;null = 新增 */
@@ -140,6 +152,7 @@ export default function AccessoryTab({ profile, compact }: AccessoryTabProps) {
     if (!item.id) return
     setForm({
       name: item.name ?? '',
+      brand: item.brand ?? '',
       category: item.category ?? '',
       material: item.material ?? '',
       metal_color: item.metal_color ?? '',
@@ -149,20 +162,28 @@ export default function AccessoryTab({ profile, compact }: AccessoryTabProps) {
     setShowAdd(true)
   }
 
+  // POST/PUT 共用这一份：可空列没填就发 null，不发 undefined。
+  // PUT 的契约是「键不传＝这一列不动，传 null＝写成 NULL」(api.ts 的 PutPayload)——
+  // 原来打包成 undefined 时，修改框里删掉品牌/材质点保存，刷新回来老值还在全在，
+  // 等于后台按 brand 出的"配饰品牌"分布永远清不掉一条写错的品牌。POST 那边 null 与"没给"同结果。
   const buildPayload = () => ({
     name: form.name.trim(),
+    // 品牌:后台按 brand 出「配饰品牌」分布,这里不采集那一栏就永远是空的
+    brand: form.brand.trim() || null,
     category: form.category,
-    material: form.material.trim() || undefined,
-    metal_color: form.metal_color.trim() || undefined,
-    price: form.price ? Number(form.price) : undefined,
+    material: form.material.trim() || null,
+    metal_color: form.metal_color.trim() || null,
+    price: form.price ? Number(form.price) : null,
   })
 
   const handleSubmit = async () => {
+    if (submitting) return
     if (!form.name.trim()) {
       toast.error('请输入配饰名称')
       return
     }
     const payload = buildPayload()
+    setSubmitting(true)
     try {
       if (editingId != null) {
         await updateAccessory(editingId, payload)
@@ -175,6 +196,8 @@ export default function AccessoryTab({ profile, compact }: AccessoryTabProps) {
       await fetchItems()
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : editingId != null ? '保存失败' : '添加失败')
+    } finally {
+      setSubmitting(false)
     }
   }
 
@@ -278,6 +301,12 @@ export default function AccessoryTab({ profile, compact }: AccessoryTabProps) {
               value={form.name}
               onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))}
             />
+            <input
+              className="form-input"
+              placeholder="品牌（选填）"
+              value={form.brand}
+              onChange={(e) => setForm((prev) => ({ ...prev, brand: e.target.value }))}
+            />
             <select
               className="form-select"
               value={form.category}
@@ -313,6 +342,7 @@ export default function AccessoryTab({ profile, compact }: AccessoryTabProps) {
                 className="gradient-btn"
                 style={{ flex: 1, ...btnStyle(compact) }}
                 onClick={handleSubmit}
+                disabled={submitting}
               >
                 {editingId != null ? '保存修改' : '确认添加'}
               </button>
@@ -363,6 +393,11 @@ export default function AccessoryTab({ profile, compact }: AccessoryTabProps) {
                 }}
               >
                 {item.name}
+                {item.brand && (
+                  <span style={{ color: 'var(--muted)', fontWeight: 400, marginLeft: '6px' }}>
+                    {item.brand}
+                  </span>
+                )}
               </div>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', alignItems: 'center' }}>
                 <span className={pillCls}>{getAccessoryCategoryLabel(item.category)}</span>
@@ -450,7 +485,9 @@ export default function AccessoryTab({ profile, compact }: AccessoryTabProps) {
                       marginBottom: '4px',
                     }}
                   >
-                    <span className={pillCls}>{gap.type}</span>
+                    <span className={pillCls}>
+                      {gap.label || ACCESSORY_GAP_TYPE_LABELS[gap.type] || gap.type}
+                    </span>
                     <span
                       className={pillCls}
                       style={{

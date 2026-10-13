@@ -133,7 +133,10 @@ test('topSpec: 合身段证据串报出四件国标（分档值已逐字核对�
   assert.match(f.evidence, /GB\/T 31901-2024/)
   assert.ok(!/需购文本复核/.test(f.evidence), '原文已在本机逐字核对，这句过期限定不得再出现')
   assert.match(f.note, /好不好看/)
-  assert.ok(!JSON.stringify(f.checks).includes('不合格'), '没有成衣实测通道，就不许判"你这件不合格"')
+  assert.ok(
+    !JSON.stringify(f.checks).includes('不合格'),
+    '没有成衣实测通道，就不许判"你这件不合格"',
+  )
 })
 
 // ============================================================
@@ -165,7 +168,11 @@ test('topSpec: 体型/Kibbe/四季型这些标签换成别的值 ⇒ 处方逐�
     color_season: '冬型',
     color_season_12: '深冬型',
   })
-  assert.strictEqual(JSON.stringify(base), JSON.stringify(withLabels), '分类标签只许展示，不许进规格')
+  assert.strictEqual(
+    JSON.stringify(base),
+    JSON.stringify(withLabels),
+    '分类标签只许展示，不许进规格',
+  )
 })
 
 test('topSpec: 同一身材换肤色 ⇒ 只有颜色段变，身材六轴一字不动', () => {
@@ -187,7 +194,10 @@ test('topSpec: 两个人身材不同 ⇒ 至少一根轴方向相反', () => {
     const other = rowOf(b, r.key)
     return r.side !== 0 && other.side !== 0 && Math.sign(r.side) !== Math.sign(other.side)
   })
-  assert.ok(flipped.length >= 1, `没有任何一轴随人变方向：${shared.map((r) => r.key + '/' + r.side)}`)
+  assert.ok(
+    flipped.length >= 1,
+    `没有任何一轴随人变方向：${shared.map((r) => r.key + '/' + r.side)}`,
+  )
 })
 
 // ============================================================
@@ -197,7 +207,10 @@ test('topSpec: 两个人身材不同 ⇒ 至少一根轴方向相反', () => {
 test('topSpec: 每条轴与颜色段都带档位，顶层 note 承认没有标准', () => {
   const s = topSpec(JIA)
   s.axes.forEach((a) => assert.ok(a.tier && /B|C/.test(a.tier), `${a.key} 缺档位串`))
-  assert.ok(s.colour.tier.includes('A') && s.colour.tier.includes('C'), '颜色段要同时标出公式档与手拍权重')
+  assert.ok(
+    s.colour.tier.includes('A') && s.colour.tier.includes('C'),
+    '颜色段要同时标出公式档与手拍权重',
+  )
   assert.match(s.note, /没有任何标准/)
   assert.match(s.evidence, /手拍/)
   assert.ok(Object.keys(s.axis_tiers).length >= 1)
@@ -224,9 +237,15 @@ test('topSpec: 条纹轴只在偏瘦的人身上出现，并带"文献结论互�
 test('topSpec: 松量那一轴给区间，净胸围在场才换算成衣尺寸', () => {
   const withBust = rowOf(topSpec(JIA), 'ease')
   assert.match(withBust.label, /松量落在 \d+(\.\d+)?~\d+(\.\d+)? cm/)
-  assert.ok(withBust.prefer.some((t) => t.includes('成衣胸围≈') && t.includes('cm')), '给了净胸围就该换算')
+  assert.ok(
+    withBust.prefer.some((t) => t.includes('成衣胸围≈') && t.includes('cm')),
+    '给了净胸围就该换算',
+  )
   const noBust = rowOf(topSpec({ height: 158, weight: 65 }), 'ease')
-  assert.ok(noBust.prefer.some((t) => t.includes('不给成衣尺寸')), '没量胸围就只给区间，不编成衣尺寸')
+  assert.ok(
+    noBust.prefer.some((t) => t.includes('不给成衣尺寸')),
+    '没量胸围就只给区间，不编成衣尺寸',
+  )
 })
 
 test('topSpec: 中性阈值两侧都算"不推拉"，且不给出方向性文案', () => {
@@ -262,6 +281,18 @@ test('topSpec: 每一根出了说法的轴都带上"算它用的实测数"', () 
         assert.match(a.based_on, /\d/, `${a.key} 的 based_on 里没有数：${a.based_on}`)
       })
   }
+})
+
+test('topSpec: 肩那一行的实测数带上肩宽÷腰围，并写明它不是论文那个肩围÷臀围', () => {
+  const s = topSpec(JIA)
+  const row = rowOf(s, 'shoulder')
+  assert.ok(row, '甲量了肩宽与腰围 ⇒ 肩轴该出')
+  assert.match(row.based_on, /肩宽÷腰围 = 0\.42/, row.based_on)
+  assert.match(row.based_on, /不是论文那个肩围÷臀围/, row.based_on)
+  // 没量腰围 ⇒ 这条比值整个不出现（缺测不编）
+  const noWaist = topSpec({ ...JIA, waist: null })
+  const row2 = rowOf(noWaist, 'shoulder')
+  if (row2) assert.doesNotMatch(row2.based_on, /肩宽÷腰围/, row2.based_on)
 })
 
 test('topSpec: 肤色两个口径都在 ⇒ 颜色分取更低那个，并标出短板口径', () => {

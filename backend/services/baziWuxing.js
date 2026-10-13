@@ -14,12 +14,14 @@
  *      中和则全局补最弱。忌神取对立面里最强的一行。
  *      ——不是民间"缺什么补什么"，缺的那行若是忌神就不该补。
  *   4. 调候：亥子丑月加火、巳午未月加水；若该行正落在忌神上则不加（宁可不调候，不自相矛盾）。
+ *      喜用只留两个 ⇒ 调候那一行是**替换**掉原第 2 位（summary 里会写明是哪一行让位）。
  *
  * 时辰按用户选的时辰档取时段中点，不做经度真太阳时校正；子时按早子时（00:30）算，
  * 不处理 23:00 后晚子时换日那一派；时辰选"不清楚"只用年月日三柱推，precision 标"三柱"。
  */
 
 const { Solar } = require('../vendor/lunar/lunar.js')
+const { beijingParts } = require('../utils/beijingTime')
 
 const ELEMENTS = ['木', '火', '土', '金', '水']
 
@@ -207,12 +209,17 @@ function analyzeBazi(birthDate, birthHour) {
   const total = support + drain
   if (total <= 0) return null
 
-  // 月支主气落帮扶组 = 得令，比值上再抬一点
+  // 月支主气落帮扶组 = 得令，比值上再抬一点。
+  // 抬完的这个数才是判定依据：下面 strength_ratio 与文案里的百分比必须都用它。
+  // 原来判定用 decisionRatio、返回与文案用 support/total ⇒ 帮扶占 49~50% 时
+  // 结论写"身强"、旁边括号里却打着"帮扶占 49%"，同一句话自己跟自己对不上（2026-10-12 改）。
   const monthMainElem = GAN_ELEMENT[ec.getMonthHideGan()[0]] || ZHI_ELEMENT[ec.getMonthZhi()]
   const monthRel = relationOf(day, monthMainElem)
-  const ratio = support / total + (monthRel === '比劫' || monthRel === '印' ? 0.06 : 0)
+  const supportRatio = support / total
+  const deLing = monthRel === '比劫' || monthRel === '印'
+  const decisionRatio = supportRatio + (deLing ? 0.06 : 0)
 
-  const strength = ratio >= 0.56 ? '身强' : ratio <= 0.44 ? '身弱' : '中和'
+  const strength = decisionRatio >= 0.56 ? '身强' : decisionRatio <= 0.44 ? '身弱' : '中和'
 
   const pickLowest = (pool, n) =>
     [...pool]
@@ -251,9 +258,18 @@ function analyzeBazi(birthDate, birthHour) {
 
   // 调候：冬月取暖、夏月取水。撞上忌神就不调，避免自相矛盾
   const monthZhi = ec.getMonthZhi()
-  const seasonal = '亥子丑'.includes(monthZhi) ? '火' : '巳午未'.includes(monthZhi) ? '水' : null
+  // 用数组精确匹配，不用 `'亥子丑'.includes(monthZhi)`：字符串版对空串恒为 true
+  // （`'亥子丑'.includes('')` === true），月支一旦取不到值就被当成冬月硬加一条"取火调候"，
+  // 而这条会直接改写喜用列表。数组 includes 对 '' 回 false，缺值就是不判。
+  const seasonal = ['亥', '子', '丑'].includes(monthZhi)
+    ? '火'
+    : ['巳', '午', '未'].includes(monthZhi)
+      ? '水'
+      : null
   let seasonalApplied = false
+  let seasonalReplaced = null
   if (seasonal && seasonal !== unfavorable && !favorable.includes(seasonal)) {
+    seasonalReplaced = favorable[1]
     favorable = [favorable[0], seasonal]
     seasonalApplied = true
   }
@@ -264,8 +280,8 @@ function analyzeBazi(birthDate, birthHour) {
   const summary =
     `日主${dayMaster}${day}，生于${ec.getMonthZhi()}月。` +
     `五行力量 ${ELEMENTS.map((e) => `${e}${Math.round(scores[e])}`).join('、')}，` +
-    `${strength}（帮扶占 ${Math.round((support / total) * 100)}%）` +
-    `${seasonalApplied ? `，${seasonal === '火' ? '冬月取火调候' : '夏月取水调候'}` : ''}。` +
+    `${strength}（帮扶占 ${Math.round(decisionRatio * 100)}%${deLing ? '，含得令加权' : ''}）` +
+    `${seasonalApplied ? `，${seasonal === '火' ? '冬月取火' : '夏月取水'}调候（${seasonalReplaced}让位）` : ''}。` +
     `喜用${favorable.join('、')}，忌${unfavorable}。`
 
   return {
@@ -276,7 +292,7 @@ function analyzeBazi(birthDate, birthHour) {
     day_master: dayMaster,
     day_master_element: day,
     strength,
-    strength_ratio: Number((support / total).toFixed(3)),
+    strength_ratio: Number(decisionRatio.toFixed(3)),
     month_zhi: monthZhi,
     seasonal,
     seasonal_applied: seasonalApplied,
@@ -297,11 +313,17 @@ function analyzeBazi(birthDate, birthHour) {
 /**
  * 当日干支与个人喜用的关系（日期依据）
  * 同一个人在不同日子得到不同强度的建议，靠的就是这一段
+ *
+ * 日期一律按东八区拆（`utils/beijingTime.js` 的头注释里写了为什么）：容器没设 TZ，
+ * 实测读出来是 UTC ⇒ 原来这三行 `getFullYear/getMonth/getDate` 在北京 00:00~07:59
+ * 会取到**前一天**，日柱、干支、节气整段跟着错，而同一页面里的星座运势走的是
+ * `beijingDateStr()`，两处口径对不上（2026-10-12 修）。
  */
 function analyzeDay(analysis, date = new Date()) {
-  const y = date.getFullYear()
-  const m = date.getMonth() + 1
-  const d = date.getDate()
+  const bj = beijingParts(date)
+  const y = Number(bj.year)
+  const m = Number(bj.month)
+  const d = Number(bj.day)
   const ec = Solar.fromYmdHms(y, m, d, 12, 0, 0).getLunar().getEightChar()
   const dayElem = GAN_ELEMENT[ec.getDayGan()]
   const out = {
@@ -320,15 +342,19 @@ function analyzeDay(analysis, date = new Date()) {
   const un = analysis.unfavorable
   let tone
   let reason
+  // 忌神这条必须排在"生喜用"前面：忌神常常正是喜用的母气（喜木火 ⇒ 忌水，而水生木），
+  // 排在后面时同一天既被档案写"忌水"又被当日建议写"顺"。
+  // 300 个生日 × 60 天 = 18000 组实测，这种自相矛盾占 1488 组（8.27%）。
   if (fav.includes(dayElem)) {
     tone = '顺'
     reason = '与你的喜用同气'
-  } else if (fav.some((f) => isGenerate(dayElem, f))) {
-    tone = '顺'
-    reason = '你喜用所生，助喜用'
   } else if (dayElem === un) {
     tone = '忌'
     reason = '正是你的忌神'
+  } else if (fav.some((f) => isGenerate(dayElem, f))) {
+    // isGenerate(a, b) ＝ a 生 b，这里是"今日五行去生喜用"，不是"喜用生它"
+    tone = '顺'
+    reason = '生你的喜用，助喜用'
   } else if (fav.some((f) => isOvercome(dayElem, f))) {
     tone = '忌'
     reason = '克制你的喜用'

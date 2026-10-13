@@ -82,6 +82,16 @@ body{font-family:-apple-system,"Microsoft YaHei",system-ui,sans-serif;background
     xhr.onreadystatechange = function() {
       if (xhr.readyState !== 4) return;
       setLoading(false);
+      // 本站错误统一形状是 sendError 造的 {success:false, error:{code,message}}；
+      // 旧代码只读顶层 d.message ⇒ 后端给的大实话一条都没读到，全糊成"登录失败"。
+      // 最坑的是 429：那是"你试得太快"（/api 总闸 100 次/15 分钟，或登录子闸 10 次/60 秒），
+      // 不是密码错，糊成"登录失败"会让人反复去改密码。
+      function apiMsg() {
+        try {
+          var d = JSON.parse(xhr.responseText);
+          return (d && d.error && d.error.message) || (d && d.message) || '';
+        } catch (e) { return ''; }
+      }
       if (xhr.status === 200) {
         try {
           var d = JSON.parse(xhr.responseText);
@@ -89,14 +99,19 @@ body{font-family:-apple-system,"Microsoft YaHei",system-ui,sans-serif;background
             localStorage.setItem('admin_token', d.data.token);
             window.location.href = getBase() + '/';
           } else {
-            errEl.textContent = d.message || '登录失败';
+            errEl.textContent = apiMsg() || '登录失败';
           }
         } catch(e) { errEl.textContent = '响应解析失败'; }
       } else if (xhr.status === 401) {
         errEl.textContent = '账号或密码错误';
+      } else if (xhr.status === 429) {
+        var wait = parseInt(xhr.getResponseHeader('Retry-After') || '0', 10);
+        var waitTxt = wait > 0
+          ? '（还需等 ' + (wait >= 90 ? Math.ceil(wait / 60) + ' 分钟' : wait + ' 秒') + '）'
+          : '';
+        errEl.textContent = (apiMsg() || '请求过于频繁') + waitTxt + '；这不是密码错，别改密码';
       } else {
-        try { var d = JSON.parse(xhr.responseText); errEl.textContent = d.message || '登录失败'; }
-        catch(e) { errEl.textContent = '登录失败 (' + xhr.status + ')'; }
+        errEl.textContent = apiMsg() || ('登录失败 (' + xhr.status + ')');
       }
     };
 

@@ -22,6 +22,11 @@ const {
   shouldSkipDir,
   BROKEN_DIR_NAME,
 } = require('../utils/model-utils')
+// ownValue：这里查表的键是 parseFolderName 从目录名里切出来的一截，属于自由文本。
+// 今天 parseFolderName 已经把认不出的都归成 '其他'（那是本轮在 model-utils 里修的），
+// 但 ICON_MAP['constructor'] 这类顺原型链取值不该靠上游保证——一旦有别的调用方把原始
+// 目录名送进来，图标列就会写进一个函数。
+const { ownValue } = require('../utils/common')
 
 // 数据库路径唯一出口是 ./paths(在这里再拼一次属于历史遗留,拼错会静默开一个空库)
 const { DB_PATH } = require('./paths')
@@ -127,6 +132,10 @@ const MISSING_COLUMNS = [
   ['body_metrics', 'birth_hour', 'TEXT'],
   // 管理员改密码后作废旧 Token 的锚点;老库不补列的话 verifyAdminToken 查它会直接报错
   ['admin_users', 'password_changed_at', 'INTEGER'],
+  // 会话滚动活跃时间:users 原来只有 created_at,拿它判"过期"会把所有老账号一起踢掉,
+  // 所以新加一列从现在开始记活跃(见 middleware/auth.js 的 getCurrentUser)。
+  // 不设 DEFAULT:NULL＝"本轮迁移后还没观测过活跃",执法只能等下一轮数据攒够再开。
+  ['users', 'last_active_at', 'TEXT'],
 ]
 
 function initMissingColumns() {
@@ -262,7 +271,7 @@ function initModelConfigs() {
            VALUES (?, ?, ?, ?, ?, ?, 1, 0.3, ?)`,
         ).run(
           name,
-          ICON_MAP[source] || '🎭',
+          ownValue(ICON_MAP, source) || '🎭',
           source + ' · ' + name,
           pmx.relPath,
           pmx.fileName,

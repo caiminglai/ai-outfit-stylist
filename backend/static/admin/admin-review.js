@@ -49,11 +49,16 @@ document.getElementById('price-save').addEventListener('click', savePrice);
 function loadPrice() {
   fetchJSON(PAY_API + '/admin/price').then(function(res) {
     if (!res.success) throw new Error(apiErr(res));
-    var p = res.data;
-    document.getElementById('price-now').textContent = '¥' + p.amount.toFixed(2);
-    document.getElementById('price-input').placeholder = '新金额，如 ' + p.default_amount;
+    // 兜一层：接口形状哪天改了（比如错误也带 success:true）时，
+    // p.amount.toFixed() 抛的 TypeError 会被下面当成"读取收款金额失败"，
+    // 看着像接口坏了，其实是这个字段没来。缺字段就显示占位符。
+    var p = res.data || {};
+    var amt = Number(p.amount);
+    var def = Number(p.default_amount);
+    document.getElementById('price-now').textContent = '¥' + (isFinite(amt) ? amt.toFixed(2) : '—');
+    document.getElementById('price-input').placeholder = isFinite(def) ? '新金额，如 ' + def : '新金额';
     document.getElementById('price-tip').textContent = p.source === 'db'
-      ? '上次改动：' + (p.updated_at || '—')
+      ? '上次改动：' + (beijingOrRaw(p.updated_at) || '—')
       : '现在用的是代码默认值，后台还没改过';
   }).catch(function(e) {
     showToast('读取收款金额失败: ' + e.message, 'error');
@@ -65,18 +70,26 @@ function savePrice() {
   var v = (input.value || '').trim();
   if (!/^\d+(\.\d{1,2})?$/.test(v)) { showToast('金额最多两位小数，例如 99 或 59.9', 'error'); return; }
   if (!confirm('把收款金额改成 ¥' + v + '？只影响之后新建的订单。')) return;
+  if (reviewBusy('price')) return;
 
   apiCall(PAY_API + '/admin/price', 'PUT', { amount: v }).then(function(res) {
+    reviewFree('price');
     if (!res.success) throw new Error(apiErr(res));
-    showToast('收款金额已改成 ¥' + res.data.amount.toFixed(2), 'success');
+    var saved = res.data && Number.isFinite(Number(res.data.amount)) ? Number(res.data.amount) : null;
+    showToast('收款金额已改成 ¥' + (saved === null ? v : saved.toFixed(2)), 'success');
     input.value = '';
     loadPrice();
   }).catch(function(e) {
+    reviewFree('price');
     showToast(e.message, 'error');
   });
 }
 
+// 凭证筛选下拉每改一次发一次请求，响应回来的先后顺序不保证 ⇒ 旧条件那条后到会顶掉新结果。
+var _depositGate = seqGate();
+
 function loadDeposits() {
+  var tok = _depositGate.begin();
   var container = document.getElementById('deposit-container');
   container.className = 'loading';
   container.textContent = '加载中...';
@@ -85,18 +98,26 @@ function loadDeposits() {
   var url = PAY_API + '/admin/list' + (status ? '?status=' + encodeURIComponent(status) : '');
 
   fetchJSON(url).then(function(res) {
+    if (!_depositGate.isCurrent(tok)) return;
     if (!res.success) throw new Error(apiErr(res));
-    renderDeposits(res.data || []);
+    renderDeposits(res.data);
   }).catch(function(e) {
+    if (!_depositGate.isCurrent(tok)) return;
     container.className = '';
     container.innerHTML = '<div class="error-msg">加载失败: ' + escapeHtml(e.message) + '</div>';
   });
 }
 
-function renderDeposits(rows) {
+function renderDeposits(payload) {
   var container = document.getElementById('deposit-container');
   container.className = '';
-  document.getElementById('deposit-count').textContent = '共 ' + rows.length + ' 条';
+  // 接口现在回 { list, total, limit }：list 是被 limit 截过的最近一段，total 才是全库条数。
+  // 原来这里写 rows.length，凭证一旦超过 200 条，"共 200 条"就是假的（还有多少没显示看不出来）。
+  var rows = (payload && payload.list) || [];
+  var total = payload && typeof payload.total === 'number' ? payload.total : rows.length;
+  var limit = payload && typeof payload.limit === 'number' ? payload.limit : 0;
+  document.getElementById('deposit-count').textContent =
+    '共 ' + total + ' 条' + (limit > 0 && rows.length < total ? '（下面只列最近 ' + rows.length + ' 条，接口上限 ' + limit + '）' : '');
 
   if (!rows.length) {
     container.innerHTML = cardFallback('暂无付款凭证');
@@ -116,7 +137,7 @@ function renderDeposits(rows) {
         '<div class="inv-product-meta">' +
           '<span style="color:var(--muted);font-size:12px;">#' + d.id +
             ' · 提交人: ' + escapeHtml(d.nickname || '匿名') + ' / ' + escapeHtml(d.phone || '-') +
-            ' · ' + escapeHtml(d.created_at || '') + '</span>' +
+            ' · ' + escapeHtml(beijingOrRaw(d.created_at)) + '</span>' +
         '</div>' +
         (d.admin_note ? '<div style="font-size:12px;color:var(--muted);">备注: ' + escapeHtml(d.admin_note) + '</div>' : '') +
       '</div>' +
@@ -130,16 +151,35 @@ function renderDeposits(rows) {
   }).join('');
 }
 
+/* 在飞闸：这些动作按钮都是"点一次发一个请求"，连点两次＝发两个 POST。
+   后端 payment.js / creator.js 的 UPDATE 都是 `WHERE id = ?`，第二次 changes=0
+   会回"凭证不存在/作品不存在"的红 toast 盖住第一次的成功提示，
+   管理员以为没存上又点一次——状态类接口必须一次只发一个。 */
+var _reviewBusy = {};
+
+function reviewBusy(key) {
+  if (_reviewBusy[key]) return true;
+  _reviewBusy[key] = true;
+  return false;
+}
+
+function reviewFree(key) {
+  delete _reviewBusy[key];
+}
+
 function setDepositStatus(id, status) {
+  if (reviewBusy('dep-' + id + '-' + status)) return;
   var noteEl = document.getElementById('dn-' + id);
   apiCall(PAY_API + '/admin/' + id + '/status', 'POST', {
     status: status,
     admin_note: noteEl ? noteEl.value : ''
   }).then(function(res) {
+    reviewFree('dep-' + id + '-' + status);
     if (!res.success) throw new Error(apiErr(res));
     showToast(status === 'approved' ? '已确认到账' : '已驳回', 'success');
     loadDeposits();
   }).catch(function(e) {
+    reviewFree('dep-' + id + '-' + status);
     showToast(e.message, 'error');
   });
 }
@@ -148,7 +188,11 @@ function setDepositStatus(id, status) {
 document.getElementById('creator-refresh').addEventListener('click', loadCreatorWorks);
 document.getElementById('creator-filter').addEventListener('change', loadCreatorWorks);
 
+// 与凭证那格同一把尺：筛选下拉连改两次，旧条件那条响应后到会顶掉新结果。
+var _creatorGate = seqGate();
+
 function loadCreatorWorks() {
+  var tok = _creatorGate.begin();
   var container = document.getElementById('creator-container');
   container.className = 'loading';
   container.textContent = '加载中...';
@@ -157,18 +201,25 @@ function loadCreatorWorks() {
   var url = CREATOR_API + '/admin/list' + (status ? '?status=' + encodeURIComponent(status) : '');
 
   fetchJSON(url).then(function(res) {
+    if (!_creatorGate.isCurrent(tok)) return;
     if (!res.success) throw new Error(apiErr(res));
-    renderCreatorWorks(res.data || []);
+    renderCreatorWorks(res.data);
   }).catch(function(e) {
+    if (!_creatorGate.isCurrent(tok)) return;
     container.className = '';
     container.innerHTML = '<div class="error-msg">加载失败: ' + escapeHtml(e.message) + '</div>';
   });
 }
 
-function renderCreatorWorks(rows) {
+function renderCreatorWorks(payload) {
   var container = document.getElementById('creator-container');
   container.className = '';
-  document.getElementById('creator-count').textContent = '共 ' + rows.length + ' 件';
+  // 接口回 { list, total, limit }，理由与 renderDeposits 那段注释同一条。
+  var rows = (payload && payload.list) || [];
+  var total = payload && typeof payload.total === 'number' ? payload.total : rows.length;
+  var limit = payload && typeof payload.limit === 'number' ? payload.limit : 0;
+  document.getElementById('creator-count').textContent =
+    '共 ' + total + ' 件' + (limit > 0 && rows.length < total ? '（下面只列最近 ' + rows.length + ' 件，接口上限 ' + limit + '）' : '');
 
   if (!rows.length) {
     container.innerHTML = cardFallback('暂无创作者提交');
@@ -191,7 +242,7 @@ function renderCreatorWorks(rows) {
           '<span style="color:var(--muted);font-size:12px;">#' + w.id +
             ' · 作者: ' + escapeHtml(w.nickname || '匿名') + ' / ' + escapeHtml(w.phone || '-') +
             ' · 浏览 ' + (w.heat || 0) + ' · 分享带量 ' + (w.share_views || 0) +
-            ' · ' + escapeHtml(w.created_at || '') + '</span>' +
+            ' · ' + escapeHtml(beijingOrRaw(w.created_at)) + '</span>' +
         '</div>' +
         (w.summary ? '<div style="font-size:12px;color:var(--muted);margin-bottom:6px;">' + escapeHtml(w.summary) + '</div>' : '') +
         (text ? '<div style="font-size:13px;white-space:pre-wrap;margin-bottom:6px;">' + escapeHtml(text) + '</div>' : '') +
@@ -212,25 +263,31 @@ function renderCreatorWorks(rows) {
 }
 
 function reviewWork(id, status) {
+  if (reviewBusy('work-' + id + '-' + status)) return;
   var noteEl = document.getElementById('cn-' + id);
   apiCall(CREATOR_API + '/admin/' + id + '/review', 'POST', {
     status: status,
     admin_note: noteEl ? noteEl.value : ''
   }).then(function(res) {
+    reviewFree('work-' + id + '-' + status);
     if (!res.success) throw new Error(apiErr(res));
     showToast(status === 'approved' ? '已上广场' : '已驳回', 'success');
     loadCreatorWorks();
   }).catch(function(e) {
+    reviewFree('work-' + id + '-' + status);
     showToast(e.message, 'error');
   });
 }
 
 function featureWork(id, featured) {
+  if (reviewBusy('feat-' + id)) return;
   apiCall(CREATOR_API + '/admin/' + id + '/feature', 'POST', { featured: featured }).then(function(res) {
+    reviewFree('feat-' + id);
     if (!res.success) throw new Error(apiErr(res));
     showToast(res.message || '已保存', 'success');
     loadCreatorWorks();
   }).catch(function(e) {
+    reviewFree('feat-' + id);
     showToast(e.message, 'error');
   });
 }
@@ -238,6 +295,8 @@ function featureWork(id, featured) {
 /* ── 会员账号（找回密码 = 管理员代重置） ── */
 var AUTH_API = '/api/auth';
 var MemberRows = [];
+var MemberTotal = 0;
+var MemberLimit = 0;
 
 document.getElementById('member-refresh').addEventListener('click', loadAccounts);
 document.getElementById('member-search').addEventListener('input', renderAccounts);
@@ -250,9 +309,15 @@ function loadAccounts() {
   fetchJSON(AUTH_API + '/admin/accounts').then(function(res) {
     if (!res.success) throw new Error(apiErr(res));
     MemberRows = (res.data && res.data.accounts) || [];
+    // total 是真 COUNT(*)，accounts 只到 limit 条：注册超过 500 人之后的新人不在这一页里，
+    // 而"共 N 个账号"必须报真数，否则后台会以为没人注册。搜索框搜的仍然只是已载入这段。
+    MemberTotal = res.data && typeof res.data.total === 'number' ? res.data.total : MemberRows.length;
+    MemberLimit = res.data && typeof res.data.limit === 'number' ? res.data.limit : 0;
     renderAccounts();
   }).catch(function(e) {
     MemberRows = [];
+    MemberTotal = 0;
+    MemberLimit = 0;
     container.className = '';
     container.innerHTML = '<div class="error-msg">加载失败: ' + escapeHtml(e.message) + '</div>';
   });
@@ -270,7 +335,9 @@ function renderAccounts() {
     : MemberRows;
 
   document.getElementById('member-count').textContent =
-    '共 ' + MemberRows.length + ' 个账号' + (kw ? '，筛出 ' + rows.length + ' 个' : '');
+    '共 ' + MemberTotal + ' 个账号' +
+    (MemberLimit > 0 && MemberRows.length < MemberTotal ? '（已载入最近 ' + MemberRows.length + ' 个，接口上限 ' + MemberLimit + '）' : '') +
+    (kw ? '，筛出 ' + rows.length + ' 个' : '');
 
   if (!rows.length) {
     container.innerHTML = cardFallback(MemberRows.length ? '没有匹配的账号' : '还没有人注册过账号');
@@ -283,7 +350,7 @@ function renderAccounts() {
         '<div class="inv-product-name">' + escapeHtml(a.nickname || '未填昵称') + '</div>' +
         '<div class="inv-product-meta">' +
           '<span style="color:var(--muted);font-size:12px;">' + escapeHtml(a.phone) +
-            ' · 身份 #' + a.user_id + ' · 注册于 ' + escapeHtml(a.created_at || '') + '</span>' +
+            ' · 身份 #' + a.user_id + ' · 注册于 ' + escapeHtml(beijingOrRaw(a.created_at)) + '</span>' +
         '</div>' +
       '</div>' +
       '<div class="inv-actions">' +
@@ -302,12 +369,16 @@ function resetMemberPassword(userId) {
   var pw = input ? input.value : '';
   if (pw.length < 6 || pw.length > 64) { showToast('新密码长度需在 6-64 位之间', 'error'); return; }
   if (!confirm('把 ' + acc.phone + ' 的密码改成刚填的这个？会员数据不受影响。')) return;
+  // 连点两次会发两次 bcrypt 代换：第二次也回成功（后端按手机号更新，不判 changes），
+  // 白跑一次哈希，还可能把两次不同输入都写进去
+  if (reviewBusy('pw-' + userId)) return;
 
   apiCall(AUTH_API + '/admin/reset-password', 'POST', { phone: acc.phone, new_password: pw })
     .then(function(res) {
+      reviewFree('pw-' + userId);
       if (!res.success) throw new Error(apiErr(res));
       showToast(res.message || '密码已重置', 'success');
       if (input) input.value = '';
     })
-    .catch(function(e) { showToast(e.message, 'error'); });
+    .catch(function(e) { reviewFree('pw-' + userId); showToast(e.message, 'error'); });
 }

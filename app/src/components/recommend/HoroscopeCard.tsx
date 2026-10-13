@@ -3,7 +3,7 @@
  *
  * 查询今日星座运势，展示心情、幸运色/数字、运势概述和穿搭建议
  */
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import type { HoroscopeData } from '../../types'
 import { getDailyHoroscope } from '../../api'
 
@@ -29,18 +29,25 @@ export default function HoroscopeCard() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  // 连着点两个星座时两个请求并行，先点的可能后到 ⇒ 只认最后一次发出的结果，
+  // 否则会出现"选的是天蝎、卡片上放的是白羊"这种对不上号的展示
+  const seq = useRef(0)
+
   async function handleQuery(zodiac: string): Promise<void> {
+    const mine = ++seq.current
     setSelected(zodiac)
     setLoading(true)
     setError(null)
     try {
       const result = await getDailyHoroscope(zodiac)
+      if (mine !== seq.current) return
       setData(result)
     } catch (e: unknown) {
+      if (mine !== seq.current) return
       setError(e instanceof Error ? e.message : '查询失败')
       setData(null)
     } finally {
-      setLoading(false)
+      if (mine === seq.current) setLoading(false)
     }
   }
 

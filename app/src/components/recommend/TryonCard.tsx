@@ -6,6 +6,7 @@
 import { useState } from 'react'
 import type { TryonResult } from '../../types'
 import { directTryon } from '../../api'
+import { UPLOAD_ACCEPT, checkPickedImage } from '../../lib/imagePick'
 
 /** 虚拟试穿类别 */
 const TRYON_CATEGORIES: { value: string; label: string }[] = [
@@ -53,8 +54,15 @@ export default function TryonCard() {
           </label>
           <input
             type="file"
-            accept="image/*"
-            onChange={(e) => setPersonImage(e.target.files?.[0] ?? null)}
+            accept={UPLOAD_ACCEPT}
+            onChange={(e) => {
+              const file = e.target.files?.[0] ?? null
+              // 本机先挡一道：gif/heic/超 10MB 传上去也是被后端 400 打回，还白占一次试穿限流额度
+              const err = file ? checkPickedImage(file, '人物照片') : null
+              if (err) setError(err)
+              else setError(null)
+              setPersonImage(err ? null : file)
+            }}
             className="form-input text-xs"
             style={{ padding: '4px' }}
           />
@@ -65,8 +73,14 @@ export default function TryonCard() {
           </label>
           <input
             type="file"
-            accept="image/*"
-            onChange={(e) => setGarmentImage(e.target.files?.[0] ?? null)}
+            accept={UPLOAD_ACCEPT}
+            onChange={(e) => {
+              const file = e.target.files?.[0] ?? null
+              const err = file ? checkPickedImage(file, '衣服照片') : null
+              if (err) setError(err)
+              else setError(null)
+              setGarmentImage(err ? null : file)
+            }}
             className="form-input text-xs"
             style={{ padding: '4px' }}
           />
@@ -115,6 +129,12 @@ export default function TryonCard() {
             {result.degraded && (
               <div className="text-xs mb-2" style={{ color: 'var(--warning)', lineHeight: 1.6 }}>
                 试穿模型未开通，下面这张就是你上传的人物照片，不是换装效果。
+              </div>
+            )}
+            {/* saved=false 是后端如实带回的：图已经给你了，但这次没写进历史记录 */}
+            {result.saved === false && (
+              <div className="text-xs mb-2" style={{ color: 'var(--warning)', lineHeight: 1.6 }}>
+                这张图能看，但没能存进你的试穿记录，下次进来找不到它。
               </div>
             )}
             <img

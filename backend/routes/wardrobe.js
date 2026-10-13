@@ -9,13 +9,53 @@ const db = require('../db/init')
 const { sendSuccess, sendError } = require('../utils/response')
 const { buildRecommendation, recommendationBodyDeviation } = require('../services/recommendEngine')
 const { topFitBody, isTopCategory } = require('../services/topFitBody')
-const { getSessionId, parseJsonField, getCurrentSeason } = require('../utils/common')
+const {
+  getSessionId,
+  parseJsonField,
+  getCurrentSeason,
+  asText,
+  asNumber,
+  asFilters,
+  firstBadScalar,
+  tally,
+  asId,
+} = require('../utils/common')
+const { countByBucket, wardrobeGapBuckets } = require('../services/categoryBuckets')
 const { rateLimit } = require('../middleware/rateLimit')
 
 const router = express.Router()
 
 // 写操作限流：每分钟最多 30 次
 const writeLimiter = rateLimit({ windowMs: 60000, max: 30, message: '操作过于频繁，请稍后再试' })
+// 六个吃 CPU 的分析口（/gaps /evaluate /suggest /match /recommend /top-fit）。
+// 原来只有全局 100 次/15 分钟那道共享 IP 闸兜着，而它按 IP 分桶——出口是 CGNAT，
+// 一个 IP 后面是一片人，一个人连点分析就能把整栋楼挤出额度（2026-10-12 补）。
+// 单独一个桶，是为了不和写入口的 30 次共用：加满 30 件衣服不该让人下一步分析被拦。
+const analysisLimiter = rateLimit({
+  windowMs: 60000,
+  max: 20,
+  message: '分析请求过于频繁，请稍后再试',
+})
+
+/**
+ * 原样绑进 user_wardrobe 的可空标量列。
+ * JSON 列表字段先 stringify、fit_style/fabric_weight 走 sanitizeEnum、is_favorite 转 0/1，
+ * 都不会绑崩；只有这些"直接进 SQL 参数"的字段需要进门挡一次类型。
+ */
+const WARDROBE_SCALARS = [
+  'name',
+  'category',
+  'sub_category',
+  'color',
+  'pattern',
+  'condition',
+  'price',
+  'image_url',
+]
+
+/** 心愿单与搭配两张表的原样标量列 */
+const WISHLIST_SCALARS = ['category', 'color', 'reason', 'priority', 'gap_type']
+const OUTFIT_SCALARS = ['occasion', 'season', 'notes']
 
 // ============================================================
 // 辅助函数
@@ -31,6 +71,28 @@ const FABRIC_WEIGHT_VALUES = ['薄', '中', '厚']
 function sanitizeEnum(val, allowedVals) {
   const v = typeof val === 'string' ? val.trim() : ''
   return allowedVals.includes(v) ? v : null
+}
+
+/**
+ * 枚举列的进门校验：没填 / 填空 / 值在表内 → 放行（这列留 NULL，缺测不编造）；
+ * 填了却不认识 → 回一句人话，由调用方转 400。
+ * 原来只有 sanitizeEnum 一层：PUT 传 fit_style='紧身' 被静默归成 NULL，把用户已填好的
+ * '合体' 抹掉，而前端只看 HTTP 200 就弹「已保存修改」（10-13 现量）。
+ * 前端两个下拉的取值与下面两张值表逐字一致 ⇒ 拦 400 只挡畸形请求，挡不到真实用户。
+ */
+function enumError(value, allowedVals, label) {
+  if (value === undefined || value === null) return null
+  const v = asText(value)
+  if (v === '' || allowedVals.includes(v)) return null
+  return `${label} 只能是 ${allowedVals.join('/')}，收到的是「${v.slice(0, 20)}」`
+}
+
+/** 两格体量轴一起查，返回第一条错误话术（没有则 null） */
+function volumeAxisError(data) {
+  return (
+    enumError(data.fit_style, FIT_STYLE_VALUES, 'fit_style') ||
+    enumError(data.fabric_weight, FABRIC_WEIGHT_VALUES, 'fabric_weight')
+  )
 }
 
 /** 规范化衣橱单品记录（解析 JSON 字段） */
@@ -52,10 +114,12 @@ function normalizeItem(row) {
 function calculateStats(items) {
   const stats = {
     total: items.length,
-    by_category: {},
-    by_season: {},
-    by_color: {},
-    by_style: {},
+    // 四个计数桶都按用户自填的分类/季节/颜色/风格当键 ⇒ 必须是空原型对象，
+    // 否则有人把分类填成 __proto__ 或 constructor，这一件就从统计里消失或变成 NaN
+    by_category: tally(),
+    by_season: tally(),
+    by_color: tally(),
+    by_style: tally(),
   }
   for (const item of items) {
     // 分类统计
@@ -100,6 +164,10 @@ function analyzeWardrobeGaps(profile, sessionId) {
   const normalized = items.map(normalizeItem)
   const stats = calculateStats(normalized)
   const currentSeason = getCurrentSeason()
+  // 库里的 category 是中文自由标签（'衬衫'/'连衣裙'）或表单英文 value（'top'），
+  // 而下面的需求表用的是桶名 ⇒ 先归桶再计数，否则 by_category['top'] 恒 undefined，
+  // 四类缺口永远报"仅0件、优先级 high"（2026-10-11 实测：衣橱有 4 件仍报 0 件）。
+  const bucketCounts = countByBucket(stats.by_category, wardrobeGapBuckets)
 
   // 各类别基础需求（基于胶囊衣橱理论）
   const requiredCategories = {
@@ -111,11 +179,12 @@ function analyzeWardrobeGaps(profile, sessionId) {
 
   const gaps = []
   for (const [cat, req] of Object.entries(requiredCategories)) {
-    const count = stats.by_category[cat] || 0
+    const count = bucketCounts[cat] || 0
     if (count < req.min) {
       const shortage = req.min - count
       gaps.push({
         type: req.type,
+        label: req.label,
         priority: count === 0 ? 'high' : 'medium',
         message: `${req.label}仅${count}件，推荐至少${req.min}件（胶囊衣橱理论）`,
         suggestions: [
@@ -172,8 +241,12 @@ function analyzeWardrobeGaps(profile, sessionId) {
 /** 购物评估核心逻辑 */
 function evaluatePurchase(profile, sessionId, candidate) {
   const gaps = analyzeWardrobeGaps(profile, sessionId)
-  // g.type 格式为 category_top / category_bottom 等，需匹配 candidate.category
-  const matchingGap = gaps.gaps.find((g) => g.type === 'category_' + candidate.category)
+  // 缺口 type 是 category_<桶名>，candidate.category 却是库里那三种写法之一（'外套'/'outerwear'）
+  // ⇒ 必须先归桶再比，否则中文类别一条也匹配不上，评估里那 +30 分形同虚设
+  const candidateBuckets = wardrobeGapBuckets(candidate.category)
+  const matchingGap = gaps.gaps.find(
+    (g) => g.type.startsWith('category_') && candidateBuckets.includes(g.type.slice(9)),
+  )
 
   let score = 50
   const reasons = []
@@ -240,8 +313,10 @@ function suggestNextPurchase(profile, sessionId) {
   }
 
   // 按优先级排序
+  // ★ 必须用 ?? 不能用 ||：priorityOrder.high === 0，`0 || 3` 会把 high 打成 3，
+  // 10-13 现量 high/medium/low 三条建议排完成了 medium,low,high —— 最要紧的缺口排到最后。
   const priorityOrder = { high: 0, medium: 1, low: 2 }
-  suggestions.sort((a, b) => (priorityOrder[a.priority] || 3) - (priorityOrder[b.priority] || 3))
+  suggestions.sort((a, b) => (priorityOrder[a.priority] ?? 3) - (priorityOrder[b.priority] ?? 3))
 
   return suggestions
 }
@@ -293,7 +368,9 @@ router.get('/items', (req, res) => {
       return sendError(res, '缺少 X-Session-Id', 400)
     }
 
-    const { category, season, occasion } = req.query
+    // 三个筛选项都过 asFilters：数组型查询串（?category[]=上衣）原样绑进 SQLite 会 500，
+    // 非文本当"没这个筛选"
+    const { category, season, occasion } = asFilters(req.query, ['category', 'season', 'occasion'])
     let query = 'SELECT * FROM user_wardrobe WHERE session_id = ?'
     const params = [sessionId]
 
@@ -338,11 +415,18 @@ router.post('/items', writeLimiter, (req, res) => {
     }
 
     const data = req.body || {}
-    const name = (data.name || '').trim()
-    const category = (data.category || '').trim()
+    const name = asText(data.name)
+    const category = asText(data.category)
     if (!name || !category) {
       return sendError(res, 'name 和 category 不能为空', 400)
     }
+
+    const bad = firstBadScalar(data, WARDROBE_SCALARS)
+    if (bad) return sendError(res, `${bad} 只能是文本或数字`, 400)
+
+    // 版型/厚薄填了却不认识 ⇒ 说破，别再经 sanitizeEnum 归成 NULL 假装"没填"（见 enumError）
+    const axisErr = volumeAxisError(data)
+    if (axisErr) return sendError(res, axisErr, 400)
 
     const result = db
       .prepare(
@@ -369,7 +453,8 @@ router.post('/items', writeLimiter, (req, res) => {
         JSON.stringify(data.fit_body_types || []),
         JSON.stringify(data.fit_skin_tones || []),
         data.condition || '良好',
-        data.price || null,
+        // 0 元是真实价格（自制/赠品），`|| null` 会把它记成"没填" ⇒ 跨柜价格区间少算一件
+        asNumber(data.price, null),
         data.image_url || null,
       )
 
@@ -384,7 +469,8 @@ router.post('/items', writeLimiter, (req, res) => {
 /** 获取单件衣服详情 */
 router.get('/items/:itemId', (req, res) => {
   try {
-    const itemId = parseInt(req.params.itemId, 10)
+    const itemId = asId(req.params.itemId)
+    if (itemId === null) return sendError(res, 'itemId 必须是正整数', 400)
     const sid = getSessionId(req)
     if (!sid) return sendError(res, '缺少 Session ID', 400)
     const item = db
@@ -403,10 +489,19 @@ router.get('/items/:itemId', (req, res) => {
 /** 更新衣服信息 */
 router.put('/items/:itemId', writeLimiter, (req, res) => {
   try {
-    const itemId = parseInt(req.params.itemId, 10)
+    const itemId = asId(req.params.itemId)
+    if (itemId === null) return sendError(res, 'itemId 必须是正整数', 400)
     const sid = getSessionId(req)
     if (!sid) return sendError(res, '缺少 Session ID', 400)
     const data = req.body || {}
+
+    // 与 POST 同一把闸门：下面按 allowed 原样绑值，类型写错该 400 而不是 500
+    const bad = firstBadScalar(data, WARDROBE_SCALARS)
+    if (bad) return sendError(res, `${bad} 只能是文本或数字`, 400)
+
+    // 版型/厚薄同样先验值：认不出来就 400，不许静默把已有的好值抹成 NULL
+    const axisErr = volumeAxisError(data)
+    if (axisErr) return sendError(res, axisErr, 400)
 
     // 允许更新的字段
     const allowed = {
@@ -429,29 +524,42 @@ router.put('/items/:itemId', writeLimiter, (req, res) => {
       is_favorite: 'is_favorite',
     }
 
+    const jsonListKeys = [
+      'color_tags',
+      'style_tags',
+      'season_tags',
+      'occasion_tags',
+      'fit_body_types',
+      'fit_skin_tones',
+    ]
+
     const updates = []
     const params = []
     for (const [key, col] of Object.entries(allowed)) {
-      if (data[key] !== undefined && data[key] !== null) {
-        // JSON 数组字段需要 stringify
-        const val = [
-          'color_tags',
-          'style_tags',
-          'season_tags',
-          'occasion_tags',
-          'fit_body_types',
-          'fit_skin_tones',
-        ].includes(key)
-          ? JSON.stringify(data[key])
-          : key === 'is_favorite'
-            ? data[key]
-              ? 1
-              : 0
-            : key === 'fit_style'
-              ? sanitizeEnum(data[key], FIT_STYLE_VALUES)
-              : key === 'fabric_weight'
-                ? sanitizeEnum(data[key], FABRIC_WEIGHT_VALUES)
-                : data[key]
+      // undefined = 这次没动这一格；null = 用户明确要清空。
+      // 原来把 null 也当"没动"跳过去：前端清掉一个选填项后 PUT 不带它 ⇒ 库里旧值留着，
+      // 界面按表单显示"已空"，两边各说各话（WardrobeTab 的 buildPayload 同一处修法）。
+      if (data[key] !== undefined) {
+        const raw = data[key]
+        let val
+        if (raw === null) {
+          // 显式清空：JSON 列表列也存 NULL，不存字符串 'null'（那会被 parseJsonField 读回 null，
+          // 但按文本比对的老代码会当它有值）
+          val = null
+        } else if (jsonListKeys.includes(key)) {
+          val = JSON.stringify(raw)
+        } else if (key === 'is_favorite') {
+          val = raw ? 1 : 0
+        } else if (key === 'fit_style') {
+          val = sanitizeEnum(raw, FIT_STYLE_VALUES)
+        } else if (key === 'fabric_weight') {
+          val = sanitizeEnum(raw, FABRIC_WEIGHT_VALUES)
+        } else if (key === 'price') {
+          // 0 元是真实价格，'1,200' 这类脏值归 NULL：与 POST、配饰/化妆柜、inventory 同一把尺子
+          val = asNumber(raw, null)
+        } else {
+          val = raw
+        }
         updates.push(`${col} = ?`)
         params.push(val)
       }
@@ -482,16 +590,46 @@ router.put('/items/:itemId', writeLimiter, (req, res) => {
 /** 删除衣服 */
 router.delete('/items/:itemId', writeLimiter, (req, res) => {
   try {
-    const itemId = parseInt(req.params.itemId, 10)
+    const itemId = asId(req.params.itemId)
+    if (itemId === null) return sendError(res, 'itemId 必须是正整数', 400)
     const sid = getSessionId(req)
     if (!sid) return sendError(res, '缺少 Session ID', 400)
-    const result = db
-      .prepare('DELETE FROM user_wardrobe WHERE id = ? AND session_id = ?')
-      .run(itemId, sid)
-    if (result.changes === 0) {
-      return sendError(res, '衣服不存在', 404)
-    }
-    return sendSuccess(res, { deleted: true })
+
+    // item_ids 是指向 user_wardrobe.id 的真引用（POST /outfits 逐条验过归属，存的是整数数组），
+    // 但删衣服原来只删这一行 ⇒ 本人搭配里留下指向空行的 id，GET /outfits 把这些洞原样发出去。
+    // 同一个事务里把这个 id 从本人所有搭配剔掉；剔完一件不剩的搭配没有存在意义
+    // （POST 要求至少一件、且 name 与 item_ids 同时非空），连行一起删。
+    const removeItem = db.transaction(() => {
+      const result = db
+        .prepare('DELETE FROM user_wardrobe WHERE id = ? AND session_id = ?')
+        .run(itemId, sid)
+      if (result.changes === 0) return null
+      let scrubbed = 0
+      let emptied = 0
+      const outfits = db
+        .prepare('SELECT id, item_ids FROM wardrobe_outfits WHERE session_id = ?')
+        .all(sid)
+      for (const o of outfits) {
+        const ids = parseJsonField(o.item_ids)
+        if (!Array.isArray(ids) || !ids.some((x) => Number(x) === itemId)) continue
+        const rest = ids.filter((x) => Number(x) !== itemId)
+        if (rest.length === 0) {
+          db.prepare('DELETE FROM wardrobe_outfits WHERE id = ?').run(o.id)
+          emptied += 1
+        } else {
+          db.prepare('UPDATE wardrobe_outfits SET item_ids = ? WHERE id = ?').run(
+            JSON.stringify(rest),
+            o.id,
+          )
+          scrubbed += 1
+        }
+      }
+      return { scrubbed, emptied }
+    })
+
+    const dependents = removeItem()
+    if (!dependents) return sendError(res, '衣服不存在', 404)
+    return sendSuccess(res, { deleted: true, ...dependents })
   } catch (err) {
     console.error('[衣橱] 删除失败:', err)
     return sendError(res, '删除失败', 500)
@@ -529,7 +667,7 @@ router.get('/outfits', (req, res) => {
 })
 
 /** 创建一套搭配 */
-router.post('/outfits', (req, res) => {
+router.post('/outfits', writeLimiter, (req, res) => {
   try {
     const sessionId = getSessionId(req)
     if (!sessionId) {
@@ -537,11 +675,43 @@ router.post('/outfits', (req, res) => {
     }
 
     const data = req.body || {}
-    const name = (data.name || '').trim()
-    const itemIds = data.item_ids || []
-    if (!name || !itemIds.length) {
+    const name = asText(data.name)
+    // item_ids 是指向 user_wardrobe.id 的真引用，原来只判 `!itemIds.length`：
+    // ① 传字符串 "123" 也有 .length ⇒ 整串 JSON 进库，前端解析出来是一堆单字符；
+    // ② 传别人的 ID 照样入库 ⇒ 一套搭配里能挂进陌生人的单品（GET 按 session 取，
+    //    但 admin 源码/导出看得到，且后续按 ID 取详情的口子不认归属）；
+    // ③ 不带体积上限 ⇒ 一份 10MB 数组直接进 TEXT 列。
+    // 三样一起收：必须是数组、元素必须是正整数、去重后≤50 件、且都属于当前会话。
+    if (!Array.isArray(data.item_ids) || data.item_ids.length === 0) {
       return sendError(res, 'name 和 item_ids 不能为空', 400)
     }
+    if (data.item_ids.length > 50) {
+      return sendError(res, '一套搭配最多 50 件单品', 400)
+    }
+    const itemIds = []
+    for (const raw of data.item_ids) {
+      const n = asNumber(raw, NaN)
+      if (!Number.isInteger(n) || n <= 0) {
+        return sendError(res, 'item_ids 只能是衣物 ID 整数', 400)
+      }
+      if (!itemIds.includes(n)) itemIds.push(n)
+    }
+    if (!name) {
+      return sendError(res, 'name 和 item_ids 不能为空', 400)
+    }
+
+    const owned = db
+      .prepare('SELECT id FROM user_wardrobe WHERE session_id = ?')
+      .all(sessionId)
+      .map((r) => r.id)
+    const ownedSet = new Set(owned)
+    const foreign = itemIds.filter((id) => !ownedSet.has(id))
+    if (foreign.length > 0) {
+      return sendError(res, `搭配里有不属于当前会话的衣物：${foreign.join(', ')}`, 400)
+    }
+
+    const bad = firstBadScalar(data, OUTFIT_SCALARS)
+    if (bad) return sendError(res, `${bad} 只能是文本或数字`, 400)
 
     const result = db
       .prepare(
@@ -579,7 +749,7 @@ router.post('/outfits', (req, res) => {
 // 三、衣橱缺口分析
 // ============================================================
 
-router.post('/gaps', (req, res) => {
+router.post('/gaps', analysisLimiter, (req, res) => {
   try {
     const sessionId = getSessionId(req)
     if (!sessionId) {
@@ -603,7 +773,7 @@ router.post('/gaps', (req, res) => {
 // 四、购物评估（值不值得买）
 // ============================================================
 
-router.post('/evaluate', (req, res) => {
+router.post('/evaluate', analysisLimiter, (req, res) => {
   try {
     const sessionId = getSessionId(req)
     if (!sessionId) {
@@ -629,7 +799,7 @@ router.post('/evaluate', (req, res) => {
 // 五、购物推荐（下次买什么）
 // ============================================================
 
-router.post('/suggest', (req, res) => {
+router.post('/suggest', analysisLimiter, (req, res) => {
   try {
     const sessionId = getSessionId(req)
     if (!sessionId) {
@@ -650,7 +820,7 @@ router.post('/suggest', (req, res) => {
 // 六、衣橱匹配（从已有衣服中筛选）
 // ============================================================
 
-router.post('/match', (req, res) => {
+router.post('/match', analysisLimiter, (req, res) => {
   try {
     const sessionId = getSessionId(req)
     if (!sessionId) {
@@ -679,7 +849,8 @@ router.get('/wishlist', (req, res) => {
       return sendError(res, '缺少 X-Session-Id', 400)
     }
 
-    const { status } = req.query
+    // 同 /items：数组型查询串绑进 SQLite 会 500，非文本当"没这个筛选"
+    const { status } = asFilters(req.query, ['status'])
     let query = 'SELECT * FROM shopping_wishlist WHERE session_id = ?'
     const params = [sessionId]
 
@@ -700,7 +871,7 @@ router.get('/wishlist', (req, res) => {
 })
 
 /** 添加购物心愿 */
-router.post('/wishlist', (req, res) => {
+router.post('/wishlist', writeLimiter, (req, res) => {
   try {
     const sessionId = getSessionId(req)
     if (!sessionId) {
@@ -709,10 +880,13 @@ router.post('/wishlist', (req, res) => {
 
     const data = req.body || {}
     // 前端 ShoppingWishlistItem 字段名为 name，兼容 item_name
-    const itemName = (data.name || data.item_name || '').trim()
+    const itemName = asText(data.name) || asText(data.item_name)
     if (!itemName) {
       return sendError(res, 'name 不能为空', 400)
     }
+
+    const bad = firstBadScalar(data, WISHLIST_SCALARS)
+    if (bad) return sendError(res, `${bad} 只能是文本或数字`, 400)
 
     const result = db
       .prepare(
@@ -740,12 +914,14 @@ router.post('/wishlist', (req, res) => {
 })
 
 /** 更新心愿单状态 */
-router.put('/wishlist/:wishId', (req, res) => {
+router.put('/wishlist/:wishId', writeLimiter, (req, res) => {
   try {
-    const wishId = parseInt(req.params.wishId, 10)
+    const wishId = asId(req.params.wishId)
+    if (wishId === null) return sendError(res, 'wishId 必须是正整数', 400)
     const sid = getSessionId(req)
     if (!sid) return sendError(res, '缺少 Session ID', 400)
-    const status = req.body?.status
+    // status 给成数组/对象时过去会绑进 SQL ⇒ "can only bind..." ⇒ 500（2026-10-11 实测）
+    const status = asText(req.body?.status)
     if (!status) {
       return sendError(res, '缺少 status', 400)
     }
@@ -771,7 +947,7 @@ router.put('/wishlist/:wishId', (req, res) => {
 // 八、个人衣橱推荐（规则引擎 personal 模式）
 // ============================================================
 
-router.post('/recommend', (req, res) => {
+router.post('/recommend', analysisLimiter, (req, res) => {
   try {
     const sessionId = getSessionId(req)
     const data = req.body || {}
@@ -858,7 +1034,7 @@ function toTopDescriptor(row) {
   }
 }
 
-router.post('/top-fit', (req, res) => {
+router.post('/top-fit', analysisLimiter, (req, res) => {
   try {
     const sessionId = getSessionId(req)
     if (!sessionId) {
@@ -868,9 +1044,7 @@ router.post('/top-fit', (req, res) => {
 
     // 现量：活库 category 是中文自由标签 ⇒ 判定交给 isTopCategory，SQL 里写死英文键会一条不中
     const rows = db
-      .prepare(
-        'SELECT * FROM user_wardrobe WHERE session_id = ? ORDER BY created_at DESC',
-      )
+      .prepare('SELECT * FROM user_wardrobe WHERE session_id = ? ORDER BY created_at DESC')
       .all(sessionId)
       .filter((r) => isTopCategory(r.category))
     const tops = rows.map((r) => toTopDescriptor(normalizeItem(r)))
@@ -900,7 +1074,12 @@ router.post('/top-fit', (req, res) => {
         axes: r.axes,
         axes_present: r.axes_present,
         axes_missing: r.axes_missing,
-        top: { label: r.top.label, signals: r.top.signals, fit_style: r.top.fit_style, fabric_weight: r.top.fabric_weight },
+        top: {
+          label: r.top.label,
+          signals: r.top.signals,
+          fit_style: r.top.fit_style,
+          fabric_weight: r.top.fabric_weight,
+        },
       })
     })
     ranked.sort((a, b) => b.score - a.score)

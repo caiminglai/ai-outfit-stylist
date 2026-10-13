@@ -22,7 +22,8 @@ const 全身 = {
   skin_tone: '白皙',
   scenario: '通勤',
 }
-const report = (p) => generateStructuredText(buildRecommendation(p, 'personal', false), null, 'personal')
+const report = (p) =>
+  generateStructuredText(buildRecommendation(p, 'personal', false), null, 'personal')
 
 test('报告里三段的先后顺序＝合身 → 修形 → 颜色', () => {
   const t = report(全身)
@@ -85,4 +86,38 @@ test('修形段与颜色段的既有内容没被搬家搬坏（档位行、肤�
   assert.match(seg2, /上衣颜色\*\*\(肤色口径 深浅 白皙/)
   assert.match(seg2, /档位: A 色差公式/)
   assert.match(t, /顺序是定的|可以相反/, '顶层那句"两段结论可以相反"要留在报告里')
+})
+
+// ============================================================
+// 天气段与数据概览（10-12 第二十七轮）
+// ============================================================
+
+test('报告的"今日天气"段真的会出：前端送的键是 temperature/condition，不是 temp/description', () => {
+  const rec = buildRecommendation(全身, 'personal', false)
+  const t = generateStructuredText(
+    rec,
+    { temperature: 5.2, feelsLike: 2.1, condition: '阴', humidity: 71 },
+    'personal',
+  )
+  assert.match(t, /## 今日天气/)
+  assert.match(t, /气温 5\.2°C（体感 2\.1°C），阴，湿度 71%/)
+})
+
+test('天气缺项只少那一格；没送气温就整段不出（不写"天气良好"）', () => {
+  const rec = buildRecommendation(全身, 'personal', false)
+  const 无湿度 = generateStructuredText(rec, { temperature: 30, feelsLike: 33 }, 'personal')
+  assert.match(无湿度, /气温 30°C（体感 33°C），天气状况未知/)
+  assert.ok(!无湿度.includes('湿度'), '湿度没读到就不许印这一格')
+  assert.ok(!无湿度.includes('天气良好'), '"天气良好"是原来那句 || 兜底编出来的')
+
+  const 没天气 = generateStructuredText(rec, { feelsLike: 3 }, 'personal')
+  assert.ok(!没天气.includes('## 今日天气'), '读不到气温就整段不出')
+  assert.ok(!没天气.includes('气温 '), '假气温一行都不许出现')
+})
+
+test('数据概览：档位没算出来时不把 bmi_level/wh_status 显示成"正常"', () => {
+  // computeBmi 现在量不到就返回 {}，_computed 里可能只有数字没有档位
+  const t = generateStructuredText({ 上衣: [], _computed: { bmi: 22.8 } }, null, 'personal')
+  assert.match(t, /^- BMI: 22\.8$/m)
+  assert.ok(!t.includes('（正常）'), '档位没读到就不许写"正常"')
 })

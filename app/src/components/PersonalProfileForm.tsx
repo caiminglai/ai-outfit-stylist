@@ -248,14 +248,9 @@ interface PersonalProfileFormProps {
 
 /* ── 组件 ── */
 
-export default function PersonalProfileForm({
-  initial,
-  onSubmit,
-  onChange,
-  submitting,
-  compact,
-}: PersonalProfileFormProps) {
-  const [profile, setProfile] = useState<CustomerProfile>({
+/** 档案 → 表单初始值(挂载时铺一次,晚到的档案再按同一口径铺一次) */
+function fromInitial(initial?: Partial<CustomerProfile>): CustomerProfile {
+  return {
     nickname: initial?.nickname || '',
     gender: initial?.gender,
     age_range: initial?.age_range,
@@ -296,11 +291,30 @@ export default function PersonalProfileForm({
     allergy_metal: initial?.allergy_metal,
     birth_date: initial?.birth_date,
     birth_hour: initial?.birth_hour,
-  })
+  }
+}
+
+export default function PersonalProfileForm({
+  initial,
+  onSubmit,
+  onChange,
+  submitting,
+  compact,
+}: PersonalProfileFormProps) {
+  // 没动过表单 ⇒ 界面直接跟着档案(含草稿)走。档案是在"选择模式"那一屏异步读的,他点得快时
+  // 表单已经挂载、档案还没回;老代码只在挂载那一刻读一次 initial,晚到的那份就静默丢了。
+  // 派生而不是 useEffect:不用 effect 就没级联渲染,也不会覆盖他正在打的字,也不会顺手多存一份草稿
+  const [override, setOverride] = useState<CustomerProfile | null>(null)
+  const profile = override ?? fromInitial(initial)
 
   const update = (key: keyof CustomerProfile, value: unknown) => {
-    setProfile((prev) => ({ ...prev, [key]: value }))
-    onChange?.({ ...profile, [key]: value })
+    // setOverride 与 onChange 必须发同一个对象:老代码 setProfile 走 prev(functional)、
+    // onChange 走 render 闭包里的 profile,两者在"父组件这拍又渲染了一次"或"同一拍连着改两个字段"时
+    // 会分叉 ⇒ onChange 交出去的那份缺了刚改的字段,1.5s 防抖后写进草稿的就是丢字段的版本。
+    // 这里一次算好 next,两边都用它,保证界面状态、上抛 payload、落库草稿三者一致。
+    const next = { ...profile, [key]: value }
+    setOverride(next)
+    onChange?.(next)
   }
 
   const handleSubmit = () => {
@@ -347,7 +361,28 @@ export default function PersonalProfileForm({
 
   type NumberField = 'height' | 'weight' | 'bust' | 'waist' | 'hip' | 'leg_length' | 'shoulder'
 
+  /**
+   * 与后端 `backend/services/profileArchive.js:57-63` 的 BODY_FIELDS 同区间。
+   * 那边 `cleanNum` 越界一律 return null ⇒ 填了 300cm 的人，身高这条字段进不了档案也不报错，
+   * 按身高分档的规则组就永远命不中。这里把区间摆到输入框上。
+   * 注意：上面 HEIGHT_RANGE_OPTIONS 给了四档，但规则库里实际只有 150-160／160-170／180+
+   * 三档条件（`backend/db/seed/rules.json` 实测 3 条，L7672/L7696/L7712），
+   * 选 170-180 的人命中不到任何身高规则 —— 这一条挂给用户拍板，见 §三十五。
+   */
+  const NUMBER_RANGE: Record<NumberField, [number, number]> = {
+    height: [50, 250],
+    weight: [20, 300],
+    bust: [40, 200],
+    waist: [30, 200],
+    hip: [40, 220],
+    leg_length: [30, 160],
+    shoulder: [20, 80],
+  }
+
   function renderNumberInput(key: NumberField, label: string, placeholder: string) {
+    const [lo, hi] = NUMBER_RANGE[key]
+    const v = profile[key]
+    const outOfRange = typeof v === 'number' && Number.isFinite(v) && (v < lo || v > hi)
     return (
       <div className="flex-1 min-w-0">
         <div className="text-xs mb-2" style={{ color: 'var(--muted)' }}>
@@ -357,9 +392,17 @@ export default function PersonalProfileForm({
           type="number"
           placeholder={placeholder}
           className="form-input"
+          min={lo}
+          max={hi}
           value={profile[key] ?? ''}
           onChange={(e) => update(key, e.target.value ? Number(e.target.value) : undefined)}
         />
+        {/* 后端会把越界值静默丢掉，这里当场说清楚，别让人以为已经存进去了 */}
+        {outOfRange && (
+          <div className="text-xs mt-1" style={{ color: 'var(--bad, #c0392b)' }}>
+            {label}只能在 {lo}～{hi} 之间，超出的值不会被保存
+          </div>
+        )}
       </div>
     )
   }
@@ -414,7 +457,7 @@ export default function PersonalProfileForm({
             <button
               onClick={() => {
                 const next: CustomerProfile = { ...profile, birth_date: '', birth_hour: '' }
-                setProfile(next)
+                setOverride(next)
                 onChange?.(next)
               }}
               className="text-xs"

@@ -12,7 +12,7 @@ const fs = require('fs')
 const path = require('path')
 const db = require('../db/init')
 const { sendSuccess, sendError } = require('../utils/response')
-const { generateUUID, UPLOAD_DIR } = require('../utils/common')
+const { generateUUID, UPLOAD_DIR, asId } = require('../utils/common')
 const { loginRequired, adminLoginRequired } = require('../middleware/auth')
 const { upload, validateImage } = require('../middleware/upload')
 const { rateLimit } = require('../middleware/rateLimit')
@@ -194,11 +194,23 @@ router.get('/order/:outTradeNo', loginRequired, orderQueryLimiter, async (req, r
 })
 
 /**
+ * 回调专用限流：server.js 的全局 apiLimiter 豁免了 /api/payment/notify*（回调被掐
+ * 会导致微信/支付宝按失败重推），两条 notify 之前是完全裸的——伪造回调的洪水可以
+ * 不限次数地锤验签逻辑（RSA 验签是有真实 CPU 成本的）。这道闸只拦洪水：
+ * 300 次/15 分钟按 IP 独立成桶，渠道方正常的重试与重推远够不着，不会掐掉真到账通知。
+ */
+const notifyLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 300,
+  message: '回调过于频繁，请稍后再试',
+})
+
+/**
  * 微信支付回调：由微信服务器直接调用，不能挂 loginRequired。
  * 验签原文必须是 req.rawBody（express.json 的 verify 钩子存下的原始字节）。
  * 返回 SUCCESS 微信才停止重试；非 2xx 会按它的策略重推。
  */
-router.post('/notify', (req, res) => {
+router.post('/notify', notifyLimiter, (req, res) => {
   const result = wxpay.handleNotify(req.rawBody || '', req.headers)
   if (!result.ok) {
     console.error('[收款] 回调验签失败:', result.reason)
@@ -262,7 +274,7 @@ router.post('/alipay/order', loginRequired, (req, res) => {
  * 支付宝异步通知：form-urlencoded，签名就在表单字段里，不需要 rawBody。
  * 处理成功必须回纯文本 success，否则支付宝会在 25 小时内按 4m/10m/... 重推。
  */
-router.post('/notify/alipay', (req, res) => {
+router.post('/notify/alipay', notifyLimiter, (req, res) => {
   const result = alipay.handleNotify(req.body)
   if (!result.ok) {
     console.error('[收款] 支付宝通知验签失败:', result.reason)
@@ -310,11 +322,24 @@ router.post('/deposit', loginRequired, depositLimiter, upload.single('file'), (r
     fs.writeFileSync(path.join(UPLOAD_DIR, filename), req.file.buffer)
 
     const amount = currentPriceFen() / 100
-    const result = db
-      .prepare(
-        'INSERT INTO deposits (user_id, channel, amount, proof_url, status) VALUES (?, ?, ?, ?, ?)',
-      )
-      .run(req.user.id, channel, amount, `/uploads/${filename}`, 'pending')
+    const proofUrl = `/uploads/${filename}`
+    let result
+    try {
+      result = db
+        .prepare(
+          'INSERT INTO deposits (user_id, channel, amount, proof_url, status) VALUES (?, ?, ?, ?, ?)',
+        )
+        .run(req.user.id, channel, amount, proofUrl, 'pending')
+    } catch (err) {
+      // 凭证图已落盘但行没写成 ⇒ 删文件，别留一张后台永远看不见、
+      // 也没人会被通知去审的孤儿凭证（这条和 clothing.js 同一处理）
+      try {
+        fs.unlinkSync(path.join(UPLOAD_DIR, filename))
+      } catch {
+        /* 删不掉只是文件残留，不改变这条本就要回的 500 */
+      }
+      throw err
+    }
 
     return sendSuccess(
       res,
@@ -354,21 +379,39 @@ router.get('/my', loginRequired, (req, res) => {
 // 管理端（供后台页面调用，与 /api/models/admin/* 同一套约定）
 // ============================================================
 
-/** 凭证列表 */
+/**
+ * 凭证列表
+ * 返回: { success: true, data: { list, total, limit } }
+ * total 是真 COUNT(*)。原来后台把接口返回的行数当"共 N 条"显示，而这里带 LIMIT：
+ * 库里一旦超过 limit 条，"只给了最近 200 条"就会被显示成"一共 200 条"，
+ * 审核页看上去就少了 pending 凭证。list 仍是被 limit 截过的那一段。
+ */
+const ADMIN_LIST_LIMIT = 200
 router.get('/admin/list', adminLoginRequired, (req, res) => {
   try {
     const status = req.query.status
     const allowed = ['pending', 'approved', 'rejected']
-    let sql = `SELECT d.*, u.nickname, ua.phone FROM deposits d
-      LEFT JOIN users u ON d.user_id = u.id
-      LEFT JOIN user_accounts ua ON ua.user_id = d.user_id`
-    const params = []
-    if (allowed.includes(status)) {
-      sql += ' WHERE d.status = ?'
-      params.push(status)
-    }
-    sql += ' ORDER BY d.id DESC LIMIT 200'
-    return sendSuccess(res, db.prepare(sql).all(...params))
+    const hasFilter = allowed.includes(status)
+    const where = hasFilter ? 'WHERE d.status = ?' : ''
+    const filterParams = hasFilter ? [status] : []
+    const totalRow = db
+      .prepare(`SELECT COUNT(*) AS n FROM deposits d ${where}`)
+      .get(...filterParams)
+    const rows = db
+      .prepare(
+        `SELECT d.*, u.nickname, ua.phone FROM deposits d
+         LEFT JOIN users u ON d.user_id = u.id
+         LEFT JOIN user_accounts ua ON ua.user_id = d.user_id
+         ${where}
+         ORDER BY d.id DESC
+         LIMIT ${ADMIN_LIST_LIMIT}`,
+      )
+      .all(...filterParams)
+    return sendSuccess(res, {
+      list: rows,
+      total: totalRow ? totalRow.n : 0,
+      limit: ADMIN_LIST_LIMIT,
+    })
   } catch (err) {
     console.error('[收款] 读取凭证列表失败:', err)
     return sendError(res, '读取凭证列表失败', 500)
@@ -378,8 +421,8 @@ router.get('/admin/list', adminLoginRequired, (req, res) => {
 /** 审核凭证 */
 router.post('/admin/:id/status', adminLoginRequired, (req, res) => {
   try {
-    const id = parseInt(req.params.id, 10)
-    if (isNaN(id)) return sendError(res, 'ID 格式错误', 400)
+    const id = asId(req.params.id)
+    if (id === null) return sendError(res, 'id 必须是正整数', 400)
 
     const status = req.body?.status
     if (!DEPOSIT_STATUSES.has(status)) {
@@ -387,10 +430,34 @@ router.post('/admin/:id/status', adminLoginRequired, (req, res) => {
     }
 
     const adminNote = String(req.body?.admin_note || '').slice(0, 200)
-    const approvedAt = status === 'approved' ? new Date().toISOString() : null
+
+    // 在线支付已到账的那笔凭证不能改判"拒绝"：钱是回调确认过的，deposits 这边改成 rejected
+    // 而 payment_orders.status 还是 paid（:106-127 markPaid 写的），两张账从此相反，
+    // 且这一改还把 approved_at 清成 NULL，对账时看不出来。退款要走平台原路，不是改状态。
+    const current = db
+      .prepare('SELECT status, admin_note, proof_url FROM deposits WHERE id = ?')
+      .get(id)
+    if (!current) return sendError(res, '凭证不存在', 404)
+    const isOnlinePaid =
+      current.status === 'approved' &&
+      /^(微信|支付宝)在线支付 /.test(current.admin_note || '') &&
+      !(current.proof_url || '')
+    if (isOnlinePaid && status === 'rejected') {
+      return sendError(
+        res,
+        '这笔是线上支付且已到账，不能改成拒绝；要退款请在支付平台走原路退款',
+        400,
+      )
+    }
+
+    // approved_at 必须与 markPaid 写库时(第 122 行)同用 SQLite datetime('now')。
+    // 之前这里塞 new Date().toISOString() ⇒ 同一列两种格式('2026-…T…Z' vs '2026-… …'),
+    // 按 approved_at 排序或和 created_at 比大小时,ISO 的 'T' 恒 > 空格,人工审核永远被排到后面。
     const result = db
-      .prepare('UPDATE deposits SET status = ?, admin_note = ?, approved_at = ? WHERE id = ?')
-      .run(status, adminNote, approvedAt, id)
+      .prepare(
+        "UPDATE deposits SET status = ?, admin_note = ?, approved_at = CASE WHEN ? = 'approved' THEN datetime('now') ELSE NULL END WHERE id = ?",
+      )
+      .run(status, adminNote, status, id)
 
     if (result.changes === 0) return sendError(res, '凭证不存在', 404)
     return sendSuccess(res, { id, status }, '审核已保存')
@@ -425,7 +492,8 @@ router.get('/admin/price', adminLoginRequired, (req, res) => {
 router.put('/admin/price', adminLoginRequired, (req, res) => {
   try {
     const raw = String(req.body?.amount ?? '').trim()
-    if (!/^\d+(\.\d{1,2})?$/.test(raw)) return sendError(res, '金额最多两位小数，例如 99 或 59.9', 400)
+    if (!/^\d+(\.\d{1,2})?$/.test(raw))
+      return sendError(res, '金额最多两位小数，例如 99 或 59.9', 400)
     const fen = alipay.yuanToFen(raw)
     if (fen < 1 || fen > 9999999) return sendError(res, '金额需在 0.01 ～ 99999.99 元之间', 400)
 

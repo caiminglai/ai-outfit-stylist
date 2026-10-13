@@ -330,7 +330,13 @@ export interface TopSpecFit {
   present: boolean
   layer_cn?: string
   size_label?: string
-  size?: { 号: number; 型: number; 体型: string | null; 体型中文: string | null; 体型档: number[] | null }
+  size?: {
+    号: number
+    型: number
+    体型: string | null
+    体型中文: string | null
+    体型档: number[] | null
+  }
   size_scope?: 'standard' | 'near'
   size_scope_note?: string | null
   /** 常用档系表列的出处（按性别分表，1335.1／1335.2-2008） */
@@ -404,6 +410,7 @@ export interface BaziAnalysis {
   day_master: string
   day_master_element: string
   strength: '身强' | '身弱' | '中和'
+  /** 判定用的帮扶比值(含月支得令 +0.06),与 strength、后端 summary 同一口径、保留 3 位 */
   strength_ratio: number
   /** 冬月取火、夏月取水;为 null 表示本月不调候 */
   seasonal: string | null
@@ -507,6 +514,8 @@ export interface WardrobeItem {
 export interface BodyDeviation {
   bmi?: number
   shoulder_ratio?: number
+  /** 肩宽÷净腰围（站内自建比值；Pazhoohi 2023 的 SHR 是肩围÷臀围，量不到肩围） */
+  shoulder_waist_ratio?: number
   leg_ratio?: number
   bust_waist_diff?: number
   hip_waist_diff?: number
@@ -576,6 +585,8 @@ export interface WardrobeGapResult {
 
 export interface WardrobeGap {
   type: string
+  /** 后端为 category_* 缺口附带中文名(上衣/下装…);季节、色彩这类没有,前端用 type→中文兜底表 */
+  label?: string
   priority: 'high' | 'medium' | 'low'
   message: string
   suggestions: string[]
@@ -644,6 +655,8 @@ export interface CosmeticGapResult {
 
 export interface CosmeticGap {
   type: string
+  /** 同 WardrobeGap:category_* 带中文名,过期/肤色这类靠前端兜底表 */
+  label?: string
   priority: 'high' | 'medium' | 'low'
   message: string
   suggestions: string[]
@@ -702,6 +715,8 @@ export interface AccessoryGapResult {
 
 export interface AccessoryGap {
   type: string
+  /** 后端为 category_* 缺口附带中文名(项链/耳饰…);脸型、金属色这类没有,前端用 type→中文兜底表 */
+  label?: string
   priority: 'high' | 'medium' | 'low'
   message: string
   suggestions: string[]
@@ -939,4 +954,6 @@ export interface TryonResult {
   garment_image: string
   /** true = 未接入试穿模型，result_url 就是原图 */
   degraded?: boolean
+  /** false = 图已生成但这次没进历史记录（后端落库失败，见 routes/tryon.js） */
+  saved?: boolean
 }

@@ -69,7 +69,8 @@ test('deltaE00: Sharma 2004 论文 34 组标准样全部对上（容差 0.0005�
   const bad = []
   SHARMA_PAIRS.forEach((p, i) => {
     const got = deltaE00(lab(p.l1), lab(p.l2))
-    if (!(Math.abs(got - p.expect) < 0.0005)) bad.push(`#${i + 1} 期望 ${p.expect} 实得 ${got.toFixed(4)}`)
+    if (!(Math.abs(got - p.expect) < 0.0005))
+      bad.push(`#${i + 1} 期望 ${p.expect} 实得 ${got.toFixed(4)}`)
   })
   assert.deepStrictEqual(bad, [], `以下色差样本站不住:\n${bad.join('\n')}`)
   assert.strictEqual(SHARMA_PAIRS.length, 34, '样本数必须与论文一致，少一组就是抄漏了')
@@ -89,11 +90,20 @@ test('deltaE00: 同色为 0、对称、且不出现 NaN', () => {
 test('hexToLab: 三原色与白的 Lab 锚定值', () => {
   const near = (got, exp, tol = 0.3) => Math.abs(got - exp) <= tol
   const red = hexToLab('#FF0000')
-  assert.ok(near(red.L, 53.23) && near(red.a, 80.11) && near(red.b, 67.22), `红: ${JSON.stringify(red)}`)
+  assert.ok(
+    near(red.L, 53.23) && near(red.a, 80.11) && near(red.b, 67.22),
+    `红: ${JSON.stringify(red)}`,
+  )
   const blue = hexToLab('#0000FF')
-  assert.ok(near(blue.L, 32.3) && near(blue.a, 79.19) && near(blue.b, -107.86), `蓝: ${JSON.stringify(blue)}`)
+  assert.ok(
+    near(blue.L, 32.3) && near(blue.a, 79.19) && near(blue.b, -107.86),
+    `蓝: ${JSON.stringify(blue)}`,
+  )
   const white = hexToLab('#FFFFFF')
-  assert.ok(near(white.L, 100) && near(white.a, 0) && near(white.b, 0), `白: ${JSON.stringify(white)}`)
+  assert.ok(
+    near(white.L, 100) && near(white.a, 0) && near(white.b, 0),
+    `白: ${JSON.stringify(white)}`,
+  )
   assert.strictEqual(hexToLab('#000000').L, 0)
 })
 
@@ -122,7 +132,10 @@ test('individualTypologyAngle + itaClass: 肤色越深 ITA 越低', () => {
   assert.ok(fair > bronze, `白皙 ${fair} 应大于古铜 ${bronze}`)
   // 钉住单位：atan 出的是弧度，ITA° 必须是角度制（系数 180/π）。
   // (L−50)/b = 1 时 ITA° 恒等于 45，用它当尺子；曾经写成 100/π 会把角度压成 0.5565 倍。
-  assert.ok(Math.abs(individualTypologyAngle({ L: 60, a: 0, b: 10 }) - 45) < 1e-9, 'ITA 弧度未换成角度')
+  assert.ok(
+    Math.abs(individualTypologyAngle({ L: 60, a: 0, b: 10 }) - 45) < 1e-9,
+    'ITA 弧度未换成角度',
+  )
   assert.ok(Math.abs(fair - 52.1) < 0.2, `白皙锚点 ITA 应≈52.1°，实测 ${fair}`)
   assert.strictEqual(itaClass(fair), 'light')
   assert.strictEqual(itaClass(null), null)
@@ -194,15 +207,18 @@ test('colorFit: 色相轴按"对比"给分，不吃"相似"（Schloss & Palmer 2
   // 同一张脸，色相离肤色越远的上衣，hueContrast 分量越大（0.5 + Δhue/360）
   const near = colorFit('白皙', '#F5C9C2') // 与肤色色相接近的浅粉
   const far = colorFit('白皙', '雾霾蓝') // 色相角差最大的一档
-  assert.ok(Math.abs(far.dHue) > Math.abs(near.dHue), `dHue 应 far>near: ${far.dHue} vs ${near.dHue}`)
+  assert.ok(
+    Math.abs(far.dHue) > Math.abs(near.dHue),
+    `dHue 应 far>near: ${far.dHue} vs ${near.dHue}`,
+  )
   assert.ok(
     far.hueContrast > near.hueContrast,
-    `对比分量应随色相差增大: far=${far.hueContrast} near=${near.hueContrast}`
+    `对比分量应随色相差增大: far=${far.hueContrast} near=${near.hueContrast}`,
   )
   // 旧口径（1 - Δhue/180）会让 far 的该分量趋近 0 并把总分压到 20 以下 ⇒ 反向钉住
   assert.ok(
     far.score > 40,
-    `雾霾蓝配白皙不该再被"色相不相似"重罚（旧口径实测 19/100），现得 ${far.score}`
+    `雾霾蓝配白皙不该再被"色相不相似"重罚（旧口径实测 19/100），现得 ${far.score}`,
   )
   assert.ok(near.hueContrast >= 0.5 && near.hueContrast <= 1)
   assert.ok(far.hueContrast >= 0.5 && far.hueContrast <= 1)
@@ -212,12 +228,15 @@ test('colorFit: hueContrast 恒在 0.5~1.0，遍历 8 档肤色 × 全词表', (
   for (const skin of Object.keys(SKIN_TONE_ANCHORS)) {
     for (const name of Object.keys(COLOR_NAME_HEX)) {
       const r = colorFit(skin, name)
-      assert.ok(r.hueContrast >= 0.5 && r.hueContrast <= 1.0, `${skin}×${name} hueContrast=${r.hueContrast}`)
+      assert.ok(
+        r.hueContrast >= 0.5 && r.hueContrast <= 1.0,
+        `${skin}×${name} hueContrast=${r.hueContrast}`,
+      )
       // 恒等式：hueContrast = 0.5 + Δhue/360（两位舍入内）
       const expect = 0.5 + r.dHue / 360
       assert.ok(
         Math.abs(r.hueContrast - expect) < 0.002,
-        `${skin}×${name} 对比轴公式不符: ${r.hueContrast} vs ${expect}`
+        `${skin}×${name} 对比轴公式不符: ${r.hueContrast} vs ${expect}`,
       )
     }
   }
@@ -229,7 +248,10 @@ test('colorFit: 肤色 8 档 × 词表全部色名，score 恒在 0~100 且无 N
     for (const name of Object.keys(COLOR_NAME_HEX)) {
       const r = colorFit(skin, name)
       assert.ok(r, `${skin}×${name} 不该为 null`)
-      assert.ok(Number.isFinite(r.score) && r.score >= 0 && r.score <= 100, `${skin}×${name} score=${r.score}`)
+      assert.ok(
+        Number.isFinite(r.score) && r.score >= 0 && r.score <= 100,
+        `${skin}×${name} score=${r.score}`,
+      )
       assert.ok(Number.isFinite(r.deltaE00) && Number.isFinite(r.dHue))
       n++
     }

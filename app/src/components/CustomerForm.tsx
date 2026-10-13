@@ -93,13 +93,9 @@ interface CustomerFormProps {
   compact?: boolean
 }
 
-export default function CustomerForm({
-  initial,
-  onSubmit,
-  submitting,
-  compact,
-}: CustomerFormProps) {
-  const [profile, setProfile] = useState<CustomerProfile>({
+/** 档案 → 表单初始值(挂载时铺一次,晚到的档案再按同一口径铺一次) */
+function fromInitial(initial?: Partial<CustomerProfile>): CustomerProfile {
+  return {
     nickname: initial?.nickname || '',
     gender: initial?.gender,
     age_range: initial?.age_range,
@@ -117,10 +113,23 @@ export default function CustomerForm({
     frame_size: initial?.frame_size,
     line_quality: initial?.line_quality,
     scenario: initial?.scenario || '通勤',
-  })
+  }
+}
+
+export default function CustomerForm({
+  initial,
+  onSubmit,
+  submitting,
+  compact,
+}: CustomerFormProps) {
+  // 没动过表单 ⇒ 界面直接跟着档案走。档案是在"选择模式"那一屏异步读的,他点得快时表单已经挂载、
+  // 档案还没回;老代码只在挂载那一刻读一次 initial,晚到的那份就静默丢了(还得重新填一遍)。
+  // 派生而不是 useEffect:不用effect就没级联渲染,也不会覆盖他正在打的字
+  const [override, setOverride] = useState<CustomerProfile | null>(null)
+  const profile = override ?? fromInitial(initial)
 
   const update = (key: keyof CustomerProfile, value: CustomerProfile[keyof CustomerProfile]) => {
-    setProfile((prev) => ({ ...prev, [key]: value }))
+    setOverride({ ...profile, [key]: value })
   }
 
   const handleSubmit = () => {

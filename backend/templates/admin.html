@@ -366,22 +366,27 @@
 (function() {
   var token = localStorage.getItem('admin_token');
   if (!token) { window.location.replace('/admin/login'); return; }
+  function kickOut() {
+    localStorage.removeItem('admin_token');
+    window.location.replace('/admin/login');
+  }
   var xhr = new XMLHttpRequest();
   xhr.open('GET', '/api/auth/admin/verify', true);
   xhr.setRequestHeader('Authorization', 'Bearer ' + token);
   xhr.timeout = 5000;
+  // 只有服务端明确回 200 + valid:false 才作废登录态。
+  // 旧代码不看 xhr.status，任何返回都往 try/catch 里塞：接口被 15 分钟总闸掐了(429)、
+  // 后端 5xx、请求超时、网络断开，responseText 都不是那个形状 ⇒ catch 里照样清 token，
+  // 把密码压根没输错的管理员一脚踢回登录页，看着就像"账号有问题"。
   xhr.onreadystatechange = function() {
     if (xhr.readyState !== 4) return;
-    try {
-      var d = JSON.parse(xhr.responseText);
-      if (!d.success || !d.data || !d.data.valid) {
-        localStorage.removeItem('admin_token');
-        window.location.replace('/admin/login');
-      }
-    } catch(e) {
-      localStorage.removeItem('admin_token');
-      window.location.replace('/admin/login');
+    if (xhr.status !== 200) {
+      if (xhr.status === 401 || xhr.status === 403) kickOut();
+      return;
     }
+    var d;
+    try { d = JSON.parse(xhr.responseText); } catch(e) { return; }
+    if (d && d.success && d.data && d.data.valid === false) kickOut();
   };
   xhr.send();
 })();

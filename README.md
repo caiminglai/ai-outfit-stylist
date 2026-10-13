@@ -12,8 +12,8 @@
 | 3D 渲染 | Three.js + MMDLoader(PMX/MMD) | 卡渲材质、自动旋转、模型轮播 |
 | 前端构建 | Vite(容器内生产 + 开发 HMR)、esbuild(本机中文路径备选) | 本机路径含中文时 Vite 在 TRAE VFS 下会崩,故留 `build-esbuild.cjs` 作本机备选;容器内路径为 ASCII,Dockerfile 用 `npx vite build`;`app/dist` 不进 Git,每次构建镜像时在容器内重新生成 |
 | 后端 | Node.js ≥18 + Express 4 + better-sqlite3 | 同步 API,单服务提供 API + 静态文件 |
-| 数据库 | SQLite(WAL 模式,28 张表) | 零配置,首次启动自动建表 + 导入种子数据 |
-| 规则引擎 | 三表结构(规则组/条件/动作) | 预筛 4 字段(性别/场景/模式/类别)+ 31 类条件字段(本机 `DISTINCT field` 实测) |
+| 数据库 | SQLite(WAL 模式,31 张表) | 零配置,首次启动自动建表 + 导入种子数据 |
+| 规则引擎 | 三表结构(规则组/条件/动作) | 预筛 4 字段(性别/场景/模式/类别)+ 33 类条件字段(本机 `DISTINCT field` 实测) |
 | 外部服务 | 阿里云 DashScope(仅虚拟试穿调用) | 可选,缺 Key 时原样返回人物图并标记为降级;面容分析不调外部服务,直接返回 501 让顾客在表单里选;星座文案为本地模板 |
 | 部署 | Docker Compose + Caddy | 本机与服务器共用一份 `docker-compose.yml`(服务名 `style-ai`);服务器 Debian 12 + Docker 已于 2026-09-20 上线,Caddy 自动申请/续期 Let's Encrypt 证书;旧栈 Nginx + PM2 已作废.三站共用的服务器口径见编排仓库的 `SERVER-OPS.md`（站外，本机 `E:\website\compose\SERVER-OPS.md`） |
 
@@ -67,8 +67,7 @@
 │   │   ├── photos.js / analysis.js / tryon.js        # 上传/面容/试穿
 │   │   ├── clothing.js / weather.js / horoscope.js   # 服装识别/天气/星座
 │   │   └── history.js
-│   ├── services/                     # 服务层(14 个)
-│   ├── services/                     # 服务层(14 个)
+│   ├── services/                     # 服务层(20 个)
 │   │   ├── recommendEngine.js        # 推荐引擎(规则匹配 + 旧版兼容)
 │   │   ├── ruleExplainer.js          # 把规则条件翻成中文(可解释性)
 │   │   ├── ruleFeedback.js           # 用户对规则的评好/差评计数
@@ -86,9 +85,9 @@
 │   │   ├── auth.js / logger.js / upload.js
 │   │   ├── rateLimit.js              # 未被引用(限流实际用 npm 包 express-rate-limit,见 server.js)
 │   ├── db/
-│   │   ├── styleai.db                # SQLite 库文件(容器运行期会写它 ⇒ 已移出 Git 跟踪、*.db 已 gitignore;整目录挂载,勿单文件挂载)
+│   │   ├── styleai.db                # SQLite 库文件(容器运行期会写它 ⇒ 仍按 `.gitignore` 白名单进 Git，权威口径见 `compose/CONVENTIONS.md` §4：存档层 Git 为准、被应用写的表覆盖层以服务器为准;整目录挂载,勿单文件挂载)
 │   │   ├── init.js                   # 自动建表 + 种子数据 + 管理员 + 清理过期会话
-│   │   ├── schema.sql                # 表结构(28 个 CREATE TABLE)⚠️不等于线上表结构:库是增量演进的,新列别写这里
+│   │   ├── schema.sql                # 表结构(31 个 CREATE TABLE)⚠️不等于线上表结构:库是增量演进的,新列别写这里
 │   │   ├── seed.js                   # 种子数据导入(读 seed/ 下两份 JSON)
 │   │   ├── seed/rules.json           # 规则组/条件/动作数据源
 │   │   ├── seed/inventory.json       # 库存分类/商品数据源
@@ -98,7 +97,7 @@
 │   ├── templates/                    # 管理后台 HTML(admin.html / admin-login.html)
 │   ├── static/                       # 管理后台 CSS/JS
 │   ├── uploads/                      # 用户上传(gitignore)
-│   ├── test/                         # 单元测试 5 个文件(node --test,非 vitest):推荐引擎/审美规则/今天这身/档案增强
+│   ├── test/                         # 单元测试 27 个文件(node --test,非 vitest):推荐引擎/审美规则/今天这身/档案增强
 │   ├── scripts/                      # 一次性维护脚本(非运行时必需)
 │   │   ├── flatten-textures.js       # 纹理文件扁平化
 │   │   ├── rebuild-db.js             # 重建数据库 + 更新模型字段

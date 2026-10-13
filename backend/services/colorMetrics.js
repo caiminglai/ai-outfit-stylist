@@ -23,6 +23,8 @@
 // ------------------------------------------------------------
 // 1. 换算：sRGB hex → CIELAB(D65)
 // ------------------------------------------------------------
+const { ownValue } = require('../utils/common')
+
 const _srgbToLin = (c) => {
   c /= 255
   return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4)
@@ -109,7 +111,7 @@ function deltaE00(l1, l2) {
     Math.pow(dLp / SL, 2) +
       Math.pow(dCp / SC, 2) +
       Math.pow(dHp / SH, 2) +
-      RT * (dCp / SC) * (dHp / SH)
+      RT * (dCp / SC) * (dHp / SH),
   )
 }
 
@@ -227,7 +229,10 @@ function resolveColor(input) {
     const hex = `#${s.replace(/^#/, '').toUpperCase()}` // 统一大写，前端拿到的是稳定值
     return hexToLab(hex) ? hex : null
   }
-  if (COLOR_NAME_HEX[s]) return COLOR_NAME_HEX[s]
+  // 词表只认自己的色名：写成 COLOR_NAME_HEX[s] 时 s='constructor' 会返回 Object 构造器，
+  // 这个"颜色"再往下走就成了函数而不是 '#RRGGBB'，最后 hexToLab 认不出、分数无声消失
+  const named = ownValue(COLOR_NAME_HEX, s)
+  if (named) return named
   const hit = _firstColorNameIn(s)
   return hit ? COLOR_NAME_HEX[hit] : null
 }
@@ -251,7 +256,7 @@ const SKIN_TONE_ANCHORS = {
 function skinToneToLab(skinTone) {
   if (!skinTone) return null
   const s = String(skinTone).trim()
-  const direct = SKIN_TONE_ANCHORS[s]
+  const direct = ownValue(SKIN_TONE_ANCHORS, s)
   if (direct) return direct
   const hit = Object.keys(SKIN_TONE_ANCHORS).find((k) => s.includes(k))
   if (hit) return SKIN_TONE_ANCHORS[hit]
@@ -266,7 +271,7 @@ const _clamp01 = (v) => Math.max(0, Math.min(1, v))
 /** 从"珊瑚粉、蜜桃色针织衫"这类结论文本里认第一个出现的色名（认不出返回 null） */
 const _matchedColorName = (input) => {
   const s = String(input || '')
-  if (COLOR_NAME_HEX[s]) return s
+  if (ownValue(COLOR_NAME_HEX, s)) return s
   return _firstColorNameIn(s)
 }
 const WEIGHTS = { hueContrast: 0.45, brighten: 0.35, chromaMatch: 0.2 } // 手拍，未回归（C 档）
@@ -278,14 +283,22 @@ const WEIGHTS = { hueContrast: 0.45, brighten: 0.35, chromaMatch: 0.2 } // 手�
  *          任一侧色取不到 ⇒ 返回 null（不编造分数）
  */
 function colorFit(skin, topColor) {
-  const rawSkin =
-    skin && typeof skin === 'object' && 'L' in skin ? skin : skinToneToLab(skin)
+  const rawSkin = skin && typeof skin === 'object' && 'L' in skin ? skin : skinToneToLab(skin)
   const topHex = resolveColor(topColor)
   if (!rawSkin || !topHex) return null
   // 肤色锚点表只存 L/a/b，这里补齐 C，避免 NaN 一路传到 score
   const skinLab = { ...rawSkin, C: Math.hypot(rawSkin.a, rawSkin.b) }
-  const topLab = typeof topHex === 'string' ? hexToLab(topHex) : topHex
-  if (!topLab || !isFinite(topLab.L)) return null
+  // top 侧同一条闸门补齐：resolveColor 目前只回 '#RRGGBB'，但函数签名允许调用方
+  // 直接把 {L,a,b} 递进来（top 侧走 hexToLab 之外的那条分支）。缺 C 一律按 a/b 现算，
+  // 算不出来就整条不给分，并且**不改调用方传进来的对象**——
+  // SKIN_TONE_ANCHORS 是模块级共享常量，往里写 C 会污染后续每一次取色。
+  // 10-13 实测：改前 colorFit({L:60}, '#FFCC00') 回 score=NaN（a/b 缺 ⇒ skinLab.C NaN），
+  // 改后回 null；传 '#FFCC00' 正常出分 26、chroma 85.3。
+  const topLabRaw = typeof topHex === 'string' ? hexToLab(topHex) : topHex
+  if (!topLabRaw || !isFinite(topLabRaw.L)) return null
+  const topC = isFinite(topLabRaw.C) ? topLabRaw.C : Math.hypot(topLabRaw.a, topLabRaw.b)
+  if (!isFinite(topC) || !isFinite(skinLab.L) || !isFinite(skinLab.C)) return null
+  const topLab = { ...topLabRaw, C: topC }
 
   const dE = deltaE00(skinLab, topLab)
   const dHue = hueGap(skinLab, topLab)
@@ -295,7 +308,10 @@ function colorFit(skin, topColor) {
   const brighten = _clamp01((skinLab.L - topLab.L) / 40) // Zhang 2025：衣装越暗，脸越显白
   const chromaMatch = 1 - _clamp01(Math.abs(dC) / 60)
   const score = Math.round(
-    100 * (WEIGHTS.hueContrast * hueContrast + WEIGHTS.brighten * brighten + WEIGHTS.chromaMatch * chromaMatch)
+    100 *
+      (WEIGHTS.hueContrast * hueContrast +
+        WEIGHTS.brighten * brighten +
+        WEIGHTS.chromaMatch * chromaMatch),
   )
   return {
     score,
@@ -309,8 +325,22 @@ function colorFit(skin, topColor) {
     dL: Math.round(dL * 10) / 10,
     brighten: Math.round(brighten * 100),
     chroma: Math.round(topLab.C * 10) / 10,
-    evidence: 'A 色差公式(GB/T 7921 / ISO-CIE 11664) + B 色相对比与明度效应(Schloss & Palmer 2011 图形色-背景那句 + Zhang 2025, DOI 见文件头) + C 合成分权重(手拍)',
+    evidence:
+      'A 色差公式(GB/T 7921 / ISO-CIE 11664) + B 色相对比与明度效应(Schloss & Palmer 2011 图形色-背景那句 + Zhang 2025, DOI 见文件头) + C 合成分权重(手拍)',
   }
+}
+
+/**
+ * 面积权重取值口径：正数照用，**0 也照用**（0 表示这件不占面积，比如只当存在不算比重的配饰），
+ * 只有 NaN／负数／没填才回退成 1（等同"未知，按平均一件算"）。
+ * 原来两处写成 `Number(p.area) || 1`，`||` 会把合法的 0 一起吞掉 ⇒ 明确写 0 的单品
+ * 被当成和平均一件一样重，加权结果和调用方给的面积比例相反。
+ * @param {*} v parts 里的 area 原值
+ * @returns {number}
+ */
+function areaWeight(v) {
+  const n = Number(v)
+  return Number.isFinite(n) && n >= 0 ? n : 1
 }
 
 /**
@@ -319,18 +349,29 @@ function colorFit(skin, topColor) {
  * @returns {null|{score:number, pairs:Array}}
  */
 function outfitHarmony(parts) {
-  const list = (parts || []).map((p) => ({ ...p, lab: hexToLab(resolveColor(p.color)) })).filter((p) => p.lab)
+  const list = (parts || [])
+    .map((p) => ({ ...p, lab: hexToLab(resolveColor(p.color)), weight: areaWeight(p.area) }))
+    .filter((p) => p.lab)
   if (list.length < 2) return null
-  const total = list.reduce((s, p) => s + (Number(p.area) || 1), 0)
+  let total = list.reduce((s, p) => s + p.weight, 0)
+  // 全 0（调用方把所有件都标成不占面积）⇒ 归一化会 0/0，退化成等权
+  if (!(total > 0)) {
+    list.forEach((p) => {
+      p.weight = 1
+    })
+    total = list.length
+  }
   const pairs = []
   let num = 0
   let den = 0
+  let simSum = 0
   for (let i = 0; i < list.length; i++) {
     for (let j = i + 1; j < list.length; j++) {
-      const w = ((Number(list[i].area) || 1) / total) * ((Number(list[j].area) || 1) / total)
+      const w = (list[i].weight / total) * (list[j].weight / total)
       const sim = 100 - Math.min(deltaE00(list[i].lab, list[j].lab), 100)
       num += w * sim
       den += w
+      simSum += sim
       pairs.push({
         a: list[i].label,
         b: list[j].label,
@@ -338,7 +379,9 @@ function outfitHarmony(parts) {
       })
     }
   }
-  return { score: Math.round((num / den) * 10) / 10, pairs }
+  // 只剩一对且它权重为 0（另一件面积是 0）时 den 也是 0 ⇒ 同样按等权均值出分，不给 NaN
+  const value = den > 0 ? num / den : simSum / pairs.length
+  return { score: Math.round(value * 10) / 10, pairs }
 }
 
 module.exports = {

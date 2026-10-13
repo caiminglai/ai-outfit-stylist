@@ -7,7 +7,14 @@
 const express = require('express')
 const db = require('../db/init')
 const { sendSuccess, sendError } = require('../utils/response')
-const { getSessionId, parseJsonField, getCurrentSeason } = require('../utils/common')
+const {
+  getSessionId,
+  parseJsonField,
+  getCurrentSeason,
+  asText,
+  ownValue,
+  tally,
+} = require('../utils/common')
 const { loadArchive, loadTags, mergeWithArchive } = require('../services/profileArchive')
 const { pickMetal, buildFullLook } = require('../services/fullLookAdvisor')
 
@@ -38,6 +45,31 @@ function withinExpiry(item) {
 /** 有没有真算过保质期：没填开封日期时不能声称"在保质期内" */
 function expiryLabel(item) {
   return item.opened_date && item.expiry_months ? '在保质期内' : '开封日期未填，按在用处理'
+}
+
+/**
+ * 状态这一列"没标注"要不要算在柜内：算。
+ * 库里默认值是 在用／良好，但 PUT 传 null 会把这列清空（本轮 wardrobe/cosmetic/accessory
+ * 的 PUT 语义统一成 undefined=不动、null=清空），老数据本身也有空值。
+ * 原来三柜跨柜处一律写 `condition = '良好'`／`= '在用'`，清空状态的单品在跨柜推荐、
+ * 季节提醒和健康分里当场消失，而柜子列表里它还看得见 ⇒ 同一个人在同一时刻
+ * 两个接口给出的件数对不上。明确标成 已淘汰／破损 的照旧排除。
+ * @param {object} row 柜子行
+ * @param {string} goodLabel 该柜的"正常"取值（化妆品＝在用，配饰＝良好）
+ */
+function conditionUsable(row, goodLabel) {
+  const c = row && row.condition
+  return c == null || c === '' || c === goodLabel
+}
+
+/**
+ * 整柜件数：给"柜里有几件"这类汇总用，不带状态/品牌筛选。
+ * table 只允许调用方传字面量（本文件里就 user_cosmetics / user_accessories 两处），
+ * 它拼进 SQL 不走绑定参数，绝不能改成接外部输入。
+ */
+function countCabinet(table, sessionId) {
+  const row = db.prepare(`SELECT COUNT(*) AS n FROM ${table} WHERE session_id = ?`).get(sessionId)
+  return row ? row.n : 0
 }
 
 // 个人版表单存的是英文 value（app/src/components/CabinetConstants.ts），门店版和手填存中文。
@@ -71,7 +103,9 @@ const CATEGORY_CN = {
 
 function cnCategory(raw) {
   const v = String(raw || '')
-  return CATEGORY_CN[v] || v
+  // 分类名是用户自己填的：写成 CATEGORY_CN[v] 时 v='constructor' 会拿到 Object 构造器，
+  // `|| v` 挡不住（函数是 truthy），于是中文名这个字段在 JSON 里整个消失
+  return ownValue(CATEGORY_CN, v) || v
 }
 
 /**
@@ -93,21 +127,58 @@ function scoreItem(dims) {
 /** 跨柜联动推荐：针对场合统一推荐衣橱+化妆品+配饰 */
 function crossCabinetRecommend(profile, sessionId, occasion, tags = {}) {
   // 查询三柜数据
+  // 明确标成"已淘汰"的衣服不再当候选（化妆／配饰两柜本来就只取在用与良好，
+  // 衣橱这一格原先什么都不滤 ⇒ 淘汰掉的上衣还会被拼进"今天这身"）
   const wardrobeItems = db
-    .prepare('SELECT * FROM user_wardrobe WHERE session_id = ? ORDER BY created_at DESC LIMIT 20')
+    .prepare(
+      `SELECT * FROM user_wardrobe
+       WHERE session_id = ? AND (\`condition\` IS NULL OR \`condition\` != '已淘汰')
+       ORDER BY created_at DESC LIMIT 20`,
+    )
     .all(sessionId)
 
+  // `condition` 没标注的必须照样参与跨柜（与本文件"空值不参与筛选"那条口径、
+  // accessory.js 缺口分析的写法同一把尺）：库里默认值是 在用／良好，但 PUT 传 null
+  // 能把这列清空，老数据也有空值。原来写成 `= '在用'`／`= '良好'`，清空后的单品
+  // 在跨柜推荐与衣橱健康分里当场人间蒸发，而柜子列表里它还看得见。
+  // 只放宽"空值"这一档：明确标成 已淘汰／破损 的照旧排除。
   const cosmetics = db
     .prepare(
-      'SELECT * FROM user_cosmetics WHERE session_id = ? AND `condition` = ? ORDER BY created_at DESC LIMIT 20',
+      `SELECT * FROM user_cosmetics
+       WHERE session_id = ? AND (\`condition\` IS NULL OR \`condition\` = '' OR \`condition\` = ?)
+       ORDER BY created_at DESC LIMIT 20`,
     )
     .all(sessionId, '在用')
 
   const accessories = db
     .prepare(
-      'SELECT * FROM user_accessories WHERE session_id = ? AND `condition` = ? ORDER BY created_at DESC LIMIT 20',
+      `SELECT * FROM user_accessories
+       WHERE session_id = ? AND (\`condition\` IS NULL OR \`condition\` = '' OR \`condition\` = ?)
+       ORDER BY created_at DESC LIMIT 20`,
     )
     .all(sessionId, '良好')
+
+  // 上面三条是"候选池"，各带 LIMIT 20；summary 要报的是"柜里有几件"，必须另数真数。
+  // 原来 summary 直接取池子行数 ⇒ 衣橱超过 20 件，前台 CrossCabinetMatch 那三格就永远显示 20。
+  // 筛选条件与各自池子同一口径（已淘汰排除、空状态照算；状态值一边走绑定参数一边走字面量，取值相同）。
+  const wardrobeCabinetCount = db
+    .prepare(
+      `SELECT COUNT(*) AS n FROM user_wardrobe
+       WHERE session_id = ? AND (\`condition\` IS NULL OR \`condition\` != '已淘汰')`,
+    )
+    .get(sessionId)
+  const cosmeticCabinetCount = db
+    .prepare(
+      `SELECT COUNT(*) AS n FROM user_cosmetics
+       WHERE session_id = ? AND (\`condition\` IS NULL OR \`condition\` = '' OR \`condition\` = ?)`,
+    )
+    .get(sessionId, '在用')
+  const accessoryCabinetCount = db
+    .prepare(
+      `SELECT COUNT(*) AS n FROM user_accessories
+       WHERE session_id = ? AND (\`condition\` IS NULL OR \`condition\` = '' OR \`condition\` = ?)`,
+    )
+    .get(sessionId, '良好')
 
   // 匹配逻辑：根据肤色/脸型/场合筛选。没填就是不知道——空值不参与筛选，也不拿假默认值把单品筛掉
   const skinTone = profile.skin_tone || ''
@@ -128,7 +199,7 @@ function crossCabinetRecommend(profile, sessionId, occasion, tags = {}) {
     运动: '运动活力',
     婚礼: '正式典雅',
   }
-  const occasionStyle = occasionStyles[occ] || '百搭风格'
+  const occasionStyle = ownValue(occasionStyles, occ) || '百搭风格'
 
   // 衣橱推荐
   const outfitMatched = wardrobeItems
@@ -280,9 +351,9 @@ function crossCabinetRecommend(profile, sessionId, occasion, tags = {}) {
     metal: metal.metal ? { color: metal.metal, basis: metal.basis } : null,
     cross_tips: crossTips,
     summary: {
-      wardrobe_count: wardrobeItems.length,
-      cosmetic_count: cosmetics.length,
-      accessory_count: accessories.length,
+      wardrobe_count: wardrobeCabinetCount ? wardrobeCabinetCount.n : 0,
+      cosmetic_count: cosmeticCabinetCount ? cosmeticCabinetCount.n : 0,
+      accessory_count: accessoryCabinetCount ? accessoryCabinetCount.n : 0,
     },
   }
 }
@@ -294,11 +365,18 @@ function seasonalReminder(profile, sessionId) {
 
   // 衣橱季节检查
   const wardrobeItems = db
-    .prepare('SELECT * FROM user_wardrobe WHERE session_id = ?')
+    .prepare(
+      `SELECT * FROM user_wardrobe
+       WHERE session_id = ? AND (\`condition\` IS NULL OR \`condition\` != '已淘汰')`,
+    )
     .all(sessionId)
+  // 没打季节标签的单品按"四季都能穿"计（与 crossCabinetRecommend 里那条
+  // `seasons.length === 0 || seasons.includes(currentSeason)` 同一把尺）。
+  // 原先这里只认 seasons.includes ⇒ 一个标签都没打的人，柜里 20 件衣服也算"当季 0 件"，
+  // 开口就是"建议补充当季单品"，而同一时刻跨柜推荐正拿这些衣服给他出一套。
   const seasonItems = wardrobeItems.filter((item) => {
     const seasons = parseJsonField(item.season_tags) || []
-    return seasons.includes(currentSeason)
+    return seasons.length === 0 || seasons.includes(currentSeason)
   })
 
   if (seasonItems.length < 5) {
@@ -309,9 +387,12 @@ function seasonalReminder(profile, sessionId) {
     })
   }
 
-  // 化妆品保质期检查
+  // 化妆品保质期检查（空 condition 与 crossCabinetRecommend 同一把尺：没标注也算在柜）
   const cosmetics = db
-    .prepare('SELECT * FROM user_cosmetics WHERE session_id = ? AND `condition` = ?')
+    .prepare(
+      `SELECT * FROM user_cosmetics
+       WHERE session_id = ? AND (\`condition\` IS NULL OR \`condition\` = '' OR \`condition\` = ?)`,
+    )
     .all(sessionId, '在用')
   const now = new Date()
   let expiringCount = 0
@@ -332,11 +413,11 @@ function seasonalReminder(profile, sessionId) {
     })
   }
 
-  // 配饰状态检查
+  // 配饰状态检查（空状态按在柜对待，见 conditionUsable 的口径）
   const accessories = db
     .prepare('SELECT * FROM user_accessories WHERE session_id = ?')
     .all(sessionId)
-  const goodAccessories = accessories.filter((a) => a.condition === '良好')
+  const goodAccessories = accessories.filter((a) => conditionUsable(a, '良好'))
   if (goodAccessories.length < 3) {
     reminders.push({
       cabinet: 'accessory',
@@ -407,7 +488,8 @@ function analyzeBrandPreference(sessionId) {
   const accessoryBrands = accessories.map((r) => ({ brand: r.brand, count: r.count }))
 
   // 衣橱按 category 作为"品牌"统计
-  const wardrobeBrandMap = {}
+  // （键是用户自填的分类名 ⇒ 空原型对象，见 tally() 的注释）
+  const wardrobeBrandMap = tally()
   for (const item of wardrobeItems) {
     const cat = item.category || '未分类'
     wardrobeBrandMap[cat] = (wardrobeBrandMap[cat] || 0) + 1
@@ -432,9 +514,30 @@ function analyzeBrandPreference(sessionId) {
   // 风格偏好（从衣橱标签中提取）
   const styleSet = new Set()
   for (const item of wardrobeItems) {
-    const tags = parseJsonField(item.style_tags) || parseJsonField(item.season_tags) || []
-    if (Array.isArray(tags)) tags.forEach((t) => styleSet.add(t))
+    // 原来写成 `parseJsonField(style_tags) || parseJsonField(season_tags) || []`：
+    // utils/common.js:108 的 parseJsonField 契约是**保证返回数组**（空值回 []），
+    // 而空数组在 JS 里是 truthy ⇒ `||` 的右边永远轮不到，season_tags 这条兜底 100% 是死码；
+    // 只填了季节标签的单品，一条风格都进不了 styleSet。
+    // 现在按"哪侧真有内容"取，两侧都空才给空数组。
+    const styleTags = parseJsonField(item.style_tags)
+    const seasonTags = parseJsonField(item.season_tags)
+    const tags =
+      Array.isArray(styleTags) && styleTags.length > 0
+        ? styleTags
+        : Array.isArray(seasonTags) && seasonTags.length > 0
+          ? seasonTags
+          : []
+    tags.forEach((t) => styleSet.add(t))
   }
+
+  // 价格区间：上面那两条 cosmetics/accessories 是 GROUP BY brand 的聚合行，没有 price 列，
+  // 直接喂给 priceRange 只会得到 {0,0,0,0}（库里明明有价）⇒ 单独取整行的 price 再统计
+  const cosmeticPrices = db
+    .prepare('SELECT price FROM user_cosmetics WHERE session_id = ?')
+    .all(sessionId)
+  const accessoryPrices = db
+    .prepare('SELECT price FROM user_accessories WHERE session_id = ?')
+    .all(sessionId)
 
   return {
     wardrobe_brands: wardrobeBrands,
@@ -442,14 +545,17 @@ function analyzeBrandPreference(sessionId) {
     accessory_brands: accessoryBrands,
     price_range: {
       wardrobe: priceRange(wardrobeItems, 'price'),
-      cosmetic: priceRange(cosmetics, 'price'),
-      accessory: priceRange(accessories, 'price'),
+      cosmetic: priceRange(cosmeticPrices, 'price'),
+      accessory: priceRange(accessoryPrices, 'price'),
     },
     style_preferences: [...styleSet].slice(0, 10),
+    // cosmetic/accessory 那两格原来把 GROUP BY brand ... LIMIT 10 的每组条数再加总，
+    // 等于"前 10 个品牌的件数"冒充"柜里件数"：品牌种类超过 10 个就少报。
+    // 总数改成整柜 COUNT(*)，品牌榜单本身仍只看前 10。
     summary: {
       wardrobe_count: wardrobeItems.length,
-      cosmetic_count: cosmetics.reduce((sum, r) => sum + r.count, 0),
-      accessory_count: accessories.reduce((sum, r) => sum + r.count, 0),
+      cosmetic_count: countCabinet('user_cosmetics', sessionId),
+      accessory_count: countCabinet('user_accessories', sessionId),
     },
   }
 }
@@ -470,10 +576,14 @@ function cabinetHealthCheck(profile, sessionId) {
   let accessoryScore = 0
 
   // 衣橱评分：基于数量和多样性
+  // 已淘汰的衣服不能再撑起"品类齐"：化妆/配饰两柜的评分本来就把 已淘汰 剔出去算，
+  // 唯独衣橱这一格原先整柜一起算 ⇒ 一个人把 3 件上衣全标成已淘汰，上衣这一类还算有，
+  // missing_essentials 也就永远不报缺。总数(total)仍按柜内实际条数给，口径写在注释里。
+  const usableWardrobe = wardrobeItems.filter((i) => i.condition !== '已淘汰')
   const wardrobeCategories = [
-    ...new Set(wardrobeItems.map((i) => cnCategory(i.category)).filter(Boolean)),
+    ...new Set(usableWardrobe.map((i) => cnCategory(i.category)).filter(Boolean)),
   ]
-  wardrobeScore = Math.min(100, wardrobeItems.length * 5 + wardrobeCategories.length * 10)
+  wardrobeScore = Math.min(100, usableWardrobe.length * 5 + wardrobeCategories.length * 10)
 
   // 化妆品评分：基于数量和保质期
   const now = new Date()
@@ -481,8 +591,10 @@ function cabinetHealthCheck(profile, sessionId) {
   const cosmeticCategories = new Set()
   const expiredItems = []
   for (const item of cosmetics) {
-    cosmeticCategories.add(cnCategory(item.category))
+    // 原来 cosmeticCategories.add 写在 已淘汰 的 continue 之前 ⇒ 淘汰掉的那件仍然
+    // 给"品类"和 missing_essentials 计数，等于用一件已经不用的东西证明你不缺它
     if (item.condition === '已淘汰') continue
+    cosmeticCategories.add(cnCategory(item.category))
     if (item.opened_date && item.expiry_months) {
       const opened = new Date(item.opened_date)
       const expiryDate = new Date(opened)
@@ -499,7 +611,7 @@ function cabinetHealthCheck(profile, sessionId) {
   cosmeticScore = Math.min(100, safeCount * 10 + (cosmetics.length > 0 ? 30 : 0))
 
   // 配饰评分：基于数量和状态
-  const goodAccessories = accessories.filter((a) => a.condition === '良好')
+  const goodAccessories = accessories.filter((a) => conditionUsable(a, '良好'))
   const accessoryCategories = [
     ...new Set(accessories.map((a) => cnCategory(a.category)).filter(Boolean)),
   ]
@@ -578,7 +690,9 @@ router.get('/recommend', (req, res) => {
       const value = req.query[key]
       if (typeof value === 'string' && value.trim()) given[key] = value.trim()
     }
-    const occasion = req.query.occasion || null
+    // 场合只取文本：?occasion[]=约会 这种数组查询串过去会原样带进打分和响应，
+    // 前端拿到的 occasion 就成了数组而不是字符串
+    const occasion = asText(req.query.occasion) || null
 
     // 长期档案打底：只填过一次的肤色/体型/眼型不用每次重填
     const userId = req.user ? req.user.id : null

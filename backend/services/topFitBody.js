@@ -12,8 +12,9 @@
  * 一律不进公式（08 §9.2：分类会把分类自身的信度问题带进分数，还会让人以为系统在"判定体型"）。
  *
  * 六根轴与出处（DOI 均已于 10-08 逐条走 api.crossref.org 自核，记录在 docs/依据/06 §8）：
- *  1) shoulder 肩线宽窄   —— 人的肩宽÷身高 vs 参考带；上衣往肩上加体量还是收
- *       Pazhoohi 2023（肩腰比越大越被偏好，方向）B；Pazhoohi/Singh 的刻度不照抄
+ *  1) shoulder 肩线宽窄   —— 肩宽÷身高、肩宽÷腰围两条离带距离 + 梨形信号；上衣往肩上加体量还是收
+ *       Pazhoohi 2023 的 SHR＝肩围÷臀围（本机原文 p2 逐字：the circumference of the shoulders relative to the hips）；
+ *       我们量不到"肩围"⇒ 肩宽÷腰围是站内自建比值，只借它方向（p1 摘要：larger SHRs were considered more attractive）
  *  2) waist 腰线强调      —— 人的胸腰差/臀腰差；上衣收腰还是直筒（顺着身体走，不给不存在腰线硬收）
  *  3) ease 松量           —— Liu/Fan/Lau 2006, PMS 103(1):253-264, DOI 10.2466/pms.103.1.253-264
  *       （9 名中国男性 × 5 档白 T：BMI<20 穿大码被评更胖、20–28 更瘦、>28 两端都罚；最小感知尺寸在胸围松量 2–3 cm）B
@@ -35,6 +36,8 @@
 
 const { resolveColor, hexToLab } = require('./colorMetrics')
 const { TOP_WORDS, OUTER_WORDS, hitsWord } = require('./fullLookAdvisor')
+const { ownValue } = require('../utils/common')
+const { bmiValue } = require('./bmi')
 
 // ------------------------------------------------------------
 // 0. 通用小工具
@@ -59,6 +62,12 @@ const BODY_REF = {
   // 这里 21~24 只当**站内偏差原点**（与 computeShoulderRatio 的切点同一套），不当"合格线"。
   shoulder_band: [21, 24],
   shoulder_span: 3, // 离带 3 个百分点算这一维拉满
+  // 肩宽÷净腰围（站内自建比值；Pazhoohi 2023 那个 SHR 是肩围÷臀围，量不到肩围 ⇒ 不是同一个量）。
+  // 原点带由本机 GB/T 10000-2023 表2/表7 的 P50 目视抄读值推：男 391/763=0.512、女 354/690=0.513；
+  // 腰围挪到 P10~P90（男 678~905、女 622~788）比值落在 0.43~0.58 ⇒ 取 0.44~0.57 当站内原点带。
+  // ⚠️ 人群分布推出来的原点，不是判据（10 §2h ⑦ 那条口径）；span 是 C 档手拍。
+  shr_band: [0.44, 0.57],
+  shr_span: 0.1,
   // 腿长（髋骨到脚跟）÷身高。中枢≈0.54 是二手转录，切点 ±0.02 是产品假设（08 §2.3）
   leg_band: [0.52, 0.56],
   leg_span: 0.04,
@@ -101,7 +110,8 @@ const AXIS_CN = {
 }
 
 const AXIS_TIER = {
-  shoulder: 'B 方向(Pazhoohi 2023 肩腰比) + C 参考带与刻度(手拍)',
+  shoulder:
+    'B 方向(Pazhoohi 2023；该文的 SHR＝肩围÷臀围，本机原文 p2) + C 参考带与刻度(肩宽÷身高、肩宽÷腰围都是站内比值,手拍)',
   waist: 'B− 腰臀比与腰线可读性(Singh 系结论被 BMI 混淆) + C 刻度(手拍)',
   ease: 'B 方向与区间(Liu 2006 n=9 中国男性 / Sakata 2020 n=20) + C 松量代理(版型档换算)',
   length: 'B− 腿身比结论未闭合(Kiire 2016 vs Versluys 2018) + C 刻度(手拍)',
@@ -128,13 +138,16 @@ function bodyDeviation(person) {
   const hip = meas(p.hip)
   const leg = meas(p.leg_length)
 
-  const bmi = height > 0 && weight > 0 ? weight / ((height / 100) * (height / 100)) : 0
-  const shoulderRatio = shoulder > 0 && height > 0 ? (shoulder / height) * 100 : 0
-  const legRatio = leg > 0 && height > 0 ? leg / height : 0
+  // 算式只在 services/bmi.js 有一份（本层内部沿用 0 当"没量"哨兵，146/212 两处判据都按它写）；带切点的三根比值先按对外精度取整再比（同 bmi.js、同条纹闸门）
+  const bmi = r1(bmiValue(height, weight) ?? 0)
+  const shoulderRatio = shoulder > 0 && height > 0 ? r1((shoulder / height) * 100) : 0
+  const shr = shoulder > 0 && waist > 0 ? shoulder / waist : 0
+  const legRatio = leg > 0 && height > 0 ? r2(leg / height) : 0
 
   const measure = {
     bmi: bmi > 0 ? r1(bmi) : null,
     shoulder_ratio: shoulderRatio > 0 ? r1(shoulderRatio) : null,
+    shoulder_waist_ratio: shr > 0 ? r2(shr) : null,
     leg_ratio: legRatio > 0 ? r2(legRatio) : null,
     bust_waist_diff: bust > 0 && waist > 0 ? r1(bust - waist) : null,
     hip_waist_diff: hip > 0 && waist > 0 ? r1(hip - waist) : null,
@@ -148,20 +161,27 @@ function bodyDeviation(person) {
   const shoulderSignals = []
   if (shoulderRatio > 0) {
     const [lo, hi] = BODY_REF.shoulder_band
-    if (shoulderRatio < lo) shoulderSignals.push(clamp01((lo - shoulderRatio) / BODY_REF.shoulder_span))
+    if (shoulderRatio < lo)
+      shoulderSignals.push(clamp01((lo - shoulderRatio) / BODY_REF.shoulder_span))
     else if (shoulderRatio > hi)
       shoulderSignals.push(-clamp01((shoulderRatio - hi) / BODY_REF.shoulder_span))
     else notes.push(`肩宽比 ${r1(shoulderRatio)} 在参考带内 ⇒ 这维不推拉，上衣往任一侧修都扣分`)
   }
+  // 肩宽÷腰围：比值低＝肩相对腰偏窄 ⇒ 想加肩（借 Pazhoohi 2023 的方向）；比值高只是"别再给肩加体量"，
+  // 文献没说大到出带还要收，所以高带那一侧的方向是产品选择、不是文献结论（写进 note，别糊过去）
+  if (shr > 0) {
+    const [lo, hi] = BODY_REF.shr_band
+    if (shr < lo) shoulderSignals.push(clamp01((lo - shr) / BODY_REF.shr_span))
+    else if (shr > hi) shoulderSignals.push(-clamp01((shr - hi) / BODY_REF.shr_span))
+    else notes.push(`肩宽÷腰围 ${r2(shr)} 在参考带内 ⇒ SHR 这条不推拉`)
+  }
   if (bust > 0 && hip > 0) {
     // 臀围明显大于胸围 ⇒ 上身偏轻，往"加肩"方向修；反向只在明显超出参考带时才收
     const diff = hip - bust
-    shoulderSignals.push(diff > 0 ? clamp01(diff / 8) : clamp((diff / 12), -1, 0))
+    shoulderSignals.push(diff > 0 ? clamp01(diff / 8) : clamp(diff / 12, -1, 0))
   }
   if (shoulderSignals.length > 0) {
-    want.shoulder = r2(
-      shoulderSignals.reduce((s, v) => s + v, 0) / shoulderSignals.length,
-    )
+    want.shoulder = r2(shoulderSignals.reduce((s, v) => s + v, 0) / shoulderSignals.length)
   }
 
   // —— 腰线：顺着身体走。腰线本来就明显 ⇒ 收腰加分；平直 ⇒ 硬收腰扣分 ——
@@ -195,15 +215,18 @@ function bodyDeviation(person) {
     if (bmi >= BODY_REF.bmi_heavy) want.volume = -1
     else if (bmi >= BODY_REF.bmi_normal)
       want.volume = r2(-clamp01(0.3 + (bmi - BODY_REF.bmi_normal) / 4))
-    else if (bmi < BODY_REF.bmi_thin)
-      want.volume = r2(clamp01((BODY_REF.bmi_thin - bmi) / 4))
+    else if (bmi < BODY_REF.bmi_thin) want.volume = r2(clamp01((BODY_REF.bmi_thin - bmi) / 4))
     else want.volume = 0
     // 条纹轴用同一个方向：想显窄 ⇒ 配对任务里横条更瘦（Koutsoumpis 2026），只当低权重修正
     want.pattern = want.volume
     // 但这方向文献自己就互相冲突（Thompson&Mikellidou 2011 / Swami&Harris 2012 /
     // Ashida 2013 / Chen&Peng 2026 结论不一），只敢在 BMI<25 时当低权重修正用；
-    // 闸门关上时把 want.pattern 直接置 null ⇒ 界面不会挂着"条纹想收"却一维都没算它
-    if (bmi >= BODY_REF.stripe_bmi_max) {
+    // 闸门关上时把 want.pattern 直接置 null ⇒ 界面不会挂着"条纹想收"却一维都没算它。
+    // 闸门读的必须是 measure.bmi（已经 r1 取整那份），不能读原始 bmi：打分侧按 measure.bmi
+    // 判 stripeOn，两边用两个数时原始 bmi 落在 24.95≤bmi<25.00（r1 把它抬成 25.0）会出现
+    // "闸门放行、打分关掉" ⇒ want.pattern 留着而 pattern 这一维零贡献，
+    // 正是这句话承诺不会出现的状态。
+    if (measure.bmi >= BODY_REF.stripe_bmi_max) {
       want.pattern = null
       notes.push(
         `BMI ${r1(bmi)} ≥ ${BODY_REF.stripe_bmi_max} ⇒ 条纹方向这条不采用（文献结论互相冲突，只在偏瘦区间当低权重修正）`,
@@ -354,8 +377,11 @@ function describeTop(top) {
   // 松量：衣柜真字段优先，其次文本词典（词典那条要写清是猜的）
   let ease = null
   const fitField = isRow ? String(top.fit_style || '').trim() : ''
-  if (FIT_STYLE_EASE[fitField] != null) {
-    ease = FIT_STYLE_EASE[fitField]
+  // 这三张表按衣橱里的自填文本查：'constructor' 之类原型键在普通查法下回一个函数，
+  // `!= null` 挡不住它，于是松量变成"约 function Object(){...} cm"、肩线分成 NaN
+  const fitEase = ownValue(FIT_STYLE_EASE, fitField)
+  if (fitEase != null) {
+    ease = fitEase
     signals.push(`版型=${fitField}→松量约${ease}cm`)
   } else {
     const e = hit(LEXICON.ease)
@@ -366,18 +392,20 @@ function describeTop(top) {
   }
 
   const bulkField = isRow ? String(top.fabric_weight || '').trim() : ''
-  const bulk = FABRIC_BULK[bulkField]
+  const bulk = ownValue(FABRIC_BULK, bulkField)
 
   const shoulder = hit(LEXICON.shoulder)
   const waist = hit(LEXICON.waist)
   const length = hit(LEXICON.length)
 
   // 肩线：词典 + 面料厚薄（两个都认得到就取均值）
+  const bulkShoulder = ownValue(FABRIC_SHOULDER, bulkField)
   let shoulderVal = shoulder
-  if (shoulderVal != null && bulk != null) shoulderVal = r2(0.7 * shoulderVal + 0.3 * FABRIC_SHOULDER[bulkField])
-  else if (shoulderVal == null && bulk != null) shoulderVal = FABRIC_SHOULDER[bulkField]
+  if (shoulderVal != null && bulk != null) shoulderVal = r2(0.7 * shoulderVal + 0.3 * bulkShoulder)
+  else if (shoulderVal == null && bulk != null) shoulderVal = bulkShoulder
   if (shoulder != null) signals.push(`肩线${shoulder > 0 ? '+' : '-'}${Math.abs(shoulder)}`)
-  if (bulk != null) signals.push(`面料${bulkField}${bulk > 0 ? '加' : bulk < 0 ? '减' : '不动'}体量`)
+  if (bulk != null)
+    signals.push(`面料${bulkField}${bulk > 0 ? '加' : bulk < 0 ? '减' : '不动'}体量`)
 
   // 观感体量：色的明暗（resolveColor 认得出色名/hex 才有）+ 面料厚薄
   let lightnessDir = null
@@ -395,7 +423,8 @@ function describeTop(top) {
   if (lightnessDir != null && bulk != null) volume = r2(0.65 * lightnessDir + 0.35 * bulk)
   else if (lightnessDir != null) volume = lightnessDir
   else if (bulk != null) volume = bulk
-  if (lightnessDir != null) signals.push(`色明度方向${lightnessDir > 0 ? '+' : '-'}${Math.abs(lightnessDir)}`)
+  if (lightnessDir != null)
+    signals.push(`色明度方向${lightnessDir > 0 ? '+' : '-'}${Math.abs(lightnessDir)}`)
 
   // 条纹方向：只在文本里确实出现"条"字时才有这一维
   let pattern = null
@@ -464,17 +493,37 @@ function topFitBody(person, top, dev) {
     })
   }
 
-  add('shoulder', d.want.shoulder, g.shoulder, d.want.shoulder != null && g.shoulder != null ? align(d.want.shoulder, g.shoulder) : null)
-  add('waist', d.want.waist, g.waist, d.want.waist != null && g.waist != null ? align(d.want.waist, g.waist) : null)
+  add(
+    'shoulder',
+    d.want.shoulder,
+    g.shoulder,
+    d.want.shoulder != null && g.shoulder != null ? align(d.want.shoulder, g.shoulder) : null,
+  )
+  add(
+    'waist',
+    d.want.waist,
+    g.waist,
+    d.want.waist != null && g.waist != null ? align(d.want.waist, g.waist) : null,
+  )
   add(
     'length',
     d.want.length,
     g.length,
     d.want.length != null && g.length != null ? align(d.want.length, g.length) : null,
   )
-  add('volume', d.want.volume, g.volume, d.want.volume != null && g.volume != null ? align(d.want.volume, g.volume) : null)
+  add(
+    'volume',
+    d.want.volume,
+    g.volume,
+    d.want.volume != null && g.volume != null ? align(d.want.volume, g.volume) : null,
+  )
 
-  add('ease', d.ease_window ? d.ease_window.join('~') + 'cm' : null, g.ease, easeScore(d.ease_window, g.ease))
+  add(
+    'ease',
+    d.ease_window ? d.ease_window.join('~') + 'cm' : null,
+    g.ease,
+    easeScore(d.ease_window, g.ease),
+  )
 
   // 条纹：BMI 闸门（Ashida 2013）+ 最低权重；want 为 null（BMI 没算出来）时也直接没有这一维
   const bmi = d.measure.bmi
@@ -483,8 +532,17 @@ function topFitBody(person, top, dev) {
     'pattern',
     d.want.pattern,
     g.pattern,
-    d.want.pattern != null && g.pattern != null && stripeOn ? align(d.want.pattern, g.pattern) : null,
-    stripeOn ? undefined : { gated: bmi != null ? `BMI ${bmi}≥${BODY_REF.stripe_bmi_max} ⇒ 按 Ashida 2013 关掉` : 'BMI 没算出来 ⇒ 不启用' },
+    d.want.pattern != null && g.pattern != null && stripeOn
+      ? align(d.want.pattern, g.pattern)
+      : null,
+    stripeOn
+      ? undefined
+      : {
+          gated:
+            bmi != null
+              ? `BMI ${bmi}≥${BODY_REF.stripe_bmi_max} ⇒ 按 Ashida 2013 关掉`
+              : 'BMI 没算出来 ⇒ 不启用',
+        },
   )
 
   const present = axes.filter((a) => a.score != null)
@@ -502,7 +560,7 @@ function topFitBody(person, top, dev) {
     person: { measure: d.measure, want: d.want, ease_window: d.ease_window, notes: d.notes },
     top: g,
     evidence:
-      'B 方向(松量×BMI Liu 2006 / 深色收缩 Koutsoumpis 2021 / 肩腰比 Pazhoohi 2023) + C 刻度与权重(手拍,标定中)；' +
+      'B 方向(松量×BMI Liu 2006 / 深色收缩 Koutsoumpis 2021 / 肩宽侧更被偏好 Pazhoohi 2023) + C 刻度与权重(手拍,标定中)；' +
       '这一分只量"上衣往哪修、修多少"和这个人的偏差对不对得上，不是"好不好看"的判定',
   }
 }
@@ -526,7 +584,13 @@ function rankTopsByBody(person, tops) {
       item: t,
       label: res.top.label,
       score: res.score,
-      axes: res.axes.map((a) => ({ key: a.key, name_cn: a.name_cn, score: a.score, person: a.person, garment: a.garment })),
+      axes: res.axes.map((a) => ({
+        key: a.key,
+        name_cn: a.name_cn,
+        score: a.score,
+        person: a.person,
+        garment: a.garment,
+      })),
       axes_present: res.axes_present,
       axes_missing: res.axes_missing,
     })

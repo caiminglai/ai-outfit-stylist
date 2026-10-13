@@ -16,6 +16,7 @@
 
 const db = require('../db/init')
 const { FIELD_LABELS } = require('./ruleExplainer')
+const { asText, asNumber, ownValue, stripIdentityFields } = require('../utils/common')
 
 /**
  * 身体数字项的中文名（只用于给用户看）
@@ -96,6 +97,11 @@ function isFilled(val) {
   if (val === null || val === undefined) return false
   if (typeof val === 'string') return val.trim() !== ''
   if (typeof val === 'number') return !isNaN(val)
+  // 空数组＝多选/标签类字段被清空：这算"没填"，让档案里的旧值接管。
+  // 原来直接 return true ⇒ 表单把某项清成 [] 时档案值既不采用也不覆盖，
+  // 这一维本次推荐就当它不存在（而注释承诺的是"空即未填"）。
+  if (Array.isArray(val)) return val.length > 0
+  if (typeof val === 'object') return Object.keys(val).length > 0
   return true
 }
 
@@ -235,9 +241,24 @@ function describeProfile(profile) {
     .filter(([, val]) => isFilled(val))
     .map(([key, val]) => ({
       key,
-      label: ARCHIVE_LABELS[key] || FIELD_LABELS[key] || key,
-      value: typeof val === 'number' ? String(val) : String(val).slice(0, 200),
+      // ownValue：key 来自用户自己存的表单草稿，'constructor'/'toString' 这类
+      // 原型键直接查表会拿到函数，序列化进响应后前端读到的 label 是空的。
+      label: ownValue(ARCHIVE_LABELS, key) || ownValue(FIELD_LABELS, key) || key,
+      // 只认文本/数字两类值：草稿里混进来的对象、数组 String() 出来是
+      // "[object Object]"，直接当档案值展示给用户看就是错的。
+      value:
+        typeof val === 'number'
+          ? String(val)
+          : Array.isArray(val)
+            ? val
+                .map((v) => String(v))
+                .join('、')
+                .slice(0, 200)
+            : typeof val === 'object'
+              ? ''
+              : String(val).slice(0, 200),
     }))
+    .filter((f) => f.value !== '')
 }
 
 /**
@@ -279,7 +300,7 @@ function mergeWithArchive(profile, archive) {
     if (cleared.has(key)) continue
     if (!isFilled(merged[key])) {
       merged[key] = val
-      used.push(ARCHIVE_LABELS[key] || FIELD_LABELS[key] || key)
+      used.push(ownValue(ARCHIVE_LABELS, key) || ownValue(FIELD_LABELS, key) || key)
     }
   }
   return { profile: merged, used }
@@ -313,10 +334,7 @@ function saveArchive(userId, profile) {
   if (columns.length > 0 || clearCols.length > 0) {
     const existing = db.prepare('SELECT * FROM body_metrics WHERE user_id = ?').get(userId)
     if (existing) {
-      const sets = [
-        ...columns.map((c) => `${c} = ?`),
-        ...clearCols.map((c) => `${c} = NULL`),
-      ]
+      const sets = [...columns.map((c) => `${c} = ?`), ...clearCols.map((c) => `${c} = NULL`)]
       db.prepare(
         `UPDATE body_metrics SET ${sets.join(', ')},
          updated_at = datetime('now') WHERE user_id = ?`,
@@ -369,20 +387,33 @@ function saveArchive(userId, profile) {
  * @returns {number|null} 日志 id
  */
 function writeRecommendationLog({ sessionId, userId, storeId, mode, profile, result }) {
+  const sid = asText(sessionId)
+  // session_id 这列是 NOT NULL（db/schema.sql:285）。没有归属就写不进去：
+  // 与其绑一个 null 让 INSERT 抛错、再被下面的 catch 吞成"一行都没落"，
+  // 不如在这里把原因说清楚。补一个兜底串更不行——预填是按 session_id 查的，
+  // 大家共用同一个兜底值就等于把别人的画像回给下一个人。
+  if (!sid) {
+    console.warn('[档案] 推荐样本未落库：缺少 session_id，无法归属到人')
+    return null
+  }
   try {
-    const snapshot = { ...(profile || {}) }
-    delete snapshot.nickname
-    delete snapshot.phone
+    // 身份字段递归剥：原来只 delete 顶层 nickname/phone 两笔，而门店端实测把手机号写成
+    // contact.phone 这种嵌套位置（10-13 现量：input_snapshot 里能直接搜到 11 位号码）。
+    // 样本是要长期留存、还会拿去训练/复盘的，"不留身份"这句承诺必须覆盖整份快照。
+    const snapshot = stripIdentityFields(profile || {})
+    // 四个标量列都过 asText/asNumber：调用方传进来的 session_id、mode 是从请求体一路带上来的，
+    // 是对象/数组时绑参当场抛错，被下面的 catch 吞成"写样本失败"⇒ 客户端照样回 200，
+    // 但 recommendation_logs 一行都不落，前端"上次填的表单"预填从此悄悄失效。
     const info = db
       .prepare(
         `INSERT INTO recommendation_logs (session_id, user_id, store_id, mode, input_snapshot, result)
          VALUES (?, ?, ?, ?, ?, ?)`,
       )
       .run(
-        sessionId || null,
-        userId || null,
-        storeId || null,
-        mode,
+        sid,
+        asNumber(userId, null),
+        asNumber(storeId, null),
+        asText(mode) || 'store',
         JSON.stringify(snapshot),
         JSON.stringify(result || {}),
       )

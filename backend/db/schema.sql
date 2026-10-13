@@ -19,7 +19,12 @@ CREATE TABLE IF NOT EXISTS users (
   phone TEXT UNIQUE,
   nickname TEXT,
   gender TEXT,
-  created_at TEXT DEFAULT (datetime('now'))
+  created_at TEXT DEFAULT (datetime('now')),
+  -- 会话滚动活跃时间（middleware/auth.js 认证命中时刷新，每小时最多写一次）。
+  -- 本轮只记录、不执法：老库/新建行此列为 NULL＝从没观测过活跃，
+  -- 不能据此把在线用户踢下线；等积累出可靠的活跃分布后，下一轮再按
+  -- "长时间无活跃即失效"收紧（对比 customer_sessions.expires_at 的口径）。
+  last_active_at TEXT
 );
 CREATE INDEX IF NOT EXISTS ix_users_session_id ON users(session_id);
 
@@ -491,6 +496,15 @@ CREATE INDEX IF NOT EXISTS ix_face_features_user_id ON face_features(user_id);
 CREATE INDEX IF NOT EXISTS ix_face_features_photo_id ON face_features(photo_id);
 CREATE INDEX IF NOT EXISTS ix_recommendations_user_id ON recommendations(user_id);
 CREATE INDEX IF NOT EXISTS ix_tryon_results_user_id ON tryon_results(user_id);
+-- 下面五张每用户表此前只有 session_id 索引，而「删除我的全部数据」
+-- (routes/analysis.js) 与后台按人取数都走 WHERE user_id = ? ⇒ 全表扫描。
+-- recommendation_logs(user_id) 不在这里建：那列是老库补列迁移加的，索引在 db/init.js 补列后建；
+-- profile_drafts 不用建：user_id 本身就是 INTEGER PRIMARY KEY（rowid 别名，天然唯一索引）。
+CREATE INDEX IF NOT EXISTS ix_user_wardrobe_user_id ON user_wardrobe(user_id);
+CREATE INDEX IF NOT EXISTS ix_wardrobe_outfits_user_id ON wardrobe_outfits(user_id);
+CREATE INDEX IF NOT EXISTS ix_shopping_wishlist_user_id ON shopping_wishlist(user_id);
+CREATE INDEX IF NOT EXISTS ix_user_cosmetics_user_id ON user_cosmetics(user_id);
+CREATE INDEX IF NOT EXISTS ix_user_accessories_user_id ON user_accessories(user_id);
 
 -- ============================================================
 -- 收款凭证（用户上传付款截图 -> 后台人工审核放行）

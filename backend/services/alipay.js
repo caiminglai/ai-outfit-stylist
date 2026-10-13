@@ -15,6 +15,7 @@
  */
 const fs = require('fs')
 const crypto = require('crypto')
+const { beijingTimestamp, beijingStamp } = require('../utils/beijingTime')
 
 const GATEWAY = 'https://openapi.alipay.com/gateway.do'
 const PRODUCT_CODE = 'FAST_INSTANT_TRADE_PAY'
@@ -91,12 +92,14 @@ function verifyAlipay(content, signature) {
     .verify(getAlipayPublicKey(), signature, 'base64')
 }
 
-/** 支付宝要求的 timestamp 格式是本地时间 yyyy-MM-dd HH:mm:ss */
-function alipayTimestamp() {
-  const d = new Date()
-  const p = (n, w = 2) => String(n).padStart(w, '0')
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`
-}
+/**
+ * 支付宝要求的 timestamp 格式是"北京时间" yyyy-MM-dd HH:mm:ss。
+ * 原来这里用 d.getFullYear()/getHours()——那读的是**容器时区**，而容器没设 TZ（实测 `date` 回 UTC）
+ * ⇒ 签出去的 timestamp 恒早 8 小时，症状是"一上线就下单失败"，
+ *   而本机（东八区）跑着完全看不出问题。偏差的容忍窗口官方文档没在本机原文里，不写具体秒数。
+ * 口径统一放 utils/beijingTime.js，容器时区怎么设都不影响。
+ */
+const alipayTimestamp = (at = new Date()) => beijingTimestamp(at)
 
 function baseParams(method) {
   return {
@@ -170,6 +173,10 @@ async function callApi(method, bizContent) {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=utf-8' },
     body: formEncode(params),
+    // 查单挂在这里就没有 timeout：openapi 握手成功但不回时这个 promise 永远不 settle，
+    // 而 routes/payment.js 查单分支的 catch 等的是 reject ⇒ 前端那一格一直转圈，
+    // 钱其实已经扣了也不会被确认。与 wechatPay.request 同一把尺子。
+    signal: AbortSignal.timeout(10000),
   })
   const text = await res.text()
   const nodeKey = `${method.replace(/\./g, '_')}_response`
@@ -256,10 +263,9 @@ function handleNotify(params) {
 
 /** 商户订单号：A3 + 14 位时间 + 8 位随机，24 字符。前缀与微信的 S3 区分渠道 */
 function newOutTradeNo() {
-  const d = new Date()
-  const p = (n, w = 2) => String(n).padStart(w, '0')
-  const stamp = `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`
-  return `A3${stamp}${crypto.randomBytes(4).toString('hex').toUpperCase()}`
+  // 单号里的 14 位时间也走东八区：容器 UTC 会让"今天下的单"在 00:00~07:59 挂上前一天的日期，
+  // 对账按单号前缀筛某一天时就会漏
+  return `A3${beijingStamp()}${crypto.randomBytes(4).toString('hex').toUpperCase()}`
 }
 
 /** 分 -> 支付宝要求的两位小数字符串元 */
@@ -283,7 +289,8 @@ module.exports = {
   newOutTradeNo,
   fenToYuan,
   yuanToFen,
-  // 下面两个是给离线断言用的，业务代码不要直接调
+  // 下面三个是给离线断言用的，业务代码不要直接调
   buildSignContent,
   sign,
+  alipayTimestamp,
 }

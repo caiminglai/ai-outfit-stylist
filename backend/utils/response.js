@@ -39,6 +39,12 @@ function sendError(res, message = '操作失败', status = 400, code = null) {
     else if (status === 404) code = 'NOT_FOUND'
     else if (status === 409) code = 'CONFLICT'
     else if (status === 429) code = 'RATE_LIMITED'
+    // 502/503/504 是"别人没响应"，不是"我们炸了"。原来 `status >= 500` 一把抓，
+    // 天气那条线分出的 502（上游少回字段）/503（上游连不上）到了这里全被打成
+    // INTERNAL_ERROR；前端 api.ts 会把 code 括在文案后面显示，顾客看到的是"服务器坏了"。
+    else if (status === 502) code = 'BAD_GATEWAY'
+    else if (status === 503) code = 'SERVICE_UNAVAILABLE'
+    else if (status === 504) code = 'GATEWAY_TIMEOUT'
     else if (status >= 500) code = 'INTERNAL_ERROR'
     else code = 'ERROR'
   }

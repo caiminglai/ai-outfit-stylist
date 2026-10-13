@@ -33,6 +33,31 @@ function plain(s?: string | null): string {
   return s.replace(/\*\*(.+?)\*\*/g, '$1').replace(/`([^`]*)`/g, '$1')
 }
 
+/**
+ * 色片上的文字取黑还是白。
+ * 之前只认 '#ffffff' 和 '#F5EFE0' 两个写死值判深色字,而 colorMetrics 的调色板里
+ * 米白 #F2EDE3、雪粉 #F6D7DA、鹅黄 #F5E1A4、浅灰 #D3D6D8…一片浅色都漏判 ⇒ 白字压白底,
+ * 上衣颜色那一行等于看不见。改成按感知亮度现算,浅底一律深色字。
+ */
+function chipTextColor(hex?: string): string {
+  const h = (hex || '').trim().replace('#', '')
+  if (h.length !== 6 && h.length !== 3) return '#fff'
+  const full =
+    h.length === 3
+      ? h
+          .split('')
+          .map((x) => x + x)
+          .join('')
+      : h
+  const r = parseInt(full.slice(0, 2), 16)
+  const g = parseInt(full.slice(2, 4), 16)
+  const b = parseInt(full.slice(4, 6), 16)
+  if ([r, g, b].some((v) => Number.isNaN(v))) return '#fff'
+  // ITU-R BT.601 感知亮度,0~255;>150 视作浅底
+  const luma = (0.299 * r + 0.587 * g + 0.114 * b) / 255
+  return luma > 0.6 ? '#333' : '#fff'
+}
+
 /** 目标值里的数组写成 90~95，单值直接跟单位 */
 function targetText(target: TopSpecFitCheck['target']): string {
   if (!target) return ''
@@ -77,7 +102,9 @@ function FitCheckRow({ c }: { c: TopSpecFitCheck }) {
 function FitBlock({ fit }: { fit: TopSpecFit }) {
   return (
     <div style={{ marginBottom: '12px' }}>
-      <div style={{ fontSize: '12px', color: 'var(--muted)', margin: '0 0 6px' }}>第 0 层 · 合身（尺寸）</div>
+      <div style={{ fontSize: '12px', color: 'var(--muted)', margin: '0 0 6px' }}>
+        第 0 层 · 合身（尺寸）
+      </div>
 
       {fit.present ? (
         <>
@@ -89,30 +116,38 @@ function FitBlock({ fit }: { fit: TopSpecFit }) {
               </span>
             ) : null}
             {fit.size_scope === 'near' ? (
-              <span style={{ ...muted, color: 'var(--orange, #d98b2b)' }} title={plain(fit.size_scope_note)}>
+              <span
+                style={{ ...muted, color: 'var(--orange, #d98b2b)' }}
+                title={plain(fit.size_scope_note)}
+              >
                 超出常用档系，就近换算
               </span>
             ) : null}
           </div>
           <div style={{ ...muted, margin: '4px 0 8px' }}>
             号＝身高就近 5cm 一档，型＝净胸围就近 4cm 一档，体型按胸腰差分 Y/A/B/C
-            {fit.drop_cm ? `（你的胸腰差 ${fit.drop_cm}cm）` : ''}。
+            {fit.drop_cm != null ? `（你的胸腰差 ${fit.drop_cm}cm）` : ''}。
             {fit.drop_reason ? `体型位没出：${plain(fit.drop_reason)}` : ''}
             {fit.bmi_band ? (
               <>
                 <br />
                 胖瘦程度是另一条轴：BMI {fit.bmi} ⇒ {fit.bmi_band.cn}
-                <span title={plain(fit.bmi_band_note)}>（GB/T 31901-2024 表 A.2，2026-12-01 才实施 ⇒ 现为内部口径）</span>
+                <span title={plain(fit.bmi_band_note)}>
+                  （GB/T 31901-2024 表 A.2，2026-12-01 才实施 ⇒ 现为内部口径）
+                </span>
               </>
             ) : null}
           </div>
 
-          {fit.checks?.map((c) => <FitCheckRow key={c.key} c={c} />)}
+          {fit.checks?.map((c) => (
+            <FitCheckRow key={c.key} c={c} />
+          ))}
 
           <div style={muted}>
-            号型只管尺寸分档，本身不含"好不好看"的判据（GB/T 1335 就没写）；测量口径依据 GB/T 16160-2017（腰围取腰际线）与
-            GB/T 5703-2023 §6.2.7（肩宽取两肩峰点直线距离，家用软尺只当参考值），分档值与常用档系表列已对本机国标 PDF
-            逐字核对。Y/A/B/C 后面的中文是我们的描述词，不是国标用词。
+            号型只管尺寸分档，本身不含"好不好看"的判据（GB/T 1335 就没写）；测量口径依据 GB/T
+            16160-2017（腰围取腰际线）与 GB/T 5703-2023
+            §6.2.7（肩宽取两肩峰点直线距离，家用软尺只当参考值），分档值与常用档系表列已对本机国标
+            PDF 逐字核对。Y/A/B/C 后面的中文是我们的描述词，不是国标用词。
           </div>
         </>
       ) : (
@@ -147,14 +182,18 @@ export default function TopSpecCard({ spec }: { spec: TopSpec }) {
   return (
     <div className="glass-card p-3 mt-3 animate-fade-in">
       <div className="section-title">📐 上衣该怎么选</div>
-      <div style={{ color: 'var(--muted)', fontSize: '12px', lineHeight: 1.6, marginBottom: '8px' }}>
-        只看你的身材尺寸和肤色，不读你的衣橱，也不建议你买什么。
-        顺序是定的：<strong>先合身，再修形，最后颜色</strong>。前两层结论可以相反，那是两件事。
+      <div
+        style={{ color: 'var(--muted)', fontSize: '12px', lineHeight: 1.6, marginBottom: '8px' }}
+      >
+        只看你的身材尺寸和肤色，不读你的衣橱，也不建议你买什么。 顺序是定的：
+        <strong>先合身，再修形，最后颜色</strong>。前两层结论可以相反，那是两件事。
       </div>
 
       {spec.fit ? <FitBlock fit={spec.fit} /> : null}
 
-      <div style={{ fontSize: '12px', color: 'var(--muted)', margin: '0 0 6px' }}>第 1 层 · 修形（往哪修）</div>
+      <div style={{ fontSize: '12px', color: 'var(--muted)', margin: '0 0 6px' }}>
+        第 1 层 · 修形（往哪修）
+      </div>
       {spec.axes.map((axis) => (
         <div key={axis.key} style={{ marginBottom: '10px' }}>
           <div style={{ display: 'flex', gap: '6px', alignItems: 'baseline', flexWrap: 'wrap' }}>
@@ -169,12 +208,21 @@ export default function TopSpecCard({ spec }: { spec: TopSpec }) {
             <span style={{ fontSize: '13px' }}>{axis.label}</span>
           </div>
           {axis.prefer.length > 0 && (
-            <div style={{ fontSize: '12px', lineHeight: 1.7, color: 'var(--text)', marginLeft: '8px' }}>
+            <div
+              style={{ fontSize: '12px', lineHeight: 1.7, color: 'var(--text)', marginLeft: '8px' }}
+            >
               要选：{axis.prefer.map(plain).join('；')}
             </div>
           )}
           {axis.avoid.length > 0 && (
-            <div style={{ fontSize: '12px', lineHeight: 1.7, color: 'var(--muted)', marginLeft: '8px' }}>
+            <div
+              style={{
+                fontSize: '12px',
+                lineHeight: 1.7,
+                color: 'var(--muted)',
+                marginLeft: '8px',
+              }}
+            >
               要避：{axis.avoid.map(plain).join('；')}
             </div>
           )}
@@ -193,7 +241,9 @@ export default function TopSpecCard({ spec }: { spec: TopSpec }) {
         </div>
       ))}
 
-      <div style={{ fontSize: '12px', color: 'var(--muted)', margin: '10px 0 6px' }}>第 2 层 · 颜色</div>
+      <div style={{ fontSize: '12px', color: 'var(--muted)', margin: '10px 0 6px' }}>
+        第 2 层 · 颜色
+      </div>
       {colour.present ? (
         <div style={{ marginBottom: '10px' }}>
           <div style={{ fontSize: '13px', marginBottom: '6px' }}>
@@ -212,7 +262,7 @@ export default function TopSpecCard({ spec }: { spec: TopSpec }) {
                   padding: '2px 8px',
                   borderRadius: '10px',
                   background: c.hex,
-                  color: (c.hex || '').toLowerCase() === '#ffffff' || (c.hex || '') === '#F5EFE0' ? '#333' : '#fff',
+                  color: chipTextColor(c.hex),
                 }}
               >
                 {c.name} {c.score}
@@ -224,8 +274,12 @@ export default function TopSpecCard({ spec }: { spec: TopSpec }) {
               跟你肤色最分不开的：{colour.avoid.map((c) => c.name).join('、')}
             </div>
           )}
-          <div style={{ fontSize: '11px', color: 'var(--muted)', marginTop: '4px' }}>{plain(colour.note)}</div>
-          <div style={{ fontSize: '11px', color: 'var(--muted)' }}>依据档位：{plain(colour.tier)}</div>
+          <div style={{ fontSize: '11px', color: 'var(--muted)', marginTop: '4px' }}>
+            {plain(colour.note)}
+          </div>
+          <div style={{ fontSize: '11px', color: 'var(--muted)' }}>
+            依据档位：{plain(colour.tier)}
+          </div>
         </div>
       ) : (
         <div style={{ fontSize: '12px', color: 'var(--muted)', marginBottom: '8px' }}>
@@ -234,7 +288,9 @@ export default function TopSpecCard({ spec }: { spec: TopSpec }) {
       )}
 
       {spec.missing.length > 0 && (
-        <div style={{ fontSize: '12px', color: 'var(--muted)', lineHeight: 1.7, marginBottom: '8px' }}>
+        <div
+          style={{ fontSize: '12px', color: 'var(--muted)', lineHeight: 1.7, marginBottom: '8px' }}
+        >
           这几维没给建议：
           {spec.missing.map((m) => `${m.name_cn}（${plain(m.reason)}）`).join('；')}
         </div>

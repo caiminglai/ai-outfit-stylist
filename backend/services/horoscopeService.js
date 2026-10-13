@@ -4,6 +4,8 @@
  */
 
 const crypto = require('crypto')
+const { ownValue } = require('../utils/common')
+const { beijingDateStr } = require('../utils/beijingTime')
 
 // ============================================================
 // 星座中文映射
@@ -654,11 +656,16 @@ function getDailyHoroscope(zodiacSign) {
   }
   zodiacSign = zodiacSign.toLowerCase().trim()
 
-  if (!ZODIAC_NAMES[zodiacSign]) {
+  // ?zodiac=constructor 会顺着原型链拿到 Object 的构造器： truthy ⇒ 一路当"合法星座"
+  // 走下去，最后 zodiac_name 是个函数、JSON 序列化时整段消失。只认表里自己的 12 个键
+  const zodiacName = ownValue(ZODIAC_NAMES, zodiacSign)
+  if (!zodiacName) {
     throw new Error(`无效的星座标识: ${zodiacSign}`)
   }
 
-  const todayStr = new Date().toISOString().split('T')[0]
+  // "今天"必须按北京时间算：容器没设 TZ ⇒ toISOString() 是 UTC 日期，
+  // 北京时间 00:00~07:59 之间会取到**昨天**，缓存键跟着错，早上看到的"今日运势"是昨天那份
+  const todayStr = beijingDateStr()
   const cacheKey = `${zodiacSign}_${todayStr}`
 
   const cached = cache.get(cacheKey)
@@ -667,7 +674,7 @@ function getDailyHoroscope(zodiacSign) {
   const baseData = getBaseHoroscope(zodiacSign, todayStr)
   const result = {
     zodiac_sign: zodiacSign,
-    zodiac_name: ZODIAC_NAMES[zodiacSign],
+    zodiac_name: zodiacName,
     mood: baseData.mood,
     lucky_color: baseData.lucky_color,
     lucky_number: baseData.lucky_number,
@@ -680,6 +687,13 @@ function getDailyHoroscope(zodiacSign) {
   // if (llmApiKey) { ... }
 
   cache.set(cacheKey, result)
+  // 键里带日期 ⇒ 昨天的 12 条永远不会再被命中，却一条条留在 Map 里，
+  // 服务不重启就一直涨（每天 +12）。写完后把非今天日期的条目清掉，稳态只剩当天这 12 条。
+  if (cache.size > ZODIAC_SIGNS.length) {
+    for (const key of cache.keys()) {
+      if (!key.endsWith('_' + todayStr)) cache.delete(key)
+    }
+  }
   return result
 }
 
@@ -704,10 +718,17 @@ function getAllHoroscopesBrief() {
 
 /** 根据日期 hash 从内置数据库选择运势文案 */
 function getBaseHoroscope(zodiacSign, todayStr) {
-  const dataList = HOROSCOPE_DATA[zodiacSign] || HOROSCOPE_DATA.aries
+  // 同上：只认表里自己的星座键，原型链上的键当没命中、落回 aries
+  const dataList = ownValue(HOROSCOPE_DATA, zodiacSign) || HOROSCOPE_DATA.aries
   const hashStr = `${zodiacSign}_${todayStr}`
-  const hashVal = parseInt(crypto.createHash('md5').update(hashStr).digest('hex'), 16)
-  const index = hashVal % dataList.length
+  // md5 是 32 位十六进制 ≈ 1e38，远大于 2^53：`parseInt(hex, 16)` 会静默丢掉低位，
+  // 于是 `hashVal % length` 算出来的不是这份 md5 的余数。12 星座 × 400 天 = 4800 组实测，
+  // 4116 组（85.75%）与 BigInt 精确取模不同。分布上看不出更偏（各桶 400 天里 47~77 次，
+  // 截前 8 位后 44~73 次，同量级），所以这不是"用户看到的一直是同一句文案"那种事故，
+  // 而是这条算式从一开始就没在算它声称的东西。
+  // 只截前 8 位十六进制（<2^32，双精度逐位精确）再取模，同一日期依旧稳定复现。
+  const hashHex = crypto.createHash('md5').update(hashStr).digest('hex')
+  const index = parseInt(hashHex.slice(0, 8), 16) % dataList.length
   return dataList[index]
 }
 

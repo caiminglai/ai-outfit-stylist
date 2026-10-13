@@ -34,6 +34,7 @@ import {
   getPriorityLabel,
   btnStyle,
 } from './CabinetConstants'
+import { UPLOAD_ACCEPT, checkPickedImage } from '../lib/imagePick'
 
 /* ================================================================
    Props
@@ -65,15 +66,27 @@ const WARDROBE_FORM_DEFAULT = {
    兼容后端新旧两种 gap 数据格式
    ================================================================ */
 
+/**
+ * 缺口类型的中文兜底名。
+ * category_* 类缺口后端直接带 label(上衣/下装…),走 gap.label 那条;
+ * 季节、色彩这两类后端只给 type 不给 label,不映射的话胶囊 pill 会把英文码
+ * 原样(如 'season_gap')糊在界面上——正是"后端说了、前端没读"这一族。
+ */
+const WARDROBE_GAP_TYPE_LABELS: Record<string, string> = {
+  season_gap: '季节缺口',
+  color_diversity: '色彩多样性',
+}
+
 /** 规范化缺口数据，兼容后端新旧格式 */
 function normalizeGapResult(raw: Record<string, unknown> | null): WardrobeGapResult | null {
   if (!raw || typeof raw !== 'object') return null
 
-  // 新格式：gaps 已是 [{ type, priority, message, suggestions }]
+  // 新格式：gaps 已是 [{ type, label?, priority, message, suggestions }]
   // 旧格式：gaps 是 [{ category, label, reason, ... }]
   const rawGaps = Array.isArray(raw.gaps) ? raw.gaps : []
   const gaps: WardrobeGap[] = rawGaps.map((g: Record<string, unknown>) => ({
-    type: (g.type as string) ?? (g.category as string) ?? (g.label as string) ?? '未知类型',
+    type: (g.type as string) ?? (g.category as string) ?? '未知类型',
+    label: (g.label as string) ?? undefined,
     priority: (g.priority as 'high' | 'medium' | 'low') ?? 'medium',
     message: (g.message as string) ?? (g.reason as string) ?? '',
     suggestions: Array.isArray(g.suggestions) ? (g.suggestions as string[]) : [],
@@ -117,6 +130,7 @@ function describeDeviation(dev: TopFitResult['person_deviation']): string {
   const measured: string[] = []
   if (dev.bmi != null) measured.push(`BMI ${dev.bmi}`)
   if (dev.shoulder_ratio != null) measured.push(`肩宽÷身高 ${dev.shoulder_ratio}%`)
+  if (dev.shoulder_waist_ratio != null) measured.push(`肩宽÷腰围 ${dev.shoulder_waist_ratio}`)
   if (dev.leg_ratio != null) measured.push(`腿身比 ${dev.leg_ratio}`)
   if (dev.bust_waist_diff != null) measured.push(`胸腰差 ${dev.bust_waist_diff}cm`)
   if (dev.hip_waist_diff != null) measured.push(`臀腰差 ${dev.hip_waist_diff}cm`)
@@ -132,7 +146,9 @@ function describeDeviation(dev: TopFitResult['person_deviation']): string {
   }
 
   const head = measured.length ? measured.join(' / ') : '没量到尺寸'
-  const tail = wants.length ? `想往哪修：${wants.join(' / ')}` : '没量到能判的尺寸 ⇒ 只按能算的几维打分'
+  const tail = wants.length
+    ? `想往哪修：${wants.join(' / ')}`
+    : '没量到能判的尺寸 ⇒ 只按能算的几维打分'
   return `${head}；${tail}`
 }
 
@@ -162,6 +178,7 @@ export default function WardrobeTab({ profile, compact }: WardrobeTabProps) {
   /* 拍照上传 */
   const [showPhotoUpload, setShowPhotoUpload] = useState(true)
   const [photoUploading, setPhotoUploading] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
   const photoInputRef = useRef<HTMLInputElement>(null)
 
   /* ---------- 数据加载 ---------- */
@@ -209,39 +226,37 @@ export default function WardrobeTab({ profile, compact }: WardrobeTabProps) {
     setShowAdd(true)
   }
 
+  // POST 与 PUT 共用这一份打包：可空的列没填就发 null，不发 undefined。
+  // · PUT 的契约是「这个键不传＝这一列不动，传 null＝写成 NULL」(api.ts 的 PutPayload)。
+  //   原来空框被打包成 undefined ⇒ 键根本不在请求里，用户在修改框里删掉颜色/版型/标签点
+  //   保存，刷新回来老值一个都没少，看着就是"改了没生效"。
+  // · POST 那边同样安全：三条写口对 null 分别走 `data.xxx || null`、coerceExpiryField 的
+  //   null 分支、JSON 列的 `JSON.stringify(val || [])`，落库结果和"没给"一样。
+  const splitTags = (v: string) =>
+    v
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean)
   const buildPayload = () => ({
     name: form.name.trim(),
     category: form.category,
-    color: form.color.trim() || undefined,
-    fit_style: (form.fit_style || undefined) as WardrobeItem['fit_style'],
-    fabric_weight: (form.fabric_weight || undefined) as WardrobeItem['fabric_weight'],
-    style_tags: form.style_tags
-      ? form.style_tags
-          .split(',')
-          .map((s) => s.trim())
-          .filter(Boolean)
-      : undefined,
-    season_tags: form.season_tags
-      ? form.season_tags
-          .split(',')
-          .map((s) => s.trim())
-          .filter(Boolean)
-      : undefined,
-    occasion_tags: form.occasion_tags
-      ? form.occasion_tags
-          .split(',')
-          .map((s) => s.trim())
-          .filter(Boolean)
-      : undefined,
-    price: form.price ? Number(form.price) : undefined,
+    color: form.color.trim() || null,
+    fit_style: (form.fit_style.trim() || null) as WardrobeItem['fit_style'] | null,
+    fabric_weight: (form.fabric_weight.trim() || null) as WardrobeItem['fabric_weight'] | null,
+    style_tags: splitTags(form.style_tags),
+    season_tags: splitTags(form.season_tags),
+    occasion_tags: splitTags(form.occasion_tags),
+    price: form.price ? Number(form.price) : null,
   })
 
   const handleSubmit = async () => {
+    if (submitting) return
     if (!form.name.trim()) {
       toast.error('请输入衣物名称')
       return
     }
     const payload = buildPayload()
+    setSubmitting(true)
     try {
       if (editingId != null) {
         await updateWardrobeItem(editingId, payload)
@@ -254,6 +269,8 @@ export default function WardrobeTab({ profile, compact }: WardrobeTabProps) {
       await fetchItems()
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : editingId != null ? '保存失败' : '添加失败')
+    } finally {
+      setSubmitting(false)
     }
   }
 
@@ -265,24 +282,26 @@ export default function WardrobeTab({ profile, compact }: WardrobeTabProps) {
       const result: ClothingItem = await uploadClothing(file)
       const sem = result.semantics
       if (!sem) {
-        toast.error('AI识别返回数据不完整')
+        toast.error('识别结果不完整')
         return
       }
-      setForm({
-        name: sem.item_name ?? '',
-        category: sem.category ?? '',
-        color: sem.color ?? '',
-        fit_style: '',
-        fabric_weight: '',
+      // 后端这条上传链路目前不做任何识别,semantics 是写死的占位(category='未分类'、color='未知'…)。
+      // '未分类'不在 WARDROBE_CATEGORIES 里 ⇒ 若照单塞进受控 <select>,下拉框会显示空白而 state 停在'未分类',
+      // 存出来的衣物归不进任何缺口桶。只有当识别真给出一个合法分类时才覆盖默认值。
+      const knownCategory = WARDROBE_CATEGORIES.some((c) => c.value === sem.category)
+      setForm((prev) => ({
+        ...prev,
+        name: sem.item_name && sem.item_name !== '未命名' ? sem.item_name : prev.name,
+        category: knownCategory ? (sem.category as string) : prev.category,
+        color: sem.color && sem.color !== '未知' ? sem.color : prev.color,
         style_tags: (sem.style ?? []).join(','),
         season_tags: (sem.season ?? []).join(','),
         occasion_tags: (sem.usage ?? []).join(','),
-        price: '',
-      })
+      }))
       setEditingId(null)
       setShowAdd(true)
       setShowPhotoUpload(false)
-      toast.success('AI识别成功，请确认信息')
+      toast.success('照片已保存，请手动补充识别信息')
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : '上传识别失败')
     } finally {
@@ -416,12 +435,17 @@ export default function WardrobeTab({ profile, compact }: WardrobeTabProps) {
           <input
             ref={photoInputRef}
             type="file"
-            accept="image/*"
+            accept={UPLOAD_ACCEPT}
             capture="environment"
             style={{ display: 'none' }}
             onChange={(e) => {
               const file = e.target.files?.[0]
-              if (file) handlePhotoUpload(file)
+              if (file) {
+                // 拍照/选图先在本机过一遍格式与体积，别把 20MB 原片传上去换一句 400
+                const err = checkPickedImage(file, '这张照片')
+                if (err) toast.error(err)
+                else handlePhotoUpload(file)
+              }
               e.target.value = ''
             }}
           />
@@ -521,6 +545,7 @@ export default function WardrobeTab({ profile, compact }: WardrobeTabProps) {
                 className="gradient-btn"
                 style={{ flex: 1, ...btnStyle(compact) }}
                 onClick={handleSubmit}
+                disabled={submitting}
               >
                 {editingId != null ? '保存修改' : '确认添加'}
               </button>
@@ -649,7 +674,14 @@ export default function WardrobeTab({ profile, compact }: WardrobeTabProps) {
       {topFit && (
         <div className="glass-card p-3 mt-3 animate-fade-in">
           <div className="section-title">上衣按身材打分</div>
-          <div style={{ color: 'var(--muted)', fontSize: '12px', lineHeight: 1.6, marginBottom: '8px' }}>
+          <div
+            style={{
+              color: 'var(--muted)',
+              fontSize: '12px',
+              lineHeight: 1.6,
+              marginBottom: '8px',
+            }}
+          >
             {describeDeviation(topFit.person_deviation)}
           </div>
           {topFit.ranked.length === 0 ? (
@@ -697,12 +729,16 @@ export default function WardrobeTab({ profile, compact }: WardrobeTabProps) {
             </div>
           )}
           {topFit.unscored.length > 0 && (
-            <div style={{ marginTop: '8px', color: 'var(--muted)', fontSize: '12px', lineHeight: 1.6 }}>
+            <div
+              style={{ marginTop: '8px', color: 'var(--muted)', fontSize: '12px', lineHeight: 1.6 }}
+            >
               没打分的 {topFit.unscored.length} 件：
               {topFit.unscored.map((u) => u.name).join('、')}
             </div>
           )}
-          <div style={{ marginTop: '8px', color: 'var(--muted)', fontSize: '11px', lineHeight: 1.6 }}>
+          <div
+            style={{ marginTop: '8px', color: 'var(--muted)', fontSize: '11px', lineHeight: 1.6 }}
+          >
             {topFit.note}
           </div>
         </div>
@@ -730,7 +766,9 @@ export default function WardrobeTab({ profile, compact }: WardrobeTabProps) {
                       marginBottom: '4px',
                     }}
                   >
-                    <span className={pillCls}>{gap.type}</span>
+                    <span className={pillCls}>
+                      {gap.label || WARDROBE_GAP_TYPE_LABELS[gap.type] || gap.type}
+                    </span>
                     <span
                       className={pillCls}
                       style={{
