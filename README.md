@@ -30,7 +30,7 @@
 │   │   │   ├── recommend/            # 推荐结果卡片(RecommendTab/AlgorithmAnalysis/WeatherCard/HoroscopeCard/TryonCard/EnhancedTextCard)
 │   │   │   ├── CabinetManager.tsx    # 三柜调度器(Tab 按需加载)
 │   │   │   ├── CabinetConstants.ts   # 三柜常量
-│   │   │   ├── WardrobeTab.tsx       # 衣橱(CRUD/缺口分析/购物评估)
+│   │   │   ├── WardrobeTab.tsx       # 衣橱(CRUD/缺口分析/购物评估;"记一笔"日记面板挂在同目录 WardrobeDiary.tsx)
 │   │   │   ├── CosmeticTab.tsx       # 化妆品柜(CRUD/保质期/缺口分析)
 │   │   │   ├── AccessoryTab.tsx      # 配饰柜(CRUD/缺口分析)
 │   │   │   ├── CrossCabinetReport.tsx  # 跨柜联动总入口
@@ -40,7 +40,7 @@
 │   │   │   ├── CrossCabinetHealth.tsx  # 三柜健康检查
 │   │   │   ├── CustomerForm.tsx      # 门店模式顾客表单(快速采集)
 │   │   │   ├── PersonalProfileForm.tsx# 个人模式深度档案(全量采集)
-│   │   │   ├── RecommendationReport.tsx # 推荐结果展示
+│   │   │   ├── RecommendationReport.tsx # 推荐结果展示(付费那份「我的报告」覆盖层复用同一渲染器,见同目录 PaidReports.tsx)
 │   │   │   ├── InventoryCard.tsx     # 库存商品卡片
 │   │   │   └── ErrorBoundary.tsx     # 全局错误边界
 │   │   ├── pages/ExhibitionHall.tsx  # 主页(单页双模式入口)
@@ -49,7 +49,7 @@
 │   │   ├── types/index.ts            # 全局 TypeScript 类型
 │   │   ├── api.ts                    # 后端 API 封装(含 X-Session-Id)
 │   │   ├── App.tsx / main.tsx        # 入口
-│   ├── public/model-gallery.html     # 3D 展厅独立页(PMX 渲染,后端直供)
+│   ├── public/                       # 独立静态页(vite 原样拷进 dist,后端 static 直发):model-gallery.html=3D 展厅 / pay.html=付款 / creator.html=投稿 / how-it-works.html=10-22 新建「这套系统是怎么造的」,展厅「选择模式」页第三张卡一键跳
 │   ├── build-esbuild.cjs             # 生产构建脚本(esbuild)
 │   ├── vite.config.ts                # 开发配置(HMR + API 代理到 :5000)
 │   └── package.json
@@ -62,12 +62,12 @@
 │   │   ├── wardrobe.js / cosmetic.js / accessory.js  # 个人三柜
 │   │   ├── crossCabinet.js           # 跨柜联动(场合/季节/品牌/健康)
 │   │   ├── creator.js                # 创作者投稿(搭配/化妆/规则三类,表 creator_works)
-│   │   ├── payment.js                # 收款码展示 + 付款凭证上传 + 管理员审核 + 商户号在线收款(微信 Native / 支付宝电脑网站)
+│   │   ├── payment.js                # 收款码展示 + 付款凭证上传 + 管理员审核 + 商户号在线收款(微信 Native / 支付宝电脑网站) + 「我的凭证/我的报告」领取(`?report=` 那一路懒生成深度细账) + 30 分钟超时关单
 │   │   ├── models.js                 # 3D 模型列表/文件服务(读 model_configs 表;后台「扫描模型」才入库)
 │   │   ├── photos.js / analysis.js / tryon.js        # 上传/面容/试穿
 │   │   ├── clothing.js / weather.js / horoscope.js   # 服装识别/天气/星座
 │   │   └── history.js
-│   ├── services/                     # 服务层(20 个)
+│   ├── services/                     # 服务层(27 个;尺子=ls backend/services/*.js | wc -l,10-22 05:3x 现量;新模块 wearPreference.js/collabFilter.js/itemFeedback.js、第五阶段 bodyDimEstimator.js、第十二阶段 paidReport.js(付款即交付:权益＋报告懒生成＋后台读数)、第十三阶段 fitInference.js(文案款式词/面料词→版型四档与厚薄三档,推不出回 null)都在这一层,下方树里不逐个列)
 │   │   ├── recommendEngine.js        # 推荐引擎(规则匹配 + 旧版兼容)
 │   │   ├── ruleExplainer.js          # 把规则条件翻成中文(可解释性)
 │   │   ├── ruleFeedback.js           # 用户对规则的评好/差评计数
@@ -97,7 +97,7 @@
 │   ├── templates/                    # 管理后台 HTML(admin.html / admin-login.html)
 │   ├── static/                       # 管理后台 CSS/JS
 │   ├── uploads/                      # 用户上传(gitignore)
-│   ├── test/                         # 单元测试 27 个文件(node --test,非 vitest):推荐引擎/审美规则/今天这身/档案增强
+│   ├── test/                         # 单元测试 50 个文件(尺子=ls backend/test/*.test.js | wc -l,10-22 05:3x 现量;node --test,非 vitest):推荐引擎/审美规则/今天这身/档案增强/日记×天气/付款即交付/版型推断(fitInference)＋采集三断点(phase13CollectionRoutes)
 │   ├── scripts/                      # 一次性维护脚本(非运行时必需)
 │   │   ├── flatten-textures.js       # 纹理文件扁平化
 │   │   ├── rebuild-db.js             # 重建数据库 + 更新模型字段
@@ -109,7 +109,10 @@
 │   ├── server.js                     # 后端入口
 │   ├── .env / .env.example           # 环境变量(.env 已 gitignore)
 │   └── package.json                  # 脚本:start / dev / seed / format(:check) / lint(:fix) / test
-├── docs/                             # 设计与路线文档
+├── docs/                             # 设计与路线文档(10-22 起有地图:先读 docs/README.md)
+│   ├── README.md                     # 文档地图:按"我要干什么"排 40 份 md / 三条前置规矩
+│   ├── 依据/                         # 每条判据的原始出处(01~10)+ 分层输入输出规范(11~22)
+│   ├── 复盘/                         # 三份工程复盘与审计台账
 │   └── 形象设计模型-现状与路线.md      # 数字形象目标 / 实测缺口 / 7 步实施路线(活文档)
 ├── models/                           # 3D 角色模型库(实测:顶层 30 个角色目录 / 含子目录共 72 个 / 416 个文件 / 32 个 .pmx)
 │   │                                 # ⚠️三个数字别混:磁盘 30 个目录 ≠ model_configs 登记 32 行 ≠ 展厅 28 张卡片(enabled=1)
@@ -231,7 +234,7 @@ cd ../backend; node --require ../npm-patch.js server.js
 |------|---------|---------|------|
 | 认证 | `/api/auth` | 游客身份 + 手机号注册/登录 + 管理员登录 + 后台代重置密码(`GET /admin/accounts` 会员列表 / `POST /admin/reset-password`) | 注册登录公开;两个 admin 端点需管理员 Token |
 | 顾客会话 | `/api/customer` | 临时会话 CRUD + 隐私声明 + 门店归属(建档时带 `store` 店名,当场自动登记,店与店的数据分开) | 公开(按 session 隔离) |
-| 推荐 | `/api/recommend` | 规则引擎推荐(核心 `POST /engine`);原先无人调用的 `GET /` 空端点已删,现回真 404 | 公开;写历史需 `X-Session-Id` |
+| 推荐 | `/api/recommend` | 规则引擎推荐(核心 `POST /engine`,可选 `city`:10 城白名单由 `weatherService.WEATHER_CITIES` 现拼,取到只当这一屏排序输入、⛔ 不落库,量不到 fail-open 不猜档);衣橱星的撤销口 `DELETE /feedback/item`(按 `actor_key` 只删自己,越权与不存在同为 404);原先无人调用的 `GET /` 空端点已删,现回真 404 | 公开;写历史需 `X-Session-Id` |
 | 规则 | `/api/rules` | 规则组/条件/动作 CRUD | 读公开;增删改需管理员 Token |
 | 库存 | `/api/inventory` | 分类 + 商品 CRUD | 读公开;增删改需管理员 Token |
 | 衣橱 | `/api/wardrobe` | CRUD + 缺口分析 + 购物评估 + 智能推荐 | 需 `X-Session-Id`(挂载级) |
@@ -320,3 +323,400 @@ npm run format:check
 - 前端工具/hooks:`camelCase.ts`(如 `useResponsive.ts`)
 - 后端路由/服务/中间件:`camelCase.js`(如 `crossCabinet.js`、`recommendEngine.js`)
 - 一次性脚本:放 `backend/scripts/`,不参与运行时
+
+```
+3.personal-image-ai
+├─ .dockerignore
+├─ app
+│  ├─ .prettierrc.json
+│  ├─ build-esbuild.cjs
+│  ├─ components.json
+│  ├─ eslint.config.js
+│  ├─ index.html
+│  ├─ package-lock.json
+│  ├─ package.json
+│  ├─ postcss.config.js
+│  ├─ public
+│  │  ├─ alipay-qr.png
+│  │  ├─ creator.html
+│  │  ├─ model-gallery.html
+│  │  ├─ model-previews
+│  │  │  ├─ preview-04ef58c07a.webp
+│  │  │  ├─ preview-0d7fde13c8.webp
+│  │  │  ├─ preview-1010dda10c.webp
+│  │  │  ├─ preview-1285d55656.webp
+│  │  │  ├─ preview-14de737d47.webp
+│  │  │  ├─ preview-20c0225b7b.webp
+│  │  │  ├─ preview-222230a7fc.webp
+│  │  │  ├─ preview-2695aecfad.webp
+│  │  │  ├─ preview-313d35178b.webp
+│  │  │  ├─ preview-36e97def51.webp
+│  │  │  ├─ preview-44e6de3032.webp
+│  │  │  ├─ preview-470980c102.webp
+│  │  │  ├─ preview-4e4cc87473.webp
+│  │  │  ├─ preview-5b0d6f57af.webp
+│  │  │  ├─ preview-621a541820.webp
+│  │  │  ├─ preview-656c5acb4d.webp
+│  │  │  ├─ preview-751398eafe.webp
+│  │  │  ├─ preview-8c2d8fed6e.webp
+│  │  │  ├─ preview-9be9afc0f1.webp
+│  │  │  ├─ preview-9e3b8a8c80.webp
+│  │  │  ├─ preview-a46ce1d8ca.webp
+│  │  │  ├─ preview-a791505779.webp
+│  │  │  ├─ preview-ab04d0d1bb.webp
+│  │  │  ├─ preview-bee31ac9ce.webp
+│  │  │  ├─ preview-c2f0c20ac7.webp
+│  │  │  ├─ preview-cfd673b281.webp
+│  │  │  ├─ preview-ddb709c3c2.webp
+│  │  │  └─ preview-ead0fede1c.webp
+│  │  ├─ pay.html
+│  │  ├─ qrcode.js
+│  │  ├─ three
+│  │  │  ├─ build
+│  │  │  │  └─ three.module.js
+│  │  │  └─ examples
+│  │  │     └─ jsm
+│  │  │        ├─ controls
+│  │  │        │  └─ OrbitControls.js
+│  │  │        ├─ libs
+│  │  │        │  └─ mmdparser.module.js
+│  │  │        ├─ loaders
+│  │  │        │  ├─ MMDLoader.js
+│  │  │        │  └─ TGALoader.js
+│  │  │        └─ shaders
+│  │  │           └─ MMDToonShader.js
+│  │  └─ wechat-qr.png
+│  ├─ src
+│  │  ├─ api.ts
+│  │  ├─ App.tsx
+│  │  ├─ components
+│  │  │  ├─ AccessoryTab.tsx
+│  │  │  ├─ CabinetConstants.ts
+│  │  │  ├─ CabinetManager.tsx
+│  │  │  ├─ CosmeticTab.tsx
+│  │  │  ├─ CrossCabinetBrand.tsx
+│  │  │  ├─ CrossCabinetHealth.tsx
+│  │  │  ├─ CrossCabinetMatch.tsx
+│  │  │  ├─ CrossCabinetReport.tsx
+│  │  │  ├─ CrossCabinetSeasonal.tsx
+│  │  │  ├─ CustomerForm.tsx
+│  │  │  ├─ ErrorBoundary.tsx
+│  │  │  ├─ InventoryCard.tsx
+│  │  │  ├─ PersonalProfileForm.tsx
+│  │  │  ├─ recommend
+│  │  │  │  ├─ AlgorithmAnalysis.tsx
+│  │  │  │  ├─ EnhancedTextCard.tsx
+│  │  │  │  ├─ EvidenceTag.tsx
+│  │  │  │  ├─ HoroscopeCard.tsx
+│  │  │  │  ├─ RecommendTab.tsx
+│  │  │  │  ├─ TopSpecCard.tsx
+│  │  │  │  ├─ TryonCard.tsx
+│  │  │  │  └─ WeatherCard.tsx
+│  │  │  ├─ PaidReports.tsx            # 「我的报告」领取页(付款即交付,20 §八;付费独有的 A/D/E 三节 + 复用 RecommendationReport)
+│  │  │  ├─ RecommendationReport.tsx
+│  │  │  ├─ RuleBrowser.tsx
+│  │  │  ├─ SkinSampler.tsx            # 拍照取色组件(图不出设备,18 §二)
+│  │  │  ├─ ui
+│  │  │  │  ├─ ErrorMessage.tsx
+│  │  │  │  ├─ LoadingSpinner.tsx
+│  │  │  │  ├─ RingProgress.tsx
+│  │  │  │  └─ TipList.tsx
+│  │  │  └─ WardrobeTab.tsx
+│  │  ├─ hooks
+│  │  │  └─ useResponsive.ts
+│  │  ├─ index.css
+│  │  ├─ lib
+│  │  │  ├─ imagePick.ts
+│  │  │  ├─ skinSample.ts              # 中位数取样＋三道闸门＋冷暖切点(18 §二)
+│  │  │  └─ utils.ts
+│  │  ├─ main.tsx
+│  │  ├─ pages
+│  │  │  └─ ExhibitionHall.tsx
+│  │  ├─ types
+│  │  │  └─ index.ts
+│  │  └─ vite-env.d.ts
+│  ├─ tailwind.config.js
+│  ├─ tsconfig.app.json
+│  ├─ tsconfig.json
+│  ├─ tsconfig.node.json
+│  └─ vite.config.ts
+├─ backend
+│  ├─ .prettierignore
+│  ├─ .prettierrc.json
+│  ├─ db
+│  │  ├─ add-rules.js
+│  │  ├─ applyRuleSeeds.js
+│  │  ├─ export-rules.js
+│  │  ├─ init.js
+│  │  ├─ migrate_body_type_wording.js
+│  │  ├─ migrate_cn_category.js
+│  │  ├─ migrate_en_to_cn.js
+│  │  ├─ paths.js
+│  │  ├─ schema.sql
+│  │  ├─ seed
+│  │  │  ├─ inventory.json
+│  │  │  ├─ rules-aesthetic-2.json
+│  │  │  ├─ rules-aesthetic.json
+│  │  │  ├─ rules-height-bmi-gapfill.json
+│  │  │  ├─ rules-pose-male-personal.json
+│  │  │  ├─ rules-scenario-genderfill.json
+│  │  │  ├─ rules-wuxing.json
+│  │  │  └─ rules.json
+│  │  └─ seed.js
+│  ├─ eslint.config.js
+│  ├─ middleware
+│  │  ├─ auth.js
+│  │  ├─ logger.js
+│  │  ├─ rateLimit.js
+│  │  └─ upload.js
+│  ├─ package-lock.json
+│  ├─ package.json
+│  ├─ routes
+│  │  ├─ accessory.js
+│  │  ├─ admin.js
+│  │  ├─ analysis.js
+│  │  ├─ auth.js
+│  │  ├─ clothing.js
+│  │  ├─ cosmetic.js
+│  │  ├─ creator.js
+│  │  ├─ crossCabinet.js
+│  │  ├─ customer.js
+│  │  ├─ history.js
+│  │  ├─ horoscope.js
+│  │  ├─ inventory.js
+│  │  ├─ models.js
+│  │  ├─ payment.js
+│  │  ├─ photos.js
+│  │  ├─ recommend.js
+│  │  ├─ rules.js
+│  │  ├─ tryon.js
+│  │  ├─ wardrobe.js
+│  │  └─ weather.js
+│  ├─ scripts
+│  │  ├─ analyze-pmx.js
+│  │  ├─ audit-rules.js
+│  │  ├─ check-texture-refs.js
+│  │  ├─ dedupe-outfit-rules.js
+│  │  ├─ diagnose-overlap.js
+│  │  ├─ fix-mojibake.js
+│  │  ├─ flatten-textures.js
+│  │  ├─ optimize-gz.js
+│  │  ├─ prune-orphan-model-dirs.js
+│  │  ├─ quarantine-orphans.js
+│  │  ├─ rebuild-db.js
+│  │  ├─ regress-rank-weights.js
+│  │  ├─ restructure-models.js
+│  │  ├─ scan-models.js
+│  │  ├─ supplement-categories.js
+│  │  └─ tune-priorities.js
+│  ├─ server.js
+│  ├─ services
+│  │  ├─ alipay.js
+│  │  ├─ baziWuxing.js
+│  │  ├─ bmi.js
+│  │  ├─ bodyTypes.js
+│  │  ├─ categoryBuckets.js
+│  │  ├─ colorMetrics.js
+│  │  ├─ dashscopeService.js
+│  │  ├─ evidenceLevels.js
+│  │  ├─ fitSize.js
+│  │  ├─ fullLookAdvisor.js
+│  │  ├─ horoscopeService.js
+│  │  ├─ profileArchive.js
+│  │  ├─ profileEnricher.js
+│  │  ├─ recommendEngine.js
+│  │  ├─ recommendReportText.js
+│  │  ├─ ruleExplainer.js
+│  │  ├─ ruleFeedback.js
+│  │  ├─ topFitBody.js
+│  │  ├─ topFromBody.js
+│  │  ├─ weatherService.js
+│  │  └─ wechatPay.js
+│  ├─ static
+│  │  └─ admin
+│  │     ├─ admin-data.js
+│  │     ├─ admin-inventory.js
+│  │     ├─ admin-models.js
+│  │     ├─ admin-review.js
+│  │     ├─ admin-rules.js
+│  │     ├─ admin-utils.js
+│  │     └─ admin.css
+│  ├─ templates
+│  │  ├─ admin-login.html
+│  │  └─ admin.html
+│  ├─ test
+│  │  ├─ aestheticRules.test.js
+│  │  ├─ aestheticRules2.test.js
+│  │  ├─ auditFixes20261012.test.js
+│  │  ├─ auditFixes20261013.test.js
+│  │  ├─ baziWuxing.test.js
+│  │  ├─ beijingTime.test.js
+│  │  ├─ bmi.test.js
+│  │  ├─ colorMetrics.test.js
+│  │  ├─ creatorViewCount.test.js
+│  │  ├─ dashscopeTryon.test.js
+│  │  ├─ disabledModelFileGuard.test.js
+│  │  ├─ engineFixes20261013.test.js
+│  │  ├─ evidenceLevels.test.js
+│  │  ├─ fitSize.test.js
+│  │  ├─ fullLook.test.js
+│  │  ├─ guardHelpers.test.js
+│  │  ├─ healthRateLimitExempt.test.js
+│  │  ├─ logicConsistency20261014.test.js
+│  │  ├─ logicFixes20261013.test.js
+│  │  ├─ modelFileTrailingSlash.test.js
+│  │  ├─ modelGzFreshness.test.js
+│  │  ├─ modelSkipDirs.test.js
+│  │  ├─ profileEnricher.test.js
+│  │  ├─ quietFilesFixes20261013.test.js
+│  │  ├─ rateLimitWindow.test.js
+│  │  ├─ recommendEngine.test.js
+│  │  ├─ recommendReportText.test.js
+│  │  ├─ regressRankWeights.test.js
+│  │  ├─ routeIdParam20261014.test.js
+│  │  ├─ routeLimiterCoverage.test.js
+│  │  ├─ ruleFeedbackStars.test.js
+│  │  ├─ ruleSeedNormalize.test.js
+│  │  ├─ schemaIndexes.test.js
+│  │  ├─ sessionActivity.test.js
+│  │  ├─ topFitBody.test.js
+│  │  ├─ topFromBody.test.js
+│  │  ├─ uploadsAccess.test.js
+│  │  ├─ wardrobeDiaryWeatherRoutes.test.js
+│  │  └─ weatherService.test.js
+│  ├─ utils
+│  │  ├─ beijingTime.js
+│  │  ├─ common.js
+│  │  ├─ logger.js
+│  │  ├─ model-utils.js
+│  │  ├─ occasionVocab.js
+│  │  ├─ outfitWeather.js
+│  │  └─ response.js
+│  └─ vendor
+│     └─ lunar
+│        ├─ LICENSE
+│        ├─ lunar.js
+│        └─ NOTICE.txt
+├─ dev.bat
+├─ Dockerfile
+├─ docs
+│  ├─ 上衣量化依据与公式清单.md
+│  ├─ 依据
+│  │  ├─ 01-标准层-国标ISO团标.md
+│  │  ├─ 02-实证层-论文与效应量.md
+│  │  ├─ 03-体系层-行业经验与命理.md
+│  │  ├─ 04-可量化公式与落地口径.md
+│  │  ├─ 05-对外措辞红线.md
+│  │  ├─ 06-查证记录与负向结果.md
+│  │  ├─ 07-依据与代码落地覆盖表.md
+│  │  ├─ 08-上衣适配规则-量化方案.md
+│  │  ├─ 09-合身层输入输出规范.md
+│  │  ├─ 10-原文档案与逐条核对.md
+│  │  ├─ 11-后台算法与量化模型披露-20261019.md
+│  │  ├─ 12-文档与代码业务逻辑对账-20261014.md
+│  │  ├─ 13-体型估算输入输出规范-20261020.md
+│  │  ├─ 14-色彩量化输入输出规范-20261020.md
+│  │  ├─ 15-版型量化输入输出规范-20261020.md
+│  │  ├─ 16-数据采集输入输出规范-20261020.md
+│  │  ├─ 17-协同过滤输入输出规范-20261021.md
+│  │  ├─ 18-肤色采集输入输出规范-20261021.md
+│  │  ├─ 19-穿搭日记与天气输入输出规范-20261021.md
+│  │  ├─ 20-付款即交付输入输出规范-20261021.md
+│  │  ├─ 21-算法四轴输入输出规范-20261021.md
+│  │  ├─ papers
+│  │  │  ├─ 4.这样穿很美 平价搭出时尚范 (（日）典子，杨孟芳译).pdf
+│  │  │  ├─ BS-7754-1994-en.pdf
+│  │  │  ├─ CIE 1964色匹配函数，10度观察者.csv
+│  │  │  ├─ CIEDE2000色差公式：实现说明、补充测试数据与数学观察.pdf
+│  │  │  ├─ DIN-EN-13402-3-2017-en.PDF
+│  │  │  ├─ GBT+10000-2023 中国成年人人体尺寸.pdf
+│  │  │  ├─ GBT+1335-1-2008 服装号型 男子.pdf
+│  │  │  ├─ GBT+1335-2-2008 服装号型 女子 .pdf
+│  │  │  ├─ GBT+1335-3-2009 服装号型 儿童.pdf
+│  │  │  ├─ GBT+15608-2006 中国颜色体系.pdf
+│  │  │  ├─ GBT+16160-2017 服装用人体测量的尺寸定义与方法.pdf
+│  │  │  ├─ GBT+18132-2026 丝绸服装.pdf
+│  │  │  ├─ GBT+22700-2026 水洗整理服装.pdf
+│  │  │  ├─ GBT+2664-2017 男西服、大衣.pdf
+│  │  │  ├─ GBT+2664-2026 男西服、大衣.pdf
+│  │  │  ├─ GBT+2665-2017 女西服、大衣.pdf
+│  │  │  ├─ GBT+2665-2026 女西服、大衣.pdf
+│  │  │  ├─ GBT+2666-2026 西裤.pdf
+│  │  │  ├─ GBT+2668-2017 单服、套装规格.pdf
+│  │  │  ├─ GBT+31901-2015 服装穿着试验及评价方法.pdf
+│  │  │  ├─ GBT+31901-2024 服装穿着试验及评价方法.pdf
+│  │  │  ├─ GBT+31907-2015 服装测量方法.pdf
+│  │  │  ├─ GBT+38131-2019 服装用人体测量基准点的获取方法.pdf
+│  │  │  ├─ GBT+3977-2008 颜色的表示方法.pdf
+│  │  │  ├─ GBT+45812-2025 消费品质量分级导则 服装.pdf
+│  │  │  ├─ GBT+4841-3-2006 染料染色标准深度色卡.pdf
+│  │  │  ├─ GBT+5698-2001 颜色术语.pdf
+│  │  │  ├─ GBT+5703-2023 用于技术设计的人体测量基础项目.docx
+│  │  │  ├─ GBT+5703-2023 用于技术设计的人体测量基础项目.pdf
+│  │  │  ├─ GBT+7921-2008 均匀色空间和色差公式.pdf
+│  │  │  ├─ ISO-8559-3-2018-en 衣服的尺码标识—第三部分：身体测量表和区间制作方法论.pdf
+│  │  │  ├─ ISO-CIE-11664-1-2019 比色法—第一部分：CIE标准色度观测者.pdf
+│  │  │  ├─ ISO-CIE-11664-2-2022 比色法—第二部分：CIE标准照明弹.pdf
+│  │  │  ├─ WebFace260M：一项揭示百万级深度人脸识别能力的基准测试.gz
+│  │  │  ├─ WebFace260M：一项揭示百万级深度人脸识别能力的基准测试.pdf
+│  │  │  ├─ 专业色彩搭配设计师必备宝典 (第二版).pdf
+│  │  │  ├─ 个人色彩分析、消费者色彩偏好及时尚与纺织行业的色彩预测.pdf
+│  │  │  ├─ 个人色彩系统四季类型的肤色特性比较——以英日韩德四套系统为中心（韩文）.pdf
+│  │  │  ├─ 中国东部地区青年女性人体体型分类.pdf
+│  │  │  ├─ 中国人肤色光谱反射特性及肤色板.pdf
+│  │  │  ├─ 中国人面部自然肤色色域范围及典型肤色色样的研制.pdf
+│  │  │  ├─ 人体肤色数据库（2025年版，CIE 2562025）.xlsx
+│  │  │  ├─ 人类皮肤的颜色：富有成效的科学，却用词不合适.pdf
+│  │  │  ├─ 可读全文
+│  │  │  │  ├─ BS 7754-1994 穿着者试穿评价规范（可读全文）.md
+│  │  │  │  ├─ EN 13402-3-2017 服装尺码标识 人体测量部位与方法（可读全文）.md
+│  │  │  │  ├─ ISO 8559-3-2018 体测表与档差的制定方法（可读全文）.md
+│  │  │  │  ├─ ISO-CIE 11664-1-2019 CIE标准色度观察者（可读全文）.md
+│  │  │  │  ├─ ISO-CIE 11664-2-2022 CIE标准照明体（可读全文）.md
+│  │  │  │  ├─ 化妆品改变美的生物学因素：来自面部对比度的证据（可读全文）.md
+│  │  │  │  ├─ 把赫尔姆霍兹错觉用于时装：横条纹不会让你显胖（可读全文）.md
+│  │  │  │  ├─ 服装美学：白皙肤色与晒黑肤色各自稳定一致的色彩选择（可读全文）.md
+│  │  │  │  ├─ 条纹服装对身体视觉知觉的影响：图案间距设计研究（可读全文）.md
+│  │  │  │  ├─ 简易研究技术：皮肤比色测量——客观肤色测量的可靠方法（可读全文）.md
+│  │  │  │  ├─ 腿身比、臂身比与肢体内部比例对男性人体吸引力的影响（可读全文）.md
+│  │  │  │  ├─ 衣服上的条纹如何骗人：横条纹的知觉与既有信念差异的跨文化考察（可读全文）.md
+│  │  │  │  ├─ 赫尔姆霍兹对阵高级定制：横条纹与深色衣物如何让你显瘦（可读全文）.md
+│  │  │  │  ├─ 赫尔姆霍兹错觉：只在你本来就偏瘦时才显得身材好，而且并非对每个人都成立（可读全文）.md
+│  │  │  │  └─ 非受控拍摄条件下用 ITA 估计肤色类型的局限（可读全文）.md
+│  │  │  ├─ 基于身高体重的青年女性躯干形态分类及识别.pdf
+│  │  │  ├─ 女性外貌吸引力的视觉线索.pdf
+│  │  │  ├─ 条纹服装对身体尺寸知觉的影响.pdf
+│  │  │  ├─ 用三维人体扫描的体型测量数据评估服装尺码预测的机器学习模型.pdf
+│  │  │  ├─ 男女肩臀比的神经相关性与吸引力感知：一项脑电图研究.pdf
+│  │  │  ├─ 简易研究技术：皮肤比色测量——客观肤色测量的可靠方法.pdf
+│  │  │  ├─ 美的生物学基础再探：对称、平均与性二态对女性面部吸引力的作用.pdf
+│  │  │  ├─ 腿身比、臂身比与肢体内部比例对男性人体吸引力的影响.pdf
+│  │  │  ├─ 衣服上的条纹如何骗人：横条纹的知觉与既有信念差异的跨文化考察.pdf
+│  │  │  ├─ 赫尔姆霍兹对阵高级定制：横条纹与深色衣物如何让你显瘦.pdf
+│  │  │  └─ 赫尔姆霍兹错觉：只在你本来就偏瘦时才显得身材好，而且并非对每个人都成立.pdf
+│  │  ├─ README.md
+│  │  ├─ ~$参考文献目录.xlsx
+│  │  ├─ 中文对照
+│  │  │  ├─ 人体肤色数据库-中文对照版-非原件.xlsx
+│  │  │  └─ 人体肤色数据库-中文对照说明.md
+│  │  └─ 参考文献目录.xlsx
+│  ├─ 复盘
+│  │  ├─ audit-site3-2026-10-10.md
+│  │  ├─ 站3全项目重审报告-20261012.md
+│  │  └─ 站3深夜轮-限流豁免与定位符重扫-20261013.md
+│  ├─ 形象设计模型-现状与路线.md
+│  ├─ 架构审计与优化蓝图-20261019.md
+│  ├─ 第四阶段进展报告-20261020.md
+│  ├─ 第五阶段进展报告-20261020.md
+│  ├─ 第六阶段进展报告-20261020.md
+│  ├─ 第八阶段进展报告-20261020.md
+│  ├─ 第九阶段进展报告-20261021.md
+│  ├─ 第十阶段进展报告-20261021.md
+│  ├─ 第十一阶段进展报告-20261021.md
+│  ├─ 第十二阶段进展报告-20261021.md
+│  ├─ 第十三阶段进展报告-20261022.md
+├─ npm-patch.js
+├─ README.md
+└─ VISION.md
+
+```

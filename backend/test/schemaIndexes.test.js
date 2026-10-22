@@ -73,7 +73,7 @@ test('profile_drafts 不用建索引：user_id 就是 INTEGER PRIMARY KEY（rowi
 })
 
 test('recommendation_logs(user_id) 索引按既有约定留在 db/init.js 补列之后，不在 schema.sql 抢跑', () => {
-  // 老库此时还没有 user_id 列，schema.sql 里直接建索引会让每次启动报错——这是 init.js :142 注释写死的顺序
+  // 老库此时还没有 user_id 列，schema.sql 里直接建索引会让每次启动报错——这是 init.js :157 注释写死的顺序
   const schemaSql = fs.readFileSync(path.join(__dirname, '..', 'db', 'schema.sql'), 'utf-8')
   assert.ok(!schemaSql.includes('ON recommendation_logs(user_id)'))
   const initSrc = fs.readFileSync(path.join(__dirname, '..', 'db', 'init.js'), 'utf-8')
@@ -91,4 +91,65 @@ test('users.last_active_at：schema.sql 有列，且 init.js 的 MISSING_COLUMNS
     initSrc.includes(`['users', 'last_active_at', 'TEXT']`),
     '老库必须走 MISSING_COLUMNS 补列迁移，否则线上库不会自动获得这一列',
   )
+})
+
+test('user_wardrobe 成衣实测四列：schema.sql 有列、init.js 补列、且一律不设 DEFAULT', () => {
+  // 10-19 第二阶段「最后一公里」：topFitBody 的修形向量只吃这四列。
+  // 没列 ⇒ 老库永远量不到 ⇒ bodyFit 整块缺席；有 DEFAULT ⇒ 没量也被填成个数，直接违反
+  // docs/依据/README.md:61「缺测不出分」（硬规矩 2）——所以这三条都要有断言钉住。
+  const cols = memDb
+    .prepare('SELECT name, type, dflt_value FROM pragma_table_info(?)')
+    .all('user_wardrobe')
+  const initSrc = fs.readFileSync(path.join(__dirname, '..', 'db', 'init.js'), 'utf-8')
+  for (const key of ['shoulder_cm', 'bust_cm', 'length_cm', 'waistband_cm']) {
+    const col = cols.find((c) => c.name === key)
+    assert.ok(col, `新库建表要带 ${key}`)
+    assert.strictEqual(col.type, 'REAL', `${key} 要是 REAL（cm 可以带一位小数）`)
+    assert.ok(col.dflt_value === null || col.dflt_value === undefined, `${key} 不许有 DEFAULT`)
+    assert.ok(
+      initSrc.includes(`['user_wardrobe', '${key}', 'REAL']`),
+      `老库必须走 MISSING_COLUMNS 补 ${key}`,
+    )
+  }
+})
+
+test('user_wardrobe.fit_type（10-19 第三阶段·模块一）：schema 有列、init.js 补列、不设 DEFAULT', () => {
+  const col = memDb
+    .prepare('SELECT name, type, dflt_value FROM pragma_table_info(?)')
+    .all('user_wardrobe')
+    .find((c) => c.name === 'fit_type')
+  assert.ok(col, '新库建表要带 fit_type')
+  assert.strictEqual(col.type, 'TEXT')
+  assert.ok(
+    col.dflt_value === null || col.dflt_value === undefined,
+    '有 DEFAULT＝没选版型也被填成一档 ⇒ 凭空估出松量，违反「缺测不出分」',
+  )
+  const initSrc = fs.readFileSync(path.join(__dirname, '..', 'db', 'init.js'), 'utf-8')
+  assert.ok(
+    initSrc.includes(`['user_wardrobe', 'fit_type', 'TEXT']`),
+    '老库必须走 MISSING_COLUMNS 补 fit_type，否则线上传这一列直接 SQLITE_ERROR',
+  )
+})
+
+test('feedback_events 的星级与快照四列（10-19 第三阶段·模块三）：有列、无 DEFAULT、老库会补', () => {
+  const cols = memDb
+    .prepare('SELECT name, type, dflt_value FROM pragma_table_info(?)')
+    .all('feedback_events')
+  const initSrc = fs.readFileSync(path.join(__dirname, '..', 'db', 'init.js'), 'utf-8')
+  const want = {
+    aesthetic_score: 'INTEGER',
+    fit_score: 'INTEGER',
+    rank_snapshot: 'TEXT',
+    wardrobe_item_id: 'INTEGER',
+  }
+  for (const [key, type] of Object.entries(want)) {
+    const col = cols.find((c) => c.name === key)
+    assert.ok(col, `新库建表要带 ${key}`)
+    assert.strictEqual(col.type, type, `${key} 的类型`)
+    assert.ok(col.dflt_value === null || col.dflt_value === undefined, `${key} 不许有 DEFAULT`)
+    assert.ok(
+      initSrc.includes(`['feedback_events', '${key}', '${type}']`),
+      `老库必须走 MISSING_COLUMNS 补 ${key}，不然回归脚本读表就报错`,
+    )
+  }
 })

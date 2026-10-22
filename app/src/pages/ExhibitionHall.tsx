@@ -1,5 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
-import { toast, Toaster } from 'sonner'
+import { Toaster } from 'sonner'
+import { toast } from '../utils/toastOnce'
 import {
   clearExpiredSession,
   createCustomerSession,
@@ -19,6 +20,7 @@ import {
 } from '../api'
 import type { AccountInfo, ProfileField } from '../api'
 import { useResponsive } from '../hooks/useResponsive'
+import ErrorMessage from '../components/ui/ErrorMessage'
 import type { CustomerProfile, EngineRecommendation, ProfileTag } from '../types'
 
 // 代码分割:按需加载重型组件,减小首屏 bundle 体积
@@ -26,6 +28,8 @@ const CustomerForm = lazy(() => import('../components/CustomerForm'))
 const PersonalProfileForm = lazy(() => import('../components/PersonalProfileForm'))
 const RecommendationReport = lazy(() => import('../components/RecommendationReport'))
 const CabinetManager = lazy(() => import('../components/CabinetManager'))
+// 第十二阶段·第一步：付款之后顾客领报告的那个浮层（不是新路由，同登录面板那套遮罩）
+const PaidReports = lazy(() => import('../components/PaidReports'))
 const CrossCabinetReport = lazy(() => import('../components/CrossCabinetReport'))
 const RuleBrowser = lazy(() => import('../components/RuleBrowser'))
 
@@ -49,7 +53,10 @@ export default function ExhibitionHall() {
   }, [])
 
   const responsive = useResponsive()
-  const { mode: layoutMode } = responsive
+  // isMobile 这次多一个用途（10-22 第十四阶段·第一步 X7）：窄屏要落到 `.narrow-hit` 类上，
+  // 让选项按钮≥44px、5 列降 3 列。⛔ 不在 index.css 里再写一条 @media 767px——阈值 768 的
+  // 唯一真身是 useResponsive.ts 的 DESKTOP_MIN_WIDTH，两处各写一份迟早打架。
+  const { mode: layoutMode, isMobile } = responsive
 
   const [stage, setStage] = useState<Stage>('standby')
   const [mobilePanel, setMobilePanel] = useState<Panel>('service')
@@ -64,11 +71,34 @@ export default function ExhibitionHall() {
   const [profileTags, setProfileTags] = useState<ProfileTag[]>([])
   const [sessionId, setSessionId] = useState<string | null>(null)
   const [recommendation, setRecommendation] = useState<EngineRecommendation | null>(null)
+  // 🔴 10-21 第十三阶段·第一步 §四·1：顾客在报告页天气卡里选中的城市。
+  // 它**只活在这一屏**（state，⛔ 不写 localStorage、⛔ 不进档案），下一次生成时当 `/engine` 的可选第三参送上去。
+  const [weatherCity, setWeatherCity] = useState<string | null>(null)
+  /** 上一次生成时后端回的天气出处账（'live'/'failed' + 那句人话），原样显示，⛔ 前端不另编一句 */
+  const [weatherOutcome, setWeatherOutcome] = useState<{
+    source: 'live' | 'failed'
+    notice?: string
+  } | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [syncing, setSyncing] = useState(false)
   const [synced, setSynced] = useState(false)
 
   const [reportTab, setReportTab] = useState<ReportTab>('recommendation')
+  /**
+   * 🔴 10-22 第十四阶段·第一步 X8（`docs/依据/22` §九）：后端每次算完都随结果带回一句 `privacy_notice`，
+   * 改前前端把它整份丢掉（组件引用 0 处）⇒ 顾客在屏幕上读不到"这些数据拿去做什么、能不能删"。
+   * 真相源只有后端那一份（门店走 `routes/customer.js` 的 `PRIVACY_NOTICE.highlight`，
+   * 个人走 `routes/recommend.js` 的那句），⛔ 前端不许自己编一句。
+   */
+  const [privacyNotice, setPrivacyNotice] = useState('')
+
+  /**
+   * 🔴 10-22 第十四阶段·第一步 X2 的后半件（`docs/依据/22` §三）：吐司几秒后自动消失，
+   * 顾客抬头时页面上一处痕迹都不留 ⇒ "到底是我点太快、还是没网"永远猜。
+   * 去重（同一条只弹一次）在 `utils/toastOnce.ts`，**留下**这一半就落在这个 state：
+   * 失败原话留在提交按钮所在那一屏上，⛔ 不改写、⛔ 不翻译成状态码、⛔ 不吞掉后端给的分钟数。
+   */
+  const [submitError, setSubmitError] = useState('')
 
   const iframeRef = useRef<HTMLIFrameElement>(null)
 
@@ -76,6 +106,8 @@ export default function ExhibitionHall() {
   const handleSubmit = useCallback(
     async (p: CustomerProfile) => {
       setSubmitting(true)
+      // 每一次提交都重新计：上一屏留下的失败原话不许粘在这一屏上冒充"这次也失败了"（X2）
+      setSubmitError('')
       setProfile(p)
       let createdSessionId: string | null = null
       try {
@@ -85,9 +117,19 @@ export default function ExhibitionHall() {
           setSessionId(createdSessionId)
           const result = await getCustomerRecommendation(createdSessionId, 'store')
           setRecommendation(result.recommendation)
+          setPrivacyNotice(result.privacy_notice || '')
+          // 门店那一路走的是 `/customer/session/:id/recommend`（按会话里存的档案重算），
+          // 本轮的天气接入只落在 `/engine` 上（§四·1 的入口写死了是它），⛔ 这里不许谎称带了天气
+          setWeatherOutcome(null)
         } else {
-          const result = await getEngineRecommendation(p, 'personal')
+          const result = await getEngineRecommendation(p, 'personal', weatherCity || undefined)
           setRecommendation(result.recommendation)
+          setPrivacyNotice(result.privacy_notice || '')
+          setWeatherOutcome(
+            result.weather_source
+              ? { source: result.weather_source, notice: result.weather_notice }
+              : null,
+          )
           setArchiveUsed(result.archive?.used_fields || [])
           setProfileTags(result.archive?.tags || [])
           setSessionId(getSessionId())
@@ -104,11 +146,13 @@ export default function ExhibitionHall() {
           setSessionId(null)
         }
         toast.error(e instanceof Error ? e.message : '获取推荐失败')
+        setSubmitError(e instanceof Error ? e.message : '获取推荐失败')
       } finally {
         setSubmitting(false)
       }
     },
-    [serviceMode],
+    // 城市变了必须重算：`weatherCity` 不在依赖里的话，这一屏选了城市点"重算"还是拿旧的那份算（§四·1）
+    [serviceMode, weatherCity],
   )
 
   // 预填:在"选择模式"那一屏就把档案读回来.两个表单组件都只在挂载那一刻读一次 initial,
@@ -223,6 +267,17 @@ export default function ExhibitionHall() {
     return () => window.removeEventListener('message', handler)
   }, [startService])
 
+  // 🔴 第十四阶段·第一步 X1：从 `/gallery` 独立页跳过来时带 `?start=1`，这里替顾客点开服务流程，
+  // 并把这一个查询参数从地址栏撤掉（⛔ 让它留着：刷新一次就重开一次服务态，等于地址栏在替用户做主）。
+  useEffect(() => {
+    const q = new URLSearchParams(window.location.search)
+    if (q.get('start') !== '1') return
+    startService()
+    q.delete('start')
+    const rest = q.toString()
+    window.history.replaceState({}, '', window.location.pathname + (rest ? '?' + rest : ''))
+  }, [startService])
+
   // 注册全局网络错误处理器
   useEffect(() => {
     setGlobalErrorHandler((msg: string) => {
@@ -315,7 +370,7 @@ export default function ExhibitionHall() {
             className={`absolute inset-0 transition-opacity duration-300 ${mobilePanel === 'service' ? 'opacity-100 z-10 overflow-y-auto' : 'opacity-0 z-0 pointer-events-none'}`}
             style={{ background: 'var(--panel)' }}
           >
-            <div className="p-4">
+            <div className={isMobile ? 'p-4 narrow-hit' : 'p-4'}>
               <ServicePanel
                 stage={stage}
                 serviceMode={serviceMode}
@@ -339,6 +394,11 @@ export default function ExhibitionHall() {
                 onReset={resetToStandby}
                 onReportTabChange={setReportTab}
                 onStageChange={setStage}
+                weatherCity={weatherCity}
+                weatherOutcome={weatherOutcome}
+                onWeatherCity={setWeatherCity}
+                privacyNotice={privacyNotice}
+                submitError={submitError}
               />
             </div>
           </div>
@@ -369,7 +429,11 @@ export default function ExhibitionHall() {
         </button>
       </div>
       <div
-        className="split-right h-full overflow-y-auto"
+        className={
+          isMobile
+            ? 'split-right h-full overflow-y-auto narrow-hit'
+            : 'split-right h-full overflow-y-auto'
+        }
         style={{
           flex: '0 0 420px',
           background: 'var(--panel)',
@@ -400,6 +464,11 @@ export default function ExhibitionHall() {
           onReset={resetToStandby}
           onReportTabChange={setReportTab}
           onStageChange={setStage}
+          weatherCity={weatherCity}
+          weatherOutcome={weatherOutcome}
+          onWeatherCity={setWeatherCity}
+          privacyNotice={privacyNotice}
+          submitError={submitError}
           compact
         />
       </div>
@@ -430,13 +499,15 @@ function ModelViewer({
 
 // ============ 付款 / 创作者入驻卡片(仅模式选择页,不浮在3D展示层上)============
 function ServiceLinkCards({ onArchiveCleared }: { onArchiveCleared?: () => void }) {
+  // 「我的报告」不开新页面（`App.tsx` 只有 `/` 一条真路由）：点开走覆盖层，同登录面板那套
+  const [reportsOpen, setReportsOpen] = useState(false)
   const cards = [
     {
       href: '/pay.html',
       icon: '💳',
       title: '付款通道',
       sub: '在线付款 · 凭证提交',
-      desc: '已选好服务?在这里付款并把付款凭证提交给我们核对.',
+      desc: '已选好服务?在这里付款并把付款凭证提交给我们核对.在线付款到账后,直接用下面那张「我的报告」领这一份细账.',
     },
     {
       href: '/creator.html',
@@ -444,6 +515,14 @@ function ServiceLinkCards({ onArchiveCleared }: { onArchiveCleared?: () => void 
       title: '创作者投稿与曝光',
       sub: '提交方案 · 审核展示 · 按热度曝光',
       desc: '上传你的搭配、化妆或推荐规则方案,审核通过后按市场推广度获得曝光.投稿目前只做展示,不涉及任何款项往来.',
+    },
+    {
+      // 🔴 第十四阶段追加（他 10-22 的第三条指令：「给这个项目做个网页介绍……点一下就能跳转」）
+      href: '/how-it-works.html',
+      icon: '🧭',
+      title: '这套系统是怎么造的',
+      sub: '量化管线 · 依据分档 · 当前底数',
+      desc: '讲清楚四件事:数据怎么量出来、规则从哪来、哪些结论有国标或论文撑着、哪些只是行业经验或命理体系.里面还写了库里现在的真实行数——样本薄我们就说薄.',
     },
   ]
   return (
@@ -476,7 +555,48 @@ function ServiceLinkCards({ onArchiveCleared }: { onArchiveCleared?: () => void 
         </a>
       ))}
 
+      {/* 第十二阶段·第一步：付款即交付的那一环。今天这句话第一次成立——
+          到账后不用等人工，顾客自己在这层里领走这份细账（后端按订单号幂等，一单一份）。 */}
+      <button
+        onClick={() => setReportsOpen(true)}
+        className="block w-full p-4 text-left"
+        style={{
+          background: 'rgba(255,255,255,0.03)',
+          border: '1px solid var(--line)',
+          borderRadius: '12px',
+          cursor: 'pointer',
+        }}
+      >
+        <div className="flex items-center gap-3 mb-2">
+          <span className="text-2xl">📑</span>
+          <div>
+            <h3 className="text-sm font-semibold" style={{ color: 'var(--text)' }}>
+              我的报告
+            </h3>
+            <p className="text-xs" style={{ color: '#b8c7d4' }}>
+              付款即交付 · 可反复打开
+            </p>
+          </div>
+        </div>
+        <p className="text-xs" style={{ color: '#a8b8c4', lineHeight: '1.6' }}>
+          到账后在这里领那一份深度细账:除了屏幕上这 8
+          条,还列出参数与口径、排在名单之外的候选和交付回执,可以打印或存成文件.
+        </p>
+      </button>
+
       <AccountEntry onArchiveCleared={onArchiveCleared} />
+
+      {reportsOpen && (
+        <Suspense
+          fallback={
+            <div className="text-xs" style={{ color: 'var(--muted)' }}>
+              加载我的报告…
+            </div>
+          }
+        >
+          <PaidReports onClose={() => setReportsOpen(false)} />
+        </Suspense>
+      )}
     </div>
   )
 }
@@ -829,6 +949,15 @@ interface ServicePanelProps {
   onReportTabChange: (tab: ReportTab) => void
   /** 切换页面阶段(用于进入/退出规则浏览器等独立页) */
   onStageChange: (stage: Stage) => void
+  /** 🔴 10-21 第十三阶段·第一步 §四·1：报告页天气卡选中的城市（只在这一屏，⛔ 不落库、⛔ 不进档案） */
+  weatherCity: string | null
+  /** 上一次生成时后端给的天气出处账；null＝那一次没带城市（响应与改前逐字节相同） */
+  weatherOutcome: { source: 'live' | 'failed'; notice?: string } | null
+  onWeatherCity: (c: string | null) => void
+  /** 后端随推荐结果带回的那句隐私声明（X8，⛔ 前端不许自己编） */
+  privacyNotice: string
+  /** 上一次提交失败的原话（X2 §三：吐司会自己消失，这一句必须留在页面上） */
+  submitError: string
   compact?: boolean
 }
 
@@ -857,6 +986,11 @@ function ServicePanel(props: ServicePanelProps) {
     archiveProfile,
     archiveUsed,
     profileTags,
+    weatherCity,
+    weatherOutcome,
+    onWeatherCity,
+    privacyNotice,
+    submitError,
   } = props
 
   // 头部
@@ -1028,6 +1162,15 @@ function ServicePanel(props: ServicePanelProps) {
     return (
       <div className="animate-fade-in">
         {Header}
+        {/* 🔴 第十四阶段·第一步 X2（`docs/依据/22` §三）：失败原话留在这一屏。
+            吐司会自己消失、`toastOnce` 只负责"同一条不弹两次"，顾客抬头时页面必须还有痕迹，
+            否则他分不清是没网、点太快、还是额度用完了。文案用后端原话，⛔ 不改写、⛔ 不吞分钟数。
+            `onRetry` 这里刻意不挂：`/engine` 那把桶是 20 次/分钟，挂一个"重试"按钮就是替顾客连点。 */}
+        {submitError && (
+          <div style={{ marginBottom: '10px' }}>
+            <ErrorMessage message={submitError} />
+          </div>
+        )}
         <Suspense
           fallback={
             <div className="text-center py-8" style={{ color: 'var(--muted)' }}>
@@ -1142,6 +1285,14 @@ function ServicePanel(props: ServicePanelProps) {
               synced={synced}
               syncing={syncing}
               compact={compact}
+              weatherCity={weatherCity}
+              weatherSource={weatherOutcome?.source ?? null}
+              weatherNotice={weatherOutcome?.notice ?? null}
+              onWeatherCityChange={onWeatherCity}
+              privacyNotice={privacyNotice}
+              onRegenerate={() => {
+                if (profile) onSubmit(profile)
+              }}
             />
           </Suspense>
         )}
@@ -1188,13 +1339,51 @@ function ServicePanel(props: ServicePanelProps) {
     )
   }
 
-  // 加载中
+  // 🔴 第十四阶段·第一步 X3（规范 `docs/依据/22` §四）：走到这里＝`stage` 停在 'report' 但
+  // `recommendation` 或 `profile` 不在（请求失败、被清空、刷新后状态丢了）。
+  // 原来这一格是一颗**永久转圈**：顾客分不清"还在算"还是"死了"，门店屏能空转一整天。
+  // 正解分两档：真在提交 ⇒ 说清在算什么；数据没到 ⇒ 说人话 + 给两条出路。
+  // ⛔ 不许在这里塞一个默认空报告充数（硬规矩 2：缺测不出分），⛔ 也不许假装"马上就好"。
+  if (submitting) {
+    return (
+      <div className="animate-fade-in">
+        {Header}
+        <div className="text-center py-8" style={{ color: 'var(--muted)' }}>
+          <div className="spinner mx-auto mb-3"></div>
+          正在按你刚填的那次算，一般几秒就好……
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="animate-fade-in">
       {Header}
-      <div className="text-center py-8" style={{ color: 'var(--muted)' }}>
-        <div className="spinner mx-auto mb-3"></div>
-        加载中...
+      <div
+        className="p-4 text-center"
+        style={{
+          border: '1px solid var(--line)',
+          borderRadius: '12px',
+          background: 'rgba(255,255,255,0.03)',
+          lineHeight: '1.9',
+        }}
+      >
+        <div className="text-sm" style={{ color: 'var(--text)' }}>
+          这一屏没有可显示的结果
+        </div>
+        <div className="text-xs mt-1" style={{ color: 'var(--muted)' }}>
+          {recommendation
+            ? '结果算出来了，但当时填的那份表单不在（刷新过或换过设备），所以报告缺输入。'
+            : '这次没算出结果——可能是网络断了，或请求超时了。系统没有替你猜一份。'}
+        </div>
+        <div className="flex justify-center gap-2 mt-4">
+          <button onClick={onBack} className="primary-btn px-4 py-2 text-xs">
+            回表单再看一次
+          </button>
+          <button onClick={onReset} className="ghost-btn px-4 py-2 text-xs">
+            回展厅首页
+          </button>
+        </div>
       </div>
     </div>
   )

@@ -10,7 +10,12 @@
  */
 const test = require('node:test')
 const assert = require('node:assert')
-const { getWeather, buildTemperatureProfile } = require('../services/weatherService')
+const {
+  getWeather,
+  buildTemperatureProfile,
+  levelFromFeelsLike,
+  WEATHER_LEVELS,
+} = require('../services/weatherService')
 
 const realFetch = globalThis.fetch
 
@@ -138,4 +143,41 @@ test('取失败不写缓存：下一次仍然会打上游', async () => {
   } finally {
     globalThis.fetch = realFetch
   }
+})
+
+// ============================================================
+// 10-22 第十三阶段·第一步：档位折算的值域闸（`21` §四·1 接线时实测出来的短板）
+// 改前 `Number(null)`／`Number('')`／`Number([])`／`Number(false)` 全是 0，一律落进
+// "≤5°C ⇒ 寒冷"。而 `feels_like_c` 没填时库里就是 NULL ⇒ `collabFilter.js:199` 与
+// `wearPreference.js:247` 那两处"人没选档就现推"会把一条什么都没填的日记判成"寒冷天穿的"。
+// ⛔ 真 0°C 不许跟着一起被抹成没填——那是数值，不是缺测。
+// ============================================================
+
+test('levelFromFeelsLike：⛔ 空值／非数值一律不出档（只有真是数或数字字符串才折）', () => {
+  const 应回null = [null, undefined, '', '   ', NaN, true, false, [], {}, [3], { 值: 3 }]
+  for (const v of 应回null) {
+    assert.strictEqual(
+      levelFromFeelsLike(v),
+      null,
+      `「${String(v)}」不是温度读数，不许退成任何一档（退档＝编造天气）`,
+    )
+  }
+  // 五档本身照旧（四刀 [5,14,24,30]，边界值归低档）
+  const 档位表 = [
+    [-30, '寒冷'],
+    [5, '寒冷'],
+    [5.1, '偏凉'],
+    [14, '偏凉'],
+    [20, '舒适'],
+    [30, '偏热'],
+    [30.5, '炎热'],
+    ['2.1', '寒冷'],
+    [0, '寒冷'],
+  ]
+  for (const [input, want] of 档位表) {
+    assert.strictEqual(levelFromFeelsLike(input), want, `${String(input)}°C 该是「${want}」`)
+    assert.ok(WEATHER_LEVELS.includes(want))
+  }
+  // 上面那句"退档＝编造天气"在 buildTemperatureProfile 那一层同样成立
+  assert.strictEqual(levelFromFeelsLike(null), null, '给 buildTemperatureProfile 传的也是同一个闸')
 })

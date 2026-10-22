@@ -12,6 +12,9 @@
  * 不许显示空白判据，也不许写"建议咨询专业人士"。
  */
 import type { TopSpec, TopSpecAxis, TopSpecFit, TopSpecFitCheck } from '../../types'
+// 10-22 第十四阶段·第一步 X6：档位一律说成"凭什么"（有国标原文／有实证文献／…），
+// ⛔ 再把内部字母档 A/B/C/D 直接印给顾客。真身映射仍在这一份里（evidenceLevels.js 出字母）。
+import { evidenceLabel } from './EvidenceTag'
 
 /** 方向标记：松量那一轴给的是区间，不谈加减 */
 function sideChip(axis: TopSpecAxis): string {
@@ -80,7 +83,7 @@ function FitCheckRow({ c }: { c: TopSpecFitCheck }) {
             background: ok ? 'rgba(120,200,140,0.18)' : 'rgba(255,255,255,0.08)',
             color: ok ? 'var(--green, #58b368)' : 'var(--muted)',
           }}
-          title={`档位：${plain(c.tier)}`}
+          title={`依据：${evidenceLabel(c.tier)}`}
         >
           {c.verdict}
         </span>
@@ -94,7 +97,7 @@ function FitCheckRow({ c }: { c: TopSpecFitCheck }) {
           要判这一道还缺：{plain(c.missing_input)}
         </div>
       )}
-      <div style={{ ...muted, marginLeft: '8px' }}>依据档位：{plain(c.tier)}</div>
+      <div style={{ ...muted, marginLeft: '8px' }}>依据：{evidenceLabel(c.tier)}</div>
     </div>
   )
 }
@@ -116,12 +119,26 @@ function FitBlock({ fit }: { fit: TopSpecFit }) {
               </span>
             ) : null}
             {fit.size_scope === 'near' ? (
-              <span
-                style={{ ...muted, color: 'var(--orange, #d98b2b)' }}
-                title={plain(fit.size_scope_note)}
-              >
-                超出常用档系，就近换算
-              </span>
+              // 🔴 10-22 X6（依据/22 §七 闸门）：原来这句只有 `title=`，手机触屏压根读不到
+              // 后端那条 note（号型超出哪个档系、按哪几档就近换算）⇒ 改成点一下也摊得开的展开项，
+              // ⛔ 出处与数值一个不删，只是从 hover 挪到"点一下"。
+              <details className="inline-block">
+                <summary
+                  style={{
+                    ...muted,
+                    color: 'var(--orange, #d98b2b)',
+                    cursor: 'pointer',
+                    listStyle: 'none',
+                    fontSize: '11px',
+                  }}
+                  title={plain(fit.size_scope_note)}
+                >
+                  超出常用档系，就近换算
+                </summary>
+                <div style={{ ...muted, marginTop: '4px', maxWidth: '360px' }}>
+                  {plain(fit.size_scope_note)}
+                </div>
+              </details>
             ) : null}
           </div>
           <div style={{ ...muted, margin: '4px 0 8px' }}>
@@ -132,9 +149,18 @@ function FitBlock({ fit }: { fit: TopSpecFit }) {
               <>
                 <br />
                 胖瘦程度是另一条轴：BMI {fit.bmi} ⇒ {fit.bmi_band.cn}
-                <span title={plain(fit.bmi_band_note)}>
-                  （GB/T 31901-2024 表 A.2，2026-12-01 才实施 ⇒ 现为内部口径）
-                </span>
+                {/* 🔴 10-22 X6：这一档的国标出处与阈值原来只塞在 `title=` 里（触屏读不到），
+                    而外面那句硬编码括号就是它的一句话摘要 ⇒ 直接把后端原文摊开，
+                    ⛔ 不另外留一份会走样的短摘要（GB/T 31901-2024 与 2026-12-01 实施日期都在原文里）。 */}
+                <details style={{ marginTop: '2px' }}>
+                  <summary
+                    style={{ cursor: 'pointer', color: 'var(--muted)', listStyle: 'none' }}
+                    title={plain(fit.bmi_band_note)}
+                  >
+                    这一档凭什么（国标出处与阈值）
+                  </summary>
+                  <div style={{ ...muted, marginTop: '2px' }}>{plain(fit.bmi_band_note)}</div>
+                </details>
               </>
             ) : null}
           </div>
@@ -175,9 +201,30 @@ function FitBlock({ fit }: { fit: TopSpecFit }) {
   )
 }
 
-export default function TopSpecCard({ spec }: { spec: TopSpec }) {
+export default function TopSpecCard({
+  spec,
+  skin,
+}: {
+  spec: TopSpec
+  /**
+   * 后端记下的肤色来源（`_computed.skin_source`，口径见 docs/依据/18 §2.4）。
+   * ⛔ 只是拆账用的定性标注：不是置信度、不参与任何计算，缺了就不显示这一行。
+   */
+  skin?: {
+    skin_source?: string | null
+    skin_undertone?: string | null
+    skin_hue?: number | null
+  } | null
+}) {
   if (!spec) return null
   const colour = spec.colour
+  // 措辞照 18 §四：只说"按你照片里这块皮肤的颜色归到哪一档"，⛔ 不许写检测/识别/测出
+  const skinLine =
+    skin?.skin_source === 'photo_sample'
+      ? `这一轮颜色用的冷暖＝按你照片里这块皮肤的颜色归到「${skin.skin_undertone}」（色相角 ${skin.skin_hue}°），深浅仍是你自己确认的那档`
+      : skin?.skin_source === 'manual'
+        ? '这一轮颜色用的肤色＝你在表单里选的那档'
+        : null
 
   return (
     <div className="glass-card p-3 mt-3 animate-fade-in">
@@ -201,7 +248,7 @@ export default function TopSpecCard({ spec }: { spec: TopSpec }) {
             <span
               className="badge badge-accent"
               style={{ fontSize: '11px' }}
-              title={`档位：${plain(axis.tier)}`}
+              title={`依据：${evidenceLabel(axis.tier)}`}
             >
               {sideChip(axis)}
             </span>
@@ -228,10 +275,10 @@ export default function TopSpecCard({ spec }: { spec: TopSpec }) {
           )}
           {axis.based_on ? (
             <div style={{ ...muted, marginLeft: '8px' }}>
-              算它用的实测数：{axis.based_on} ｜ 依据档位：{plain(axis.tier)}
+              算它用的实测数：{axis.based_on} ｜ 依据：{evidenceLabel(axis.tier)}
             </div>
           ) : (
-            <div style={{ ...muted, marginLeft: '8px' }}>依据档位：{plain(axis.tier)}</div>
+            <div style={{ ...muted, marginLeft: '8px' }}>依据：{evidenceLabel(axis.tier)}</div>
           )}
           {axis.gated && (
             <div style={{ fontSize: '11px', color: 'var(--orange, #d98b2b)', marginLeft: '8px' }}>
@@ -252,21 +299,39 @@ export default function TopSpecCard({ spec }: { spec: TopSpec }) {
           </div>
           <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
             {colour.prefer?.map((c) => (
-              <span
-                key={c.hex + c.name}
-                title={`档位：${plain(colour.tier)}\nΔE00 ${c.deltaE00} ／ 色相角差 ${c.dHue}° ／ 明度差 ${c.dL}${
-                  c.limit_field ? `\n这一分的短板口径：${c.limit_field}` : ''
-                }`}
-                style={{
-                  fontSize: '12px',
-                  padding: '2px 8px',
-                  borderRadius: '10px',
-                  background: c.hex,
-                  color: chipTextColor(c.hex),
-                }}
-              >
-                {c.name} {c.score}
-              </span>
+              <details key={c.hex + c.name} className="inline-block">
+                <summary
+                  title={`依据：${evidenceLabel(colour.tier)}\n色差 ${c.deltaE00}（越小越接近，0＝同色） ／ 色调相差 ${c.dHue}° ／ 明暗差 ${c.dL}${
+                    c.limit_field ? `\n这一分的短板口径：${c.limit_field}` : ''
+                  }`}
+                  style={{
+                    fontSize: '12px',
+                    padding: '2px 8px',
+                    borderRadius: '10px',
+                    background: c.hex,
+                    color: chipTextColor(c.hex),
+                    cursor: 'pointer',
+                    listStyle: 'none',
+                  }}
+                >
+                  {c.name} {c.score}
+                </summary>
+                {/* 10-22 第十四阶段·第一步 X6：这几个数原来**只活在 `title=` 里**，
+                    手机上长按不弹提示 ⇒ 顾客永远读不到"这个分怎么来的"。点色块下面就把同一份数摊开。 */}
+                <div
+                  style={{
+                    fontSize: '11px',
+                    color: 'var(--muted)',
+                    lineHeight: 1.6,
+                    maxWidth: '320px',
+                    marginTop: '4px',
+                  }}
+                >
+                  色差 {c.deltaE00}（越小越接近，0＝同色）｜色调相差 {c.dHue}°｜明暗差 {c.dL}
+                  ｜依据：{evidenceLabel(colour.tier)}
+                  {c.limit_field && `｜这一分的短板口径：${c.limit_field}`}
+                </div>
+              </details>
             ))}
           </div>
           {colour.avoid && colour.avoid.length > 0 && (
@@ -278,8 +343,13 @@ export default function TopSpecCard({ spec }: { spec: TopSpec }) {
             {plain(colour.note)}
           </div>
           <div style={{ fontSize: '11px', color: 'var(--muted)' }}>
-            依据档位：{plain(colour.tier)}
+            依据：{evidenceLabel(colour.tier)}
           </div>
+          {skinLine && (
+            <div style={{ fontSize: '11px', color: 'var(--muted)', marginTop: '4px' }}>
+              {skinLine}
+            </div>
+          )}
         </div>
       ) : (
         <div style={{ fontSize: '12px', color: 'var(--muted)', marginBottom: '8px' }}>

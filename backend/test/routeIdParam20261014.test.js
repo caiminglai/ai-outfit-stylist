@@ -14,6 +14,12 @@
  * asId 28 处 + inventory.js 的 asNumber 4 处（Number('12abc') 是 NaN，本来就不截断），
  * `parseInt(req.params` 归零。下面 28 个入口逐条断「400 ＋ 那一行整行快照没变」。
  *
+ * 🔴 10-20 第八阶段·一c 订正一句：上面这两句是 **10-14 当时的读数，不改写历史**。
+ * 当日闸门末尾那个数会随新增数字型路径参数往上走，现在现量是 **asId 30 处**
+ * （wardrobe 由 4⇒6：新加的 `PUT /outfits/:outfitId`＋`DELETE /outfits/:outfitId`）。
+ * 末尾那道闸门断的是"当下现量"，改入口必改那个数——这道闸故意做成"会红"的，
+ * 红了就是提醒新增的路径参数没走 asId（或走了但没登记）。
+ *
  * 这些断言不是"写了就绿"：把 routes/ 换成 HEAD（ce81a88）的改前版本、在仓库外的副本里
  * 跑这同一份测试，红条数见本轮台账。
  *
@@ -547,7 +553,7 @@ test('边界：0／负数／空串同样 400，且不碰已有的 1 号行', () 
 // 三、这一类 bug 的关闭闸：路由不再用会截断的 parseInt 读路径参数
 // ============================================================
 
-test('闸门：backend/routes 里 parseInt(req.params…) 归零，asId 读法 28 处', () => {
+test('闸门：backend/routes 里 parseInt(req.params…) 归零，asId 读法 30 处', () => {
   const dir = path.join(__dirname, '..', 'routes')
   const files = fs
     .readdirSync(dir)
@@ -563,7 +569,9 @@ test('闸门：backend/routes 里 parseInt(req.params…) 归零，asId 读法 2
     })
   }
   assert.deepEqual(hits, [], `这些路径参数还在用会截断的 parseInt：${hits.join(', ')}`)
-  // 现量 28＝accessory3＋analysis1＋clothing1＋cosmetic3＋creator4＋history2＋models3
-  //        ＋payment1＋photos1＋rules4＋tryon1＋wardrobe4。新增数字型路径参数要同步这个数。
-  assert.equal(asIdCount, 28, `asId 读法数变了（现量 ${asIdCount}）`)
+  // 现量 30＝accessory3＋analysis1＋clothing1＋cosmetic3＋creator4＋history2＋models3
+  //        ＋payment1＋photos1＋rules4＋tryon1＋wardrobe6。新增数字型路径参数要同步这个数。
+  // 2026-10-20 第八阶段·一c：wardrobe 4⇒6（新加的 `PUT /outfits/:outfitId` 与
+  // `DELETE /outfits/:outfitId` 各一处，两条都走 asId 而不是 parseInt，正是这道闸要的形状）。
+  assert.equal(asIdCount, 30, `asId 读法数变了（现量 ${asIdCount}）`)
 })

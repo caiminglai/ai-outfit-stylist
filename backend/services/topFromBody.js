@@ -35,7 +35,7 @@
 
 const { bodyDeviation, BODY_REF, AXIS_CN, AXIS_TIER } = require('./topFitBody')
 const { fitLayer } = require('./fitSize')
-const { colorFit, skinToneToLab, COLOR_NAME_HEX } = require('./colorMetrics')
+const { colorFit, skinToneToLab, synthesizeSkinLab, COLOR_NAME_HEX } = require('./colorMetrics')
 
 /** |want| 小于这个数就当"这一维不推拉"，不给方向性建议（C 档手拍阈值） */
 const NEUTRAL_BAND = 0.15
@@ -121,8 +121,8 @@ const SPEC = {
   pattern: {
     tier: 'B 档但文献结论互相冲突（4 篇方向不一）⇒ 只当低权重修正，不许当判定',
     // 文案方向必须跟打分一致，否则顾客看到的理由和推荐排序是两回事：
-    // describeTop 里竖条=+1、横条=-1（topFitBody.js:432-433），而 want.pattern 直接
-    // 取 want.volume（:221）⇒ 想加体量（want>0）的人被抬高的是**竖条**，想收（want<0）
+    // describeTop 读的条纹取值表 topFitBody.js:376（竖条=+1、横条=-1），落到轴上是 `:581`；want.pattern
+    // 直接取 want.volume（`:337`）⇒ 想加体量（want>0）的人被抬高的是**竖条**，想收（want<0）
     // 的是**横条**。原来这两句 label 把目标说反（plus 写"你想收窄时…选竖向"），
     // 而 plus 分支只会落在偏瘦的人身上（BMI<24 ⇒ want.volume>0），报告当场自相矛盾。
     plus: {
@@ -371,20 +371,50 @@ function missingReason(key, dev) {
  * 30，直接决定"衣装越暗脸越显白"那一项）。档案里 skin_tone 可能被 enricher 用深浅值回填过
  * ⇒ 深浅词表在前、冷暖词表在后，按取到的值归类，不按字段名猜。两个口径都能认时按**更低的
  * 那个分**排：只讨好一个口径的颜色不许排前面（宁可保守，不吹）。
+ *
+ * 🔴 10-21 补（第十阶段·第一步，docs/依据/18 §2.5 与 §九）：这个函数原来是**第五处**自己拼
+ * 肤色字符串的取值点（改前 `:379` 一行 `skinToneToLab(value)`，完全不看 `skin_hue`），
+ * 现象实测在盘外工装 `api-diff.cjs`：照片角度改了 Top-8 名次，却**没改顾客看到的这串建议色**。
+ * 现在两处（引擎的 `_skinForColor`、这里的 `colorSpec`）都调同一个 `synthesizeSkinLab`，
+ * 过不了闸（非有限数／越过 h 闸／深浅冷暖两格都没填）⇒ 整段回改前行为，⛔ 不编值。
+ *
+ * ⚠️ 照片顶掉的是**冷暖那一格**，不是"传进来的那一个档"。判据＝h° 这个量本身就是冷暖轴
+ * （`synthesizeSkinLab` 回的 `undertone` 正是 冷皮/自然/暖皮 三个词），而深浅轴是 L\*——
+ * 本站明确不吃照片的绝对明度。第一版写成"顶掉 toneText 那一档"，实测在 自然白／自然 这个人身上
+ * 建议色六个分逐字没动（盘外 `api-diff.cjs` 10-21：`A==B true`），因为取低分时瓶颈全在冷暖那颗；
+ * 顶错格子＝照片又被瓶颈吃掉了，等于没接。深浅锚点无论如何在下面原样保留。
  */
 const DEEP_WORDS = ['白皙', '自然白', '偏黄', '小麦色', '古铜色']
+/** 冷暖口径那三个词（`SKIN_TONE_ANCHORS` 里的冷暖侧；照片接管的就是这一格） */
+const UNDERTONE_WORDS = ['冷皮', '自然', '暖皮']
 function colorSpec(person) {
+  const p = person || {}
+  const synth = synthesizeSkinLab(p.skin_tone_detail || p.skin_tone || null, p.skin_hue)
   const anchors = []
+  const add = (a) => {
+    if (anchors.some((x) => x.lab.L === a.lab.L && x.lab.a === a.lab.a && x.lab.b === a.lab.b))
+      return
+    anchors.push(a)
+  }
   const push = (value, fromDetail) => {
+    if (!value) return
+    const name = String(value).trim()
+    // 照片在场 ⇒ 冷暖那颗离散锚点被实测角度顶掉（同一个口径的更细读数，⛔ 不是再叠一个口径）
+    if (synth !== null && UNDERTONE_WORDS.includes(name)) return
     const lab = skinToneToLab(value)
     if (!lab) return
-    if (anchors.some((x) => x.lab.L === lab.L && x.lab.a === lab.a && x.lab.b === lab.b)) return
-    const name = String(value).trim()
-    const field = fromDetail || DEEP_WORDS.includes(name) ? '深浅' : '冷暖'
-    anchors.push({ field, name, lab })
+    add({ field: fromDetail || DEEP_WORDS.includes(name) ? '深浅' : '冷暖', name, lab })
   }
-  push(person.skin_tone_detail, true)
-  push(person.skin_tone, false)
+  push(p.skin_tone_detail, true)
+  push(p.skin_tone, false)
+  if (synth !== null) {
+    add({
+      field: '冷暖',
+      name: `照片色相 ${Math.round(synth.lab.h)}°（${synth.undertone}）`,
+      lab: synth.lab,
+      from_photo: true,
+    })
+  }
   if (anchors.length === 0) {
     return { present: false, reason: '肤色没填或认不出这个色 ⇒ 颜色这一整段不出，不替你猜' }
   }
@@ -415,9 +445,20 @@ function colorSpec(person) {
     present: true,
     skin_label: anchors.map((x) => `${x.field} ${x.name}`).join('／'),
     skin_lab: { L: primary.lab.L, a: primary.lab.a, b: primary.lab.b },
+    /** 照片色相角是否接管了冷暖这一格（10-21 第五处取值点补口；过不了闸恒 null） */
+    photo_hue: synth ? synth.lab.h : null,
+    /** 顶掉冷暖那颗离散锚点之后实际进 `colorFit` 的 Lab；⛔ L 与 C 一律来自 C 档锚点表 */
+    photo_lab: synth
+      ? { L: synth.lab.L, a: synth.lab.a, b: synth.lab.b, h: synth.lab.h, C: synth.lab.C }
+      : null,
+    photo_undertone: synth ? synth.undertone : null,
     anchor_count: anchors.length,
     scoring: anchors.length > 1 ? 'min' : 'single',
-    tier: 'A 色差公式（GB/T 7921-2008／ISO-CIE 11664）＋ B 方向（Schloss & Palmer 2011 图形色-背景分离、Zhang 2025 DOI 10.1111/cote.12828 衣装明度）＋ C 合成分权重（手拍）',
+    tier:
+      'A 色差公式（GB/T 7921-2008／ISO-CIE 11664）＋ B 方向（Schloss & Palmer 2011 图形色-背景分离、Zhang 2025 DOI 10.1111/cote.12828 衣装明度）＋ C 合成分权重（手拍）' +
+      (synth
+        ? '；这一条吃了照片色相角：切点 52.86／64.02 与 h 闸 36.36～78.05 的下上沿＝CIE TC 1-92 华裔子集 P25/P75、P5/P95（B 档），两侧各外扩 8 度与浏览器取样框＝C 档手拍；明度 L 与彩度 C 一律仍取自 C 档锚点表，⛔ 不吃照片的绝对明度'
+        : ''),
     prefer: uniq.slice(0, COLOR_TOP_N).map((r) => ({
       name: r.top_label,
       hex: r.top_hex,
@@ -441,7 +482,7 @@ function colorSpec(person) {
  * 主入口：一个人 ⇒ 一张上衣规格表，三层按固定顺序出，**永不合并成一个分**。
  *  第 0 层 合身（`fit`，GB/T 1335 号型 + 四道部位判据）
  *  第 1 层 修形（`axes`，六轴 want 向量）
- *  第 2 层 颜色（`colour`，与肤色锚点的色差排序）
+ *  第 2 层 颜色（`colour`，与肤色 Lab 的色差排序；填了合格的照片色相角 ⇒ 那一档的 a/b 换成实测角度）
  * @param {object} person 档案（enrich 前后都行，字段名走 profileEnricher 口径）
  * @returns {null|{inputs, fit, axes, colour, missing, note, evidence}}
  *          三层都出不了 ⇒ 返回 null（缺测不出处方）
@@ -462,6 +503,8 @@ function topSpec(person) {
       ease_window_cm: dev.ease_window,
       skin_tone: p.skin_tone || p.skin_tone_detail || null,
       skin_tone_detail: p.skin_tone_detail || null,
+      // 照片那一维只吃角度，且只有过闸才被记进 inputs（18 §2.4：本规范没有 skin_lab 这一格）
+      skin_hue: colour.present ? colour.photo_hue : null,
     },
     fit,
     axes,

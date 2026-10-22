@@ -1,0 +1,27 @@
+# 站3 · 私人形象定制AI（第十四阶段·组3：让顾客搜得到，同时别把后台和模型库喂给爬虫）
+# 判据与本文件的取舍账见 docs/依据/22-用户体验与商业模式输入输出规范-20261022.md §十二.9c
+#
+# 只放行三页：首页（React 展厅壳）、/gallery（3D 展厅待机态）、/how-it-works.html（对外介绍页）。
+# 这三页是"顾客会搜到"的入口；其余都是要么需要登录态、要么是二进制大文件、要么是经营后台。
+#
+# ⛔ /admin 与 /api/：后台命名空间与全部业务接口。/admin 那一套靠 Bearer token 把关，
+#   但"能被爬到"和"能被登录"是两回事——爬到的列表页里会带真实模型名与来源，那是未发布的内容。
+# ⛔ /pay.html /creator.html：付款页与创作者中心。两页本身也写了 robots=noindex（双保险，
+#   防有人把链接直接递进搜索引擎）。
+# ⛔ /models/ /uploads/ /static/：模型本体（.pmx.gz 最大单件几十 MB）与顾客上传的实拍图。
+#   尤其 /uploads/ 是**别人的照片**，任何情况下都不许进索引。
+User-agent: *
+Allow: /$
+Allow: /gallery
+Allow: /how-it-works.html
+Disallow: /admin
+Disallow: /api/
+Disallow: /models/
+Disallow: /uploads/
+Disallow: /static/
+Disallow: /pay.html
+Disallow: /creator.html
+
+# 站点地图：只列上面那三页。
+# 这里写的是对外域名。本机 127.0.0.1:5000 上这份文件同样存在，但爬虫进不来本机，无副作用。
+Sitemap: https://style.sparklove.cn/sitemap.xml

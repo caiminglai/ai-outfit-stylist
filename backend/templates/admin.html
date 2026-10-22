@@ -147,6 +147,13 @@
 
     <!-- Section: 收款凭证 -->
     <div id="section-payments" class="section">
+      <!-- 第十二阶段·第一步（docs/依据/20 §七）：三张经营读数卡。数来自 /api/payment/admin/list
+           新增的 summary 键，全库口径，⛔ 不跟着上面的状态筛选变。空库时全 0／全「—」是真实读数。 -->
+      <h2>经营读数</h2>
+      <div id="pay-summary" class="inv-toolbar" style="flex-wrap:wrap;gap:10px;">
+        <div class="loading" style="width:100%;">加载中...</div>
+      </div>
+
       <h2>收款金额</h2>
       <div class="card">
         <div class="inv-toolbar">

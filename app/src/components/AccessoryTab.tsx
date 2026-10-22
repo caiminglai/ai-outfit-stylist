@@ -5,7 +5,7 @@
  * 从 CabinetManager 中提取而来，降低单文件复杂度。
  */
 import { useState, useEffect, useCallback, useMemo } from 'react'
-import { toast } from 'sonner'
+import { toast } from '../utils/toastOnce'
 import type {
   CustomerProfile,
   AccessoryItem,

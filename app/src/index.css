@@ -640,3 +640,29 @@ iframe {
     border-top: 1px solid var(--line);
   }
 }
+
+/* ════════════════════════════════════════════════
+   第十四阶段·第一步 X7（2026-10-22）：窄屏上"点得准"
+   ════════════════════════════════════════════════
+   判据是 `.narrow-hit` 这个类，不是新写一条 @media —— 窄与宽的唯一阈值 768 已经写在
+   `src/hooks/useResponsive.ts`（`DESKTOP_MIN_WIDTH`）里，由 `pages/ExhibitionHall.tsx`
+   把 `isMobile` 落成这个类。这里再写一个 `@media (max-width: 767px)` 就是第二套断点，
+   两套数字迟早打架（本项目反复扫的就是"改了没生效"）。
+
+   这些规则**故意不放进 @layer**：要盖的是 Tailwind 的 `.grid-cols-5` 与自己 components 层
+   里的 `.opt-btn`，两条都靠更高的选择器权重（0,2,0 > 0,1,0）生效，进层反而可能被 utilities 压住。
+
+   ⛔ 宽屏（门店 1080 竖屏 / 1080p）拿不到这个类 ⇒ 这几条一行都不影响它（规范 §八 闸门）。 */
+.narrow-hit .opt-btn {
+  min-height: 44px;
+  font-size: 12px;
+}
+/* 选项区：5 列降 3 列（3 列及以下不动，再窄就成"一字长蛇"了） */
+.narrow-hit .grid-cols-5 {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+/* 星级那两行原本约 20px 见方，拇指点不准；只加盒子的最小可点尺寸，字形大小不动 */
+.narrow-hit .star-btn {
+  min-width: 44px;
+  min-height: 44px;
+}

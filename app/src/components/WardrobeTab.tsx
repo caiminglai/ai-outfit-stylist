@@ -5,7 +5,7 @@
  * 从 CabinetManager 中提取而来，降低单文件复杂度。
  */
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
-import { toast } from 'sonner'
+import { toast } from '../utils/toastOnce'
 import type {
   CustomerProfile,
   WardrobeItem,
@@ -26,6 +26,7 @@ import {
   rankTopsByBody,
   getWardrobeStatus,
   uploadClothing,
+  lookupWardrobeSku,
 } from '../api'
 import {
   WARDROBE_CATEGORIES,
@@ -35,6 +36,19 @@ import {
   btnStyle,
 } from './CabinetConstants'
 import { UPLOAD_ACCEPT, checkPickedImage } from '../lib/imagePick'
+import WardrobeDiary from './WardrobeDiary'
+import { evidenceLabel } from './recommend/EvidenceTag'
+
+/**
+ * 「只存图」这张图要不要真的让浏览器去取（10-20 第五阶段·第一步）。
+ * image_url 这一格后台是当短文本存的，写入口不只顾客自己（后台那条也是文本框，可以填任意串），
+ * 而我这一版开始把它的值放进 <img src> ⇒ 若原样渲染一个外部地址，等于让每个顾客的浏览器
+ * 替那个站点做一次点击（暴露 IP、给对方计数）。所以只认同源相对路径：
+ * 以单个 "/" 开头（我们上传返回的就是 /uploads/xxx.jpg），且排除 "//" 这种协议相对写法。
+ * 不满足的当"没图"处理：不请求、不显示，值仍原样留在库里，改回来也不丢。
+ */
+const sameOriginImage = (u?: string | null): string | null =>
+  typeof u === 'string' && u.startsWith('/') && !u.startsWith('//') ? u : null
 
 /* ================================================================
    Props
@@ -53,12 +67,25 @@ const WARDROBE_FORM_DEFAULT = {
   name: '',
   category: 'top' as string,
   color: '',
-  fit_style: '' as string,
+  // 版型（10-19 第三阶段·模块一）：上衣/外套/连衣裙**必选**的一档。量不了软尺的人
+  // 靠它把松量估出来（后端 FIT_TYPE_EASE），公式照样能跑——所以它是必填，实测尺寸反而是选填。
+  fit_type: '' as string,
   fabric_weight: '' as string,
+  pattern: '' as string,
+  // 成衣实测四格（cm）：量到了就按实测打分（优先级高于版型档）；空着＝没量＝那一维不算
+  shoulder_cm: '',
+  bust_cm: '',
+  length_cm: '',
+  waistband_cm: '',
   style_tags: '',
   season_tags: '',
   occasion_tags: '',
   price: '',
+  // 吊牌条码／店内编号（扫码录入那一格）：空＝这件不是扫来的
+  sku: '',
+  // 照片（第五阶段·第一步「拍照只存图」）：存的是后端返回的 /uploads/xxx.jpg 地址本身，
+  // ⛔ 不做任何识别——本机没有视觉模型，接外部识别属掏钱项，等他拍板。空＝这件没拍照。
+  image_url: '',
 }
 
 /* ================================================================
@@ -181,6 +208,10 @@ export default function WardrobeTab({ profile, compact }: WardrobeTabProps) {
   const [submitting, setSubmitting] = useState(false)
   const photoInputRef = useRef<HTMLInputElement>(null)
 
+  /* 扫码录入（键盘式扫码枪＝敲一串字符再自动按回车，所以监听 keydown 就够，不用摄像头） */
+  const [scanValue, setScanValue] = useState('')
+  const [scanBusy, setScanBusy] = useState(false)
+
   /* ---------- 数据加载 ---------- */
 
   const fetchItems = useCallback(async () => {
@@ -214,12 +245,19 @@ export default function WardrobeTab({ profile, compact }: WardrobeTabProps) {
       name: item.name ?? '',
       category: item.category ?? 'top',
       color: item.color ?? '',
-      fit_style: item.fit_style ?? '',
+      fit_type: item.fit_type ?? '',
       fabric_weight: item.fabric_weight ?? '',
+      pattern: item.pattern ?? '',
+      shoulder_cm: item.shoulder_cm != null ? String(item.shoulder_cm) : '',
+      bust_cm: item.bust_cm != null ? String(item.bust_cm) : '',
+      length_cm: item.length_cm != null ? String(item.length_cm) : '',
+      waistband_cm: item.waistband_cm != null ? String(item.waistband_cm) : '',
       style_tags: (item.style_tags ?? []).join(','),
       season_tags: (item.season_tags ?? []).join(','),
       occasion_tags: (item.occasion_tags ?? []).join(','),
       price: item.price != null ? String(item.price) : '',
+      sku: item.sku ?? '',
+      image_url: item.image_url ?? '',
     })
     setEditingId(item.id ?? null)
     setShowPhotoUpload(false)
@@ -237,22 +275,78 @@ export default function WardrobeTab({ profile, compact }: WardrobeTabProps) {
       .split(',')
       .map((s) => s.trim())
       .filter(Boolean)
+  /** 实测尺寸：空框 → null（＝没量）；有内容 → 数。脏值由下面 measureFormError 拦，不在这里抹成 null */
+  const toCm = (v: string) => (v.trim() === '' ? null : Number(v))
+  /**
+   * 哪些分类必填版型（10-19 第三阶段·模块一）：只有穿在上半身、松量算得出意义的这三类要选。
+   * 鞋、包、下装没有"成品胸围 − 净胸围"这一维，逼用户选档位只会选出噪声（后端也不认它们进打分）。
+   */
+  const FIT_TYPE_CATEGORIES = ['top', 'outerwear', 'dress']
+  const FIT_TYPE_OPTIONS = ['修身', '合身', '宽松', '廓形']
+  const fitTypeRequired = FIT_TYPE_CATEGORIES.includes(form.category)
+  /** 版型闸门：该选没选就拦下来说一句，别让这条记录带着"整维缺席"进库 */
+  const fitTypeError = () =>
+    fitTypeRequired && form.fit_type.trim() === ''
+      ? '请先选版型（修身/合身/宽松/廓形）——不用软尺也能推荐，就靠这一档估松量'
+      : null
+  /**
+   * 四格实测尺寸的前端闸门：填了却不是个数就拦下来说一句，
+   * 不能让它打包成 NaN→null 静默把库里已有的尺寸抹掉（和后端 measureError 同一把尺子）。
+   */
+  const measureFormError = () => {
+    const cells: Array<[string, string, number, string]> = [
+      ['衣服肩宽', form.shoulder_cm, 15, '两肩缝点之间的直线距离'],
+      ['衣服胸围', form.bust_cm, 50, '袖窿下方一周最宽处'],
+      ['衣服衣长', form.length_cm, 25, '肩颈点（领口最高偏侧处）到下摆'],
+      ['腰头/收口高', form.waistband_cm, 0, '腰头那条缝带自己的高度，没有就填 0'],
+    ]
+    for (const [label, raw, min, how] of cells) {
+      if (raw.trim() === '') continue
+      const n = Number(raw)
+      if (!Number.isFinite(n)) return `${label}只能填数字（单位 cm），量法：${how}`
+      if (n < min || n > 200) return `${label}看起来不像一个衣服尺寸（${min}~200 cm），量法：${how}`
+    }
+    return null
+  }
   const buildPayload = () => ({
     name: form.name.trim(),
     category: form.category,
     color: form.color.trim() || null,
-    fit_style: (form.fit_style.trim() || null) as WardrobeItem['fit_style'] | null,
+    // fit_style 这一列从 10-19 第三阶段起不再由表单产生（退役为展示标签，评分只认 fit_type）
+    fit_type: ((fitTypeRequired && form.fit_type.trim()) || null) as
+      WardrobeItem['fit_type'] | null,
     fabric_weight: (form.fabric_weight.trim() || null) as WardrobeItem['fabric_weight'] | null,
+    pattern: form.pattern.trim() || null,
+    shoulder_cm: toCm(form.shoulder_cm),
+    bust_cm: toCm(form.bust_cm),
+    length_cm: toCm(form.length_cm),
+    waistband_cm: toCm(form.waistband_cm),
     style_tags: splitTags(form.style_tags),
     season_tags: splitTags(form.season_tags),
     occasion_tags: splitTags(form.occasion_tags),
     price: form.price ? Number(form.price) : null,
+    // 条码那一格：空框发 null＝"这件不是扫来的"（PUT 那边 null 才是清空，见 api.ts PutPayload）
+    sku: form.sku.trim() || null,
+    // 照片同理：空框发 null＝把这张图从这条记录上摘掉（文件留在 uploads/ 由上传那条线自己管，
+    // 这里不代它删盘，删照片另有 DELETE /api/clothing/:id）
+    image_url: form.image_url.trim() || null,
   })
 
   const handleSubmit = async () => {
     if (submitting) return
     if (!form.name.trim()) {
       toast.error('请输入衣物名称')
+      return
+    }
+    const measureErr = measureFormError()
+    if (measureErr) {
+      toast.error(measureErr)
+      return
+    }
+    // 版型必选（上衣/外套/连衣裙）：这是"不动软尺也能跑公式"的那道闸门，不许留空
+    const fErr = fitTypeError()
+    if (fErr) {
+      toast.error(fErr)
       return
     }
     const payload = buildPayload()
@@ -274,34 +368,108 @@ export default function WardrobeTab({ profile, compact }: WardrobeTabProps) {
     }
   }
 
-  /* ---------- 拍照上传 -> AI 识别 -> 自动填充表单 ---------- */
+  /* ---------- 扫码录入（第五阶段·第一步「门店扫码快速录入」，2026-10-20） ---------- */
+
+  /**
+   * 扫一次条码：后端一次问两张表，这里按三种结果各说一句人话——
+   * 静默是最坏的结局，店员会以为已经录进去了。
+   * ① 自己衣柜里已有 ⇒ 不重复开空白表单，提示"已有 N 件同款"；
+   * ② 门店库存里有 ⇒ 开新增表单并把名称/品类/标签/价格带出来，条码先填上；
+   * ③ 两边都没有 ⇒ 也开新增表单（扫到的这件可能就是新品），但只带条码，并说清"名称品类请手填"。
+   * ⚠️ ② 目前不分店（库存表没有分店那一列），多家店共用一张库存表时别店的同款也会被带出来。
+   */
+  const handleScan = async (raw: string) => {
+    const sku = raw.trim()
+    if (!sku) {
+      toast.error('条码是空的：扫码枪扫一下，或手打吊牌上的编号再按回车')
+      return
+    }
+    setScanBusy(true)
+    try {
+      const hit = await lookupWardrobeSku(sku)
+      setScanValue('')
+
+      if (hit.in_wardrobe) {
+        const first = hit.mine[0]
+        const dup = hit.mine.length > 1 ? `（同款 ${hit.mine.length} 件）` : ''
+        toast.message(`衣柜里已有这件：${first.name || sku}${dup}——要改就点列表里那一行`)
+        return
+      }
+
+      if (hit.in_inventory) {
+        const p = hit.store[0]
+        const nextCategory = WARDROBE_CATEGORIES.some((c) => c.value === p.category_code)
+          ? (p.category_code as string)
+          : WARDROBE_FORM_DEFAULT.category
+        const colors = (p.color_tags ?? []).filter(Boolean)
+        setForm({
+          ...WARDROBE_FORM_DEFAULT,
+          name: p.name ?? '',
+          category: nextCategory,
+          // 颜色只在库存给出唯一一色时才带：多色带进单一 color 格会变成"一格里塞两个词"，
+          // 色彩那一维认不出反而算错（后端 colorMetrics 按单色解析）。
+          color: colors.length === 1 ? colors[0] : '',
+          style_tags: (p.style_tags ?? []).join(','),
+          season_tags: (p.season_tags ?? []).join(','),
+          price: p.price != null ? String(p.price) : '',
+          sku: hit.sku,
+          // 后台给这件商品传过图就一并带出来（只带地址，不重新上传）
+          image_url: p.image_url ?? '',
+        })
+        setEditingId(null)
+        setShowPhotoUpload(false)
+        setShowAdd(true)
+        const multi = hit.store.length > 1 ? `同码有 ${hit.store.length} 条，取最新一条` : ''
+        const needFit = FIT_TYPE_CATEGORIES.includes(nextCategory)
+        toast.success(
+          `从门店库存带出「${p.name || hit.sku}」${multi ? '；' + multi : ''}${
+            needFit ? '；版型（修身/合身/宽松/廓形）还差你选一下' : ''
+          }`,
+        )
+        return
+      }
+
+      setForm({ ...WARDROBE_FORM_DEFAULT, sku: hit.sku })
+      setEditingId(null)
+      setShowPhotoUpload(false)
+      setShowAdd(true)
+      toast.message(`条码 ${hit.sku} 在你衣柜和门店库存里都没有 ⇒ 当新品录，名称与品类请手填`)
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : '扫码查询失败')
+    } finally {
+      setScanBusy(false)
+    }
+  }
+
+  /* ---------- 拍照上传（10-20 第五阶段·第一步定的口径：只存图，不识别） ---------- */
 
   const handlePhotoUpload = async (file: File): Promise<void> => {
     setPhotoUploading(true)
     try {
       const result: ClothingItem = await uploadClothing(file)
+      // 这条上传链路后端只落 clothing_items 一张表，semantics 全为写死的占位
+      // （category='未分类'、color='未知'、item_name='未命名'，见 backend/routes/clothing.js:68-75），
+      // 本机没有视觉模型、外部识别 API 属掏钱项 ⇒ 本轮按他拍的「只存图」办：
+      // 把图片地址带到衣柜这条记录上（image_url），识别一个字段都不填。
+      // 下面这些守卫留着不删：哪天识别真接上了，占位值还是不能往表单里灌。
       const sem = result.semantics
-      if (!sem) {
-        toast.error('识别结果不完整')
+      const knownCategory = WARDROBE_CATEGORIES.some((c) => c.value === sem?.category)
+      if (!result.image_url) {
+        toast.error('照片没存下来（后端没回图片地址）')
         return
       }
-      // 后端这条上传链路目前不做任何识别,semantics 是写死的占位(category='未分类'、color='未知'…)。
-      // '未分类'不在 WARDROBE_CATEGORIES 里 ⇒ 若照单塞进受控 <select>,下拉框会显示空白而 state 停在'未分类',
-      // 存出来的衣物归不进任何缺口桶。只有当识别真给出一个合法分类时才覆盖默认值。
-      const knownCategory = WARDROBE_CATEGORIES.some((c) => c.value === sem.category)
       setForm((prev) => ({
         ...prev,
-        name: sem.item_name && sem.item_name !== '未命名' ? sem.item_name : prev.name,
+        // 只存图 ⇒ 名称/颜色/版型一律保持用户自己的输入，识别占位不进表单
+        name: sem?.item_name && sem.item_name !== '未命名' ? sem.item_name : prev.name,
         category: knownCategory ? (sem.category as string) : prev.category,
-        color: sem.color && sem.color !== '未知' ? sem.color : prev.color,
-        style_tags: (sem.style ?? []).join(','),
-        season_tags: (sem.season ?? []).join(','),
-        occasion_tags: (sem.usage ?? []).join(','),
+        color: sem?.color && sem.color !== '未知' ? sem.color : prev.color,
+        image_url: result.image_url,
       }))
       setEditingId(null)
       setShowAdd(true)
       setShowPhotoUpload(false)
-      toast.success('照片已保存，请手动补充识别信息')
+      toast.success('照片已存到这一件（识别暂未接入）：名称与版型请手填')
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : '上传识别失败')
     } finally {
@@ -415,6 +583,26 @@ export default function WardrobeTab({ profile, compact }: WardrobeTabProps) {
         ))}
       </div>
 
+      {/* 扫码录入（2026-10-20 第五阶段·第一步「门店扫码快速录入」）。
+          键盘式扫码枪＝模拟键盘敲一串字符再自动按回车 ⇒ 只吃 Enter 一个动作就够，
+          手打吊牌编号再回车走同一条路。查完三种结果都会说一句话，不静默。 */}
+      <div style={{ display: 'flex', gap: '6px', marginBottom: '8px' }}>
+        <input
+          className="form-input"
+          style={{ flex: 1 }}
+          placeholder="扫码枪扫条码 / 手打吊牌编号"
+          value={scanValue}
+          autoComplete="off"
+          onChange={(e) => setScanValue(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') handleScan(scanValue)
+          }}
+        />
+        <button className="ghost-btn" onClick={() => handleScan(scanValue)} disabled={scanBusy}>
+          {scanBusy ? <span className="spinner" /> : '查'}
+        </button>
+      </div>
+
       {/* 添加按钮 */}
       <button
         className="gradient-btn"
@@ -491,17 +679,25 @@ export default function WardrobeTab({ profile, compact }: WardrobeTabProps) {
               value={form.color}
               onChange={(e) => setForm((prev) => ({ ...prev, color: e.target.value }))}
             />
-            {/* 版型与面料厚薄：上衣体量轴的两格输入，不填＝没量，引擎不会替你猜 */}
+            {/* 版型（fit_type，10-19 第三阶段·模块一）：上衣/外套/连衣裙**必选**这一档。
+                量不了软尺的人靠它把松量估出来（后端按区间中值估、覆盖率只按半格计），
+                所以它是必填项，而下面的实测四格反而是选填。
+                老的 fit_style（合体/宽松）从这一轮起退役成只读展示标签，表单不再产生它。 */}
             <div style={{ display: 'flex', gap: '8px' }}>
               <select
                 className="form-select"
                 style={{ flex: 1 }}
-                value={form.fit_style}
-                onChange={(e) => setForm((prev) => ({ ...prev, fit_style: e.target.value }))}
+                value={form.fit_type}
+                onChange={(e) => setForm((prev) => ({ ...prev, fit_type: e.target.value }))}
               >
-                <option value="">版型（选填）</option>
-                <option value="合体">合体</option>
-                <option value="宽松">宽松</option>
+                <option value="">
+                  {fitTypeRequired ? '版型（必选）' : '版型（这一类不需要）'}
+                </option>
+                {FIT_TYPE_OPTIONS.map((v) => (
+                  <option key={v} value={v}>
+                    {v}
+                  </option>
+                ))}
               </select>
               <select
                 className="form-select"
@@ -515,6 +711,70 @@ export default function WardrobeTab({ profile, compact }: WardrobeTabProps) {
                 <option value="厚">厚</option>
               </select>
             </div>
+            <select
+              className="form-select"
+              value={form.pattern}
+              onChange={(e) => setForm((prev) => ({ ...prev, pattern: e.target.value }))}
+            >
+              <option value="">条纹方向（选填，纯色就不选）</option>
+              <option value="竖条">竖条</option>
+              <option value="横条">横条</option>
+            </select>
+            {/* 成衣实测四格（10-19 第二阶段「最后一公里」）：量到了就按实测打分，优先级高于版型档。
+                第三阶段把它折进"高级选项"——不挡人，量了更准；空着＝没量＝那一维不进分，系统不替你猜。 */}
+            <details style={{ margin: '4px 0' }}>
+              <summary style={{ fontSize: '12px', color: 'var(--muted)', cursor: 'pointer' }}>
+                高级选项（选填）：用软尺量一下这四格，比只选版型更准
+              </summary>
+              <div style={{ fontSize: '12px', color: 'var(--muted)', marginTop: '6px' }}>
+                衣服平铺量：肩宽＝两肩缝点直线距离，胸围＝袖窿下方一周最宽处，
+                衣长＝肩颈点到下摆，腰头高＝腰头缝带自身高度（没有就填 0）
+              </div>
+              <div style={{ display: 'flex', gap: '8px', marginTop: '6px' }}>
+                <input
+                  className="form-input"
+                  type="number"
+                  inputMode="decimal"
+                  step="0.1"
+                  min="0"
+                  placeholder="肩宽 cm"
+                  value={form.shoulder_cm}
+                  onChange={(e) => setForm((prev) => ({ ...prev, shoulder_cm: e.target.value }))}
+                />
+                <input
+                  className="form-input"
+                  type="number"
+                  inputMode="decimal"
+                  step="0.1"
+                  min="0"
+                  placeholder="胸围 cm"
+                  value={form.bust_cm}
+                  onChange={(e) => setForm((prev) => ({ ...prev, bust_cm: e.target.value }))}
+                />
+              </div>
+              <div style={{ display: 'flex', gap: '8px', marginTop: '6px' }}>
+                <input
+                  className="form-input"
+                  type="number"
+                  inputMode="decimal"
+                  step="0.1"
+                  min="0"
+                  placeholder="衣长 cm"
+                  value={form.length_cm}
+                  onChange={(e) => setForm((prev) => ({ ...prev, length_cm: e.target.value }))}
+                />
+                <input
+                  className="form-input"
+                  type="number"
+                  inputMode="decimal"
+                  step="0.1"
+                  min="0"
+                  placeholder="腰头高 cm（无腰头填 0）"
+                  value={form.waistband_cm}
+                  onChange={(e) => setForm((prev) => ({ ...prev, waistband_cm: e.target.value }))}
+                />
+              </div>
+            </details>
             <input
               className="form-input"
               placeholder="风格标签（逗号分隔）"
@@ -540,6 +800,43 @@ export default function WardrobeTab({ profile, compact }: WardrobeTabProps) {
               value={form.price}
               onChange={(e) => setForm((prev) => ({ ...prev, price: e.target.value }))}
             />
+            {/* 条码／店内编号（第五阶段·第一步）。扫出来的这一格可以被手改：
+                吊牌码与店内自编码常常两套并存，锁死改不了就成死账。清空＝这件不算扫来的。 */}
+            <input
+              className="form-input"
+              placeholder="条码 / 店内编号（扫码枪扫一下会自动填）"
+              value={form.sku}
+              onChange={(e) => setForm((prev) => ({ ...prev, sku: e.target.value }))}
+            />
+            {/* 照片这一格（第五阶段·第一步「只存图」）：上面点了「📷 拍照上传」就有地址、
+                预览出来让人核对拍的是不是这件；没有就只挂一句提示。⛔ 这里不做识别，
+                地址是后端 /uploads/xxx.jpg 原样回的那串。外部地址只当文本摊出来、不让浏览器去取。 */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              {sameOriginImage(form.image_url) ? (
+                <img
+                  src={form.image_url}
+                  alt="这件衣物的照片"
+                  className="w-11 h-11 rounded-lg object-cover flex-shrink-0"
+                  style={{ border: '1px solid var(--line)' }}
+                />
+              ) : form.image_url ? (
+                <span style={{ fontSize: '11px', color: 'var(--muted)' }}>外部地址不显示</span>
+              ) : null}
+              <span style={{ fontSize: '12px', color: 'var(--muted)', flex: 1 }}>
+                {form.image_url
+                  ? '照片已挂在这一件上'
+                  : '没拍照：要带照片就点上方「📷 拍照上传」（只存图，系统不识别）'}
+              </span>
+              {form.image_url && (
+                <button
+                  className="ghost-btn"
+                  style={{ padding: '4px 8px', fontSize: '11px' }}
+                  onClick={() => setForm((prev) => ({ ...prev, image_url: '' }))}
+                >
+                  不挂这张
+                </button>
+              )}
+            </div>
             <div style={{ display: 'flex', gap: '8px' }}>
               <button
                 className="gradient-btn"
@@ -586,6 +883,15 @@ export default function WardrobeTab({ profile, compact }: WardrobeTabProps) {
             className="glass-card p-3"
             style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}
           >
+            {/* 「只存图」那件把照片摊在列表上（没拍照的不占位；外部地址不请求，见 sameOriginImage） */}
+            {sameOriginImage(item.image_url) && (
+              <img
+                src={item.image_url}
+                alt={item.name}
+                className="w-12 h-12 rounded-lg object-cover flex-shrink-0"
+                style={{ border: '1px solid var(--line)', marginRight: '8px' }}
+              />
+            )}
             <div style={{ flex: 1, minWidth: 0 }}>
               <div
                 style={{
@@ -599,8 +905,12 @@ export default function WardrobeTab({ profile, compact }: WardrobeTabProps) {
               </div>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', alignItems: 'center' }}>
                 <span className={pillCls}>{getWardrobeCategoryLabel(item.category)}</span>
+                {/* 扫来的那件把条码摊在卡片上：店员要能一眼核对扫对没扫对 */}
+                {item.sku && <span className={pillCls}>码 {item.sku}</span>}
                 {item.color && <span className={pillCls}>{item.color}</span>}
-                {item.fit_style && <span className={pillCls}>{item.fit_style}</span>}
+                {(item.fit_type || item.fit_style) && (
+                  <span className={pillCls}>{item.fit_type || item.fit_style}</span>
+                )}
                 {item.fabric_weight && <span className={pillCls}>{item.fabric_weight}</span>}
                 {item.price != null && (
                   <span style={{ color: 'var(--accent)', fontSize: '12px', fontWeight: 500 }}>
@@ -633,6 +943,10 @@ export default function WardrobeTab({ profile, compact }: WardrobeTabProps) {
           </div>
         ))}
       </div>
+
+      {/* 穿搭日记（2026-10-20 第八阶段·一d）：衣橱页唯一的"记一笔今天穿了什么"入口。
+          衣柜列表就是它的选择面 ⇒ 放在列表后面、分析按钮前面，顾客录完衣服顺手就能记。 */}
+      <WardrobeDiary items={items} compact={compact} />
 
       {/* 底部操作按钮组 */}
       <div style={{ marginTop: '12px', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
@@ -714,7 +1028,7 @@ export default function WardrobeTab({ profile, compact }: WardrobeTabProps) {
                   </div>
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginTop: '6px' }}>
                     {t.axes.map((a) => (
-                      <span key={a.key} className={pillCls} title={a.tier}>
+                      <span key={a.key} className={pillCls} title={evidenceLabel(a.tier)}>
                         {a.name_cn} {Math.round(a.score * 100)}
                       </span>
                     ))}
@@ -724,6 +1038,18 @@ export default function WardrobeTab({ profile, compact }: WardrobeTabProps) {
                       </span>
                     )}
                   </div>
+                  {/* 🔴 10-22 X6（依据/22 §七）：这一维凭什么撑得住原来只剩一枚 `title={a.tier}`
+                      的裸字母（A/B/C/D），手机触屏点不出任何字 ⇒ 摊成行内一句人话，
+                      字母与后端一个没改，只是不甩给顾客看。 */}
+                  {t.axes.some((a) => a.tier) && (
+                    <div style={{ color: 'var(--muted)', fontSize: '11px', marginTop: '4px' }}>
+                      依据：
+                      {t.axes
+                        .filter((a) => a.tier)
+                        .map((a) => `${a.name_cn} ${evidenceLabel(a.tier)}`)
+                        .join('／')}
+                    </div>
+                  )}
                 </div>
               ))}
             </div>

@@ -310,7 +310,7 @@ const { generateStructuredText } = require('../services/recommendReportText')
 const recWith = (extra) => ({ 穿搭: [{ group_name: 'g', top_style: 'x' }], ...extra })
 const specOf = (axes) => ({
   top_spec: {
-    // fitSize.js:271-281 现量：present:false 那一支总是同时带 blocking / measure_guide / note 三件，
+    // fitSize.js:283-293 现量：present:false 那一支总是同时带 blocking / measure_guide / note 三件，
     // 这里照它的产出形状给，缺一样就是测试自己的形状错了
     fit: { present: false, blocking: [], measure_guide: [], note: '' },
     axes,

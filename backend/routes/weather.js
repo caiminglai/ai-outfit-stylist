@@ -47,6 +47,13 @@ router.get('/profile', async (req, res) => {
 
     const weather = await getWeather(location)
     const profile = buildTemperatureProfile(weather.feelsLike)
+    // 2026-10-21 第十一阶段·第一步：`buildTemperatureProfile` 不再替"没有温度"编一个档位
+    // （改前 `null <= 5` 成立 ⇒ 上游缺字段会回"寒冷"，把"没取到"说成"今天很冷"）。
+    // 这里照 502 说破：日记表单拿到这句会提示用户改手选，⛔ 不许前端自己补一个档。
+    if (!profile) {
+      console.warn('[天气] 上游未返回可用体感温度:', JSON.stringify(weather.feelsLike))
+      return sendError(res, '上游没有返回可用的体感温度，请改用手工选择天气档', 502)
+    }
     // set 转 list 以便 JSON 序列化
     profile.allowed_seasons = Array.from(profile.allowed_seasons)
 

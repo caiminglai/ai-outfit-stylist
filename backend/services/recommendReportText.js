@@ -39,7 +39,8 @@ function generateStructuredText(recommendation, weather, mode) {
   }
 
   // 各类别建议(引擎返回的顶层键是中文类别名,动作键是 action_type)
-  // color_fit / body_fit / evidence_level 是"关于这条推荐的元数据",不是动作,不能当结论打印
+  // color_fit / body_fit / evidence_level / rank 是"关于这条推荐的元数据",不是动作,不能当结论打印
+  // rank 是 10-19 第二阶段"算法重排"的综合分对象；source / wardrobe_item_id 标明这条是规则给的还是衣柜量出来的
   const META_KEYS = [
     'group_id',
     'group_name',
@@ -48,8 +49,30 @@ function generateStructuredText(recommendation, weather, mode) {
     'feedback',
     'explanation',
     'color_fit',
+    'color_harmony',
+    'color_harmony_pairs',
+    // 这三笔是 10-20 色彩接线的账目字段，已经在"上衣贴合度"那一行按 basis 说清楚了，
+    // 不再单独印一行（print 出来是 `- **color_basis**: table-key` 这种英文垃圾行）
+    'color_basis',
+    'color_parts',
+    'color_text',
+    // 10-21 第十三阶段·一 §二·3 借色＋§二·4 关系色的五笔出处：同样只在"上衣贴合度"那一行说清楚，
+    // ⛔ 不许各印一行英文键（`- **color_borrowed_from**: 白+蓝` 那种）。
+    'color_basis_source',
+    'color_borrowed',
+    'color_borrowed_from',
+    'color_borrowed_position',
+    'color_relational_from',
+    'color_relational',
+    'color_top_band',
+    // 10-21 第十三阶段·一 §三·4：版型档推断的两件出处（同样只在"身材适配度"那一行说，不单独打英文键）
+    'fit_type_inferred',
+    'fabric_weight_inferred',
     'body_fit',
     'evidence_level',
+    'rank',
+    'source',
+    'wardrobe_item_id',
   ]
   const categoryTitles = ['穿搭', '妆容', '发型', '配饰', '姿势']
   for (const cat of categoryTitles) {
@@ -68,8 +91,39 @@ function generateStructuredText(recommendation, weather, mode) {
       }
       if (item.color_fit) {
         const f = item.color_fit
+        // 上衣是黑白灰时色相角是 atan2(0,0) 造出来的假数（判据见 colorMetrics.js 的 ACHROMATIC_C），
+        // 打印上要说明这一轴没参与，否则顾客看到一个"色相角差 0°"会以为衣服跟脸同色相
+        const hueTxt = f.hue_applies === false ? '上衣属无彩色·色相不计' : `色相角差 ${f.dHue}°`
+        const splitTxt =
+          f.harmony_score === null || f.harmony_score === undefined
+            ? ''
+            : `；对比侧 ${f.contrast_score} × 呼应侧 ${f.harmony_score}`
+        // 🔴 §二·3 借色的措辞受 `docs/依据/21` §一·1 钉死：⛔ 不许写成"系统识别出你的上衣是驼色"。
+        //    只许说"按整套搭配的配色串把某色当上衣色算的（出处＋权重已打折）"。
+        //    §二·4 的关系色是另一种出处（上衣那句自己写了"跟哪一格同色"），必须分开说，
+        //    ⛔ 不许把"与鞋同色"也写成"按整套搭配的配色串算的"——那句明明点名了鞋。
+        const borrowTxt = item.color_borrowed
+          ? item.color_relational_from
+            ? `；⚠️ 上衣那一格没写自己的颜色，只写了跟「${item.color_relational_from}」同色，所以这一分是按「${item.color_relational_from}」那一格写的「${item.color_borrowed_from || '没记下原句'}」那个色算的（出处是那一格、不是上衣自己写的），权重已打折${item.color_top_band ? `（上衣那句自己只写了「${item.color_top_band}」这一档深浅）` : ''}`
+            : `；⚠️ 上衣那一格没写具体颜色，这一分是按整套搭配的配色串「${item.color_borrowed_from || '没记下原串'}」里第 ${item.color_borrowed_position || 1} 个色当上衣色算的，权重已打折${item.color_top_band ? `（那句原文自己只写了「${item.color_top_band}」这一档深浅）` : ''}`
+          : ''
+        // 10-20 L5 明度档：这一条压根没有 hex，ΔE00/明度差都是 null，直接印出来是
+        // 「与肤色差 ΔE00 null、明度差 null」——顾客会以为系统坏了，实际是"这句文案只说了深浅"。
+        if (f.basis === 'lightness-band') {
+          lines.push(
+            `- **上衣贴合度**: ${f.score}/100(${f.top_label}·这句结论只给了亮度档位、没有具体色名，所以只按"衣装越暗脸越显白"这一条方向给分，不测与肤色的色差${borrowTxt})`,
+          )
+        } else {
+          lines.push(
+            `- **上衣贴合度**: ${f.score}/100(与肤色差 ΔE00 ${f.deltaE00}、${hueTxt}、明度差 ${f.dL}${splitTxt}${borrowTxt})`,
+          )
+        }
+      }
+      // §二·4：这一格只写了"跟谁同色"时，取色出处要印出来（不印=顾客以为系统凭空补了个色）。
+      // 措辞口径：说清"这两个字是被指的那一格写的"，⛔ 不许写成"识别出你的下装是藏青"。
+      if (item.color_relational) {
         lines.push(
-          `- **上衣贴合度**: ${f.score}/100(与肤色差 ΔE00 ${f.deltaE00}、色相角差 ${f.dHue}°、明度差 ${f.dL})`,
+          `- **关系色取色**: 这句里只写了"跟谁同色"、没写自己是什么色，所以色是按被指那一格取的（${item.color_relational}，箭头左边＝这句、右边＝出处色来自那一格）。这一格的颜色不是它自己写的，分数也不为它单独加`,
         )
       }
       if (item.body_fit) {
@@ -80,7 +134,37 @@ function generateStructuredText(recommendation, weather, mode) {
               .map((k) => ownValue(AXIS_CN, k) || k)
               .join('、')}(缺测或没认出来)`
           : ''
-        lines.push(`- **上衣身材适配度**: ${b.score}/100(${detail})${skipped}`)
+        // 🔴 §三·4 的措辞受 `docs/依据/21` §一·2 钉死：⛔ 不许写成"量化了你的体型"。
+        //    这一档是从款式词（直筒／阔腿／泡泡袖…）与面料词（真丝／羊绒…）认出来的，不是软尺量的。
+        const inferTxt =
+          b.inferred_from === 'rule_text'
+            ? `；⚠️ 这一档没量过尺寸，是按这句建议自己的款式词${
+                ((b.inferred_words && b.inferred_words.fit) || []).length
+                  ? `「${b.inferred_words.fit.join('、')}」`
+                  : '（没认出款式词）'
+              }${
+                ((b.inferred_words && b.inferred_words.fabric) || []).length
+                  ? `与面料词「${b.inferred_words.fabric.join('、')}」`
+                  : ''
+              }认出来的版型档位，松量按那一档的区间中值估 ⇒ 覆盖率只有 ${Math.round((b.coverage || 0) * 100)}%，⛔ 这不是量出来的身材`
+            : ''
+        lines.push(`- **上衣身材适配度**: ${b.score}/100(${detail})${skipped}${inferTxt}`)
+      }
+      // 综合排序分（10-19 第二阶段）：名次就是这一行决定的，所以它必须印在报告里，
+      // 且把"哪几维在场、各占多少权重、缺测折了几成"一起摊开——只报一个总分等于又变成一个不能追问的数。
+      if (item.rank) {
+        const rk = item.rank
+        const shown = rk.dims.filter((d) => d.score != null && d.weight > 0)
+        const parts = shown.map(
+          (d) => `${d.name_cn} ${Math.round(d.score)}×${Math.round(d.weight * 100) / 100}`,
+        )
+        const gone = rk.dims.filter((d) => !(d.score != null && d.weight > 0))
+        const skippedRank = gone.length
+          ? `；没算:${gone.map((d) => d.name_cn).join('、')}(缺测，权重已退给在场维，不补分)`
+          : ''
+        lines.push(
+          `- **综合排序分**: ${rk.score}/100(${parts.join(' + ')}，实测覆盖折扣 ${rk.coverage}⇒乘 ${rk.factor})${skippedRank}`,
+        )
       }
       lines.push('')
     }

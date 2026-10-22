@@ -86,6 +86,10 @@ jobs:
       #          "干净 checkout 复验"这句 10-11 之后没再跑过，本轮改完代码后按新提交重跑一遍）
       #   （2026-10-11 现量校正：这三处原先写的是 8 / 105 / 78，是第十八轮之前的旧数；
       #    第七~二十七轮陆续加测试与 no-console 警告，warning 与用例只涨不减；10-12 第二十七轮再重跑一遍＝122 warning／308 用例／app 9 warning、tsc 0 错、build 通过、两侧 format:check rc=0）
+      #   （2026-10-22 第十四阶段·第一步收口现量，覆盖上面两行里过期的那四个数：backend lint **0 error／142 warning**
+      #    （no-console 87／prefer-const 30／no-unused-vars 25）、`node --test` **795 pass／0 fail**、`test/*.test.js` **54** 份；
+      #    app lint **0 error／13 warning**（set-state-in-effect 8／only-export-components 4／exhaustive-deps 1）。
+      #    ⓵ eslint 两侧都只卡 error，warning 不会把 CI 跑红；⓶ 上面 10-14 那几行是当时的真实读数，留档不改写。）
       # format:check 每次动完代码都要两侧各跑一次 `npm run format` 再验 rc=0——
       # 第二十五轮（3ba0647）就是漏了这一步，推上去 CI 直接红；10-11 已补跑（app 5 / backend 24 个文件纯排版，
       # 另 routes/models.js 本轮另有功能改动，算在第 25 个里）。

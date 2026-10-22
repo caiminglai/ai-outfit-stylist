@@ -201,6 +201,15 @@ test('四道判据齐全，袖长与衣长两道永远标注缺哪个字段', ()
     assert.strictEqual(c.target, null)
     assert.ok(c.missing_input, `${key} 要写明缺什么字段`)
   }
+  // 10-19 第二阶段：衣柜表已经有成衣四格了 ⇒ 话术不许再写"衣柜表没有成品尺寸列"，
+  // 要写明缺的是**人体侧**的腰节长/袖长（这句是给用户看的，写错等于骗用户没格子）
+  const joined = f.checks.map((c) => c.why).join(' ')
+  assert.ok(!joined.includes('也没有成品尺寸列'), `袖长话术过期：${joined}`)
+  assert.match(check(f, 'body_length').why, /人体侧没有这个字段/)
+  assert.ok(
+    f.measure_guide.some((g) => g.includes('衣服胸围')),
+    '成衣四格的平铺量法必须随 measure_guide 一起交回用户',
+  )
 })
 
 test('松量口径全局只有一处：与 bodyDeviation 的 ease_window 同一个数', () => {

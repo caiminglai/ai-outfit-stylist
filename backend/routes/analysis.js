@@ -66,7 +66,7 @@ function safeNum(val, min, max) {
 
 /**
  * 校验分类文本参数，返回安全值或 null
- * neck_length / body_type 存的是"短/中/长"、"梨形/苹果形"这类选项，不是数字。
+ * neck_length / body_type 存的是"短/中/长"、"梨形/苹果型"这类选项，不是数字。
  * 拿 safeNum 校验会把用户选的"短"读成 NaN ⇒ NULL，等于把人填的分类档案悄悄清空；
  * 直接绑原值又会在收到对象/数组时被 better-sqlite3 挡成 TypeError ⇒ 500。
  * 与 profileArchive.cleanText 同一条尺子：只留 ≤40 字符的字符串。

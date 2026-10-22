@@ -110,15 +110,38 @@ export function MatchResultCard({
           </span>
           <div className="flex flex-wrap gap-1.5 mt-1">
             {matched.map((m, i) => (
-              <span
-                key={i}
-                className="pill-tag"
-                style={{ color: 'var(--good)', borderColor: 'var(--good)' }}
-                title={m.reasons?.length ? `得分依据：${m.reasons.join('、')}` : undefined}
-              >
-                {m.name}
-                {m.score != null && <span style={{ marginLeft: 4, opacity: 0.7 }}>{m.score}%</span>}
-              </span>
+              // 🔴 10-22 X6（依据/22 §七 闸门）：「得分依据」原来只有 hover 才出字，
+              // 触屏读不到 ⇒ 药丸本身改成点一下摊开（⛔ 依据内容一个字不删，只是换个取法）
+              <details key={i} className="inline-block">
+                <summary
+                  className="pill-tag"
+                  style={{
+                    color: 'var(--good)',
+                    borderColor: 'var(--good)',
+                    cursor: 'pointer',
+                    listStyle: 'none',
+                  }}
+                  title={m.reasons?.length ? `得分依据：${m.reasons.join('、')}` : undefined}
+                >
+                  {m.name}
+                  {m.score != null && (
+                    <span style={{ marginLeft: 4, opacity: 0.7 }}>{m.score}%</span>
+                  )}
+                </summary>
+                {!!m.reasons?.length && (
+                  <div
+                    style={{
+                      fontSize: 11,
+                      color: 'var(--muted)',
+                      marginTop: 2,
+                      maxWidth: '320px',
+                      lineHeight: 1.5,
+                    }}
+                  >
+                    得分依据：{m.reasons.join('、')}
+                  </div>
+                )}
+              </details>
             ))}
           </div>
           {!!matched[0]?.reasons?.length && (

@@ -700,6 +700,8 @@ router.post('/preview', adminLoginRequired, (req, res) => {
 
     // 直接调用推荐引擎(已修复 category 映射 bug + 带可解释性说明 explanation)
     // 修复原 /preview 的 bug:原逻辑用 operator '==' 但数据库存的是 'eq',且未解析 value JSON
+    // ⛔ 第四个参数（隐性偏好身份）这里**故意不传**：后台预览看的是"这条规则会推出什么"，
+    // 混进某个管理员/某个顾客自己的日记偏爱，预览出来的名次就不是规则的本来的样子。
     const recommendation = buildRecommendation(profile, mode || 'store', false)
 
     const total =

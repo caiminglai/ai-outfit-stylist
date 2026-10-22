@@ -1,0 +1,79 @@
+{
+  "_说明": "第六批规则：主要场合 × 性别的补空（10-19 第一阶段，与止血第 3 条同一个病根）。现量判据＝把规则语料按 (取值 × gender) 拉表后，scenario 这一列有三格只有一性别有组：校园日常 只有 女/组43、居家休闲 只有 女/组45、运动健身 只有 男/组114。男性顾客选校园日常或居家休闲、女性顾客选运动健身时，穿搭这一栏命不到任何按场合分档的组，退回硬编码那套。这 3 组照对手位镜像补：mode=personal、category=穿搭、条件形状（gender+category+scenario）、priority 都沿用原组，文案按另一性别重写不抄原文。",
+  "_依据": "key 前缀 occ- 不在 services/evidenceLevels.js 的 KEY_PREFIX_TO_LEVEL 里 ⇒ evidence_level 按默认 C（行业体系/经验）落库。场合穿搭属行业经验（无国标，只有行业文本），不许称客观规律。",
+  "_一处旧账": "被镜像的原三组（43/45/114）是 db/add-rules.js 那批，条件权重写死 3 而没有声明权重的种子按 1 存（见 applyRuleSeeds.js:80 那段注释）⇒ 同一句\"这条条件没说权重\"在两条路径下差 3 倍。本轮不动老组的权重，只把新组按 1 写，与近几批种子一致；老批要不要统一过一轮，属第二阶段重排前先做的对齐项。",
+  "rules": [
+    {
+      "key": "occ-m-campus",
+      "name": "男-校园日常-穿搭",
+      "mode": "personal",
+      "category": "穿搭",
+      "gender": "男",
+      "scenario": "校园日常",
+      "priority": 25,
+      "enabled": 1,
+      "description": "场合补档，镜像组 43（女-校园日常）。男性选「校园日常」时原先没有任何按场合分档的组。",
+      "conditions": [
+        { "field": "gender", "operator": "eq", "value": "男" },
+        { "field": "category", "operator": "eq", "value": "outfit" },
+        { "field": "scenario", "operator": "eq", "value": "校园日常" }
+      ],
+      "actions": [
+        { "type": "top_style", "content": "合身卫衣、牛津纺衬衫、圆领针织；衬衫外穿时下摆别太长盖过臀" },
+        { "type": "bottom_style", "content": "直筒牛仔裤、工装裤、束脚运动裤；裤长到鞋面一道折就够，别在脚踝堆成救生圈" },
+        { "type": "shoe_style", "content": "白板鞋、帆布鞋、线条干净的运动鞋；全天走路就按舒适度选，别选硬底" },
+        { "type": "color_combo", "content": "蓝白灰做主体，全身最多一处亮色；上下同为深色时靠面料深浅拉开层次" },
+        { "type": "avoid", "content": "大一码的帽子衫配紧腿裤、整套荧光色运动服当日常穿、袜子破洞" },
+        { "type": "reason", "content": "校园这一路的整洁感主要来自肩线落位和裤长刚好，衣服不必贵，尺寸对了就利索" }
+      ]
+    },
+    {
+      "key": "occ-m-lounge",
+      "name": "男-居家休闲-穿搭",
+      "mode": "personal",
+      "category": "穿搭",
+      "gender": "男",
+      "scenario": "居家休闲",
+      "priority": 20,
+      "enabled": 1,
+      "description": "场合补档，镜像组 45（女-居家休闲）。男性选「居家休闲」时原先没有任何按场合分档的组。",
+      "conditions": [
+        { "field": "gender", "operator": "eq", "value": "男" },
+        { "field": "category", "operator": "eq", "value": "outfit" },
+        { "field": "scenario", "operator": "eq", "value": "居家休闲" }
+      ],
+      "actions": [
+        { "type": "top_style", "content": "棉质宽松T恤、薄卫衣；领口松了或变形就换，居家装最容易被看出来的就是领口" },
+        { "type": "bottom_style", "content": "束脚运动裤、松腰短裤；腰头是抽绳或松紧的，别穿带硬扣子的牛仔裤在家坐一天" },
+        { "type": "shoe_style", "content": "室内拖鞋，需要下楼取东西就备一双能直接出门的鞋" },
+        { "type": "color_combo", "content": "米白、浅灰、深蓝这类低饱和色；居家穿深色更显不出起球和污渍" },
+        { "type": "avoid", "content": "把外穿的硬挺衬衫当家居服、裤腰勒出印子、袜子薄到磨脚" },
+        { "type": "reason", "content": "居家装只判两件事：面料贴皮舒不舒服、有没有勒点。宽松不等于没有版型，肩线仍该落在自己肩头" }
+      ]
+    },
+    {
+      "key": "occ-f-sport",
+      "name": "女-运动健身-穿搭",
+      "mode": "personal",
+      "category": "穿搭",
+      "gender": "女",
+      "scenario": "运动健身",
+      "priority": 20,
+      "enabled": 1,
+      "description": "场合补档，镜像组 114（男-运动健身）。女性选「运动健身」时原先没有任何按场合分档的组。",
+      "conditions": [
+        { "field": "gender", "operator": "eq", "value": "女" },
+        { "field": "category", "operator": "eq", "value": "outfit" },
+        { "field": "scenario", "operator": "eq", "value": "运动健身" }
+      ],
+      "actions": [
+        { "type": "top_style", "content": "按强度选支撑的运动内衣，外面速干T或修身长袖；跑步时腋下和胸下沿最容易磨，接缝要平" },
+        { "type": "bottom_style", "content": "高腰紧身运动裤或中长短裤；蹲一下看看是否透、腰头是否往下掉" },
+        { "type": "shoe_style", "content": "跑步选跑鞋、力量训练选底平的训练鞋，别用一双软底鞋练所有项目" },
+        { "type": "color_combo", "content": "深色打底加一处亮色（鞋、上衣或发带都行），出汗痕迹深的颜色更耐穿" },
+        { "type": "avoid", "content": "棉质厚卫衣当跑步服、新鞋直接跑长距离、裤长堆在脚踝影响步伐" },
+        { "type": "reason", "content": "运动装的第一判据是支撑、摩擦和会不会往下掉，这三项都能在试衣间做一次蹲起和原地跳就验出来" }
+      ]
+    }
+  ]
+}

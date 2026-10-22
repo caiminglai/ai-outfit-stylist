@@ -359,7 +359,7 @@ router.put('/admin/:id', adminLoginRequired, (req, res) => {
     ])
     if (badScalar) return sendError(res, `${badScalar} 只能是文本或数字`, 400)
 
-    // name 是 `TEXT NOT NULL`（schema.sql:467）：firstBadScalar 按约定放行 null（它用来清列），
+    // name 是 `TEXT NOT NULL`（schema.sql:501）：firstBadScalar 按约定放行 null（它用来清列），
     // 但这一列清不得 ⇒ `{"name":null}` 会在 UPDATE 上抛 SQLITE_CONSTRAINT_NOTNULL，
     // 被外层 catch 抹成 500。空名是入参错，当场 400。
     if (name === null) return sendError(res, 'name 不能为空', 400)
@@ -373,7 +373,7 @@ router.put('/admin/:id', adminLoginRequired, (req, res) => {
       params.push(desc)
     }
     if (exposure !== undefined) {
-      // 同一把尺子：exposure 是 REAL（schema.sql:475），展厅拿它做光照乘法，
+      // 同一把尺子：exposure 是 REAL（schema.sql:509），展厅拿它做光照乘法，
       // 存成 '0.3x' 这种收不进实数的文本 ⇒ 前端算出来是 NaN，画面黑掉却没有任何报错。
       const e = Number(exposure)
       if (exposure === null || !Number.isFinite(e)) {
@@ -383,7 +383,7 @@ router.put('/admin/:id', adminLoginRequired, (req, res) => {
       params.push(e)
     }
     if (sort_order !== undefined) {
-      // 列是 INTEGER（schema.sql:476），取数用的是 `ORDER BY sort_order, id`。
+      // 列是 INTEGER（schema.sql:510），取数用的是 `ORDER BY sort_order, id`。
       // 整型亲和会把 '5' 收成 5，但 'abc' 这类收不动的会原样存成 TEXT，
       // 而 SQLite 排序是 NULL < 数字 < 文本 ⇒ 这一行悄悄掉到列表末尾（或最前），
       // 后台看不出任何错误。表单上来本就是字符串，所以这里统一收数、收不成就 400。
@@ -582,12 +582,12 @@ router.get('/file/*', (req, res, next) => {
 
     // ★ 纹理文件(.png/.jpg/.tga 等)特殊处理:
     // 1. 同样优先用 .gz 预压缩(Content-Encoding: gzip 由浏览器透明解压,图片解码拿到的是原始字节)
-    // 2. 禁用缓存(防止之前加载失败的空纹理被缓存)
-    //    纹理本来每次访问都重下,所以压缩收益比 .pmx 更值钱
+    // 2. 缓存口径（🔴 2026-10-22 第五十九轮·组2b 改：原来这里是 `no-cache, no-store, must-revalidate`）：
+    //    现量＝展厅待机态首屏 **38 个资源／体积合计 20.93 MB**，其中"模型本体＋贴图"31 个／20.61 MB（10-22 真浏览器取 `performance.getEntriesByType('resource')`；🔴 尺子要写准：**体积**是 `encodedBodySize` 之和，**上线字节**是 `transferSize` 之和，这 20.93 MB 是前者——我这条注释的初稿把它当成"上线"写错了,取证见 docs/依据/22-…md §十二.9d）。改前那次冷启动 `transferSize` 合计 **17.16 MB**、改后复访 **0.01 MB**；盘上纹理 297 张、`*.png.gz` 0 个，而第十三节量过 PNG 预压缩只省 0.1% ⇒ 纹理这一侧省不了字节，能省的只有"重复下"。no-store 让浏览器连磁盘缓存都不写：顾客切走再切回、或明天再来，这 20 MB 整包重下一遍，手机流量下这就是"看一次展厅跑掉一部手机的流量"。改成 `max-age=0, must-revalidate` 后 sendFile 的弱 ETag 走 304（零字节、只花一次往返），原注释要防的那件事仍然成立：纹理换文件后下一次加载照旧回源比对，不会命中旧字节。
     const TEXTURE_EXTENSIONS = ['.png', '.jpg', '.jpeg', '.tga', '.bmp', '.gif', '.webp']
     const isTexture = TEXTURE_EXTENSIONS.includes(ext)
-    const noStore = {
-      'Cache-Control': 'no-cache, no-store, must-revalidate',
+    const revalidateOnly = {
+      'Cache-Control': 'public, max-age=0, must-revalidate',
       Pragma: 'no-cache',
       Expires: '0',
     }
@@ -620,7 +620,7 @@ router.get('/file/*', (req, res, next) => {
               'Content-Encoding': 'gzip',
               'Content-Type': mimeType,
               Vary: 'Accept-Encoding',
-              ...noStore,
+              ...revalidateOnly,
             },
           },
           asFail,
@@ -631,7 +631,7 @@ router.get('/file/*', (req, res, next) => {
         {
           headers: {
             'Content-Type': mimeType,
-            ...noStore,
+            ...revalidateOnly,
           },
         },
         asFail,

@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import type { CustomerProfile } from '../types'
+import SkinSampler from './SkinSampler'
 
 /**
  * 个人形象分析表单 - 深色科技风（50+ 维度）
@@ -317,6 +318,17 @@ export default function PersonalProfileForm({
     onChange?.(next)
   }
 
+  /**
+   * 一次改多个字段。⚠️ 需要它是因为上面那个 `update` 读的是 render 闭包里的 `profile`：
+   * 同一拍连着调三次 `update`，每次都从同一份旧 `profile` 起步 ⇒ 只有最后一次活下来，
+   * 而且 `onChange` 交出去的两份 payload 也各缺一个字段（草稿会存成缺字段的版本）。
+   */
+  const updateMany = (patch: Partial<CustomerProfile>) => {
+    const next = { ...profile, ...patch }
+    setOverride(next)
+    onChange?.(next)
+  }
+
   const handleSubmit = () => {
     if (!profile.gender) return
     onSubmit(profile)
@@ -333,6 +345,13 @@ export default function PersonalProfileForm({
     ? { padding: '6px 8px', fontSize: '11px' }
     : { padding: '8px 10px', fontSize: '12px' }
 
+  /**
+   * 红星只准给**真必填**。10-22 第十四阶段·第一步 X5（`docs/依据/22` §六）：
+   * 改前这个变量挂在 7 个分区标题上（基本信息／肤色与脸型／体型分析／五官细节／风格偏好／
+   * 改善目标／其他偏好），而 `handleSubmit` 只卡 `profile.gender` 一项 ⇒ 顾客看到 7 处红星、
+   * 觉得要填一大篇，实际只填性别就能出满一屏建议。假红星比没红星更劝退，全部摘掉，
+   * 只留「性别」这一格。⛔ 不许反过来把必填项加多（改必填数量是产品决策，见 §六 闸门）。
+   */
   const requiredStar = <span style={{ color: 'var(--danger)', marginLeft: '2px' }}>*</span>
 
   /* ── 渲染辅助 ── */
@@ -411,7 +430,7 @@ export default function PersonalProfileForm({
     <div className="space-y-1">
       {/* ── 分区1: 基本信息 ── */}
       <section className={sectionClass} style={sectionStyle}>
-        <div className="section-title">基本信息{requiredStar}</div>
+        <div className="section-title">基本信息</div>
 
         <div className="text-xs mb-2" style={{ color: 'var(--muted)' }}>
           昵称
@@ -433,7 +452,13 @@ export default function PersonalProfileForm({
         />
 
         <div className="text-xs mb-2" style={{ color: 'var(--muted)' }}>
-          性别
+          性别{requiredStar}
+        </div>
+        {/* 10-22 第十四阶段·第一步 X5：把"到底要填几项"当面说清。
+            改前 7 个分区标题都挂红星、可 `handleSubmit` 只卡性别一项 ⇒ 顾客按红星去凑、
+            凑不齐还以为自己没填完。这里给的是**真口径**：必填＝性别，其余决定准不准。 */}
+        <div className="text-[11px] mb-3" style={{ color: 'var(--muted)' }}>
+          只选性别就能出建议。下面每一项都是选填，但填一项就多算一维——空着的那维会写明"没量到"。
         </div>
         <div className={`flex ${gap} mb-4`}>
           {GENDER_OPTIONS.map((opt) => (
@@ -554,7 +579,7 @@ export default function PersonalProfileForm({
 
       {/* ── 分区2: 肤色与脸型 ── */}
       <section className={sectionClass} style={sectionStyle}>
-        <div className="section-title">肤色与脸型{requiredStar}</div>
+        <div className="section-title">肤色与脸型</div>
 
         <div className="text-xs mb-2" style={{ color: 'var(--muted)' }}>
           肤色冷暖（选填，与下面深浅一起用于判定色彩四季型）
@@ -577,6 +602,22 @@ export default function PersonalProfileForm({
           肤色细分
         </div>
         {renderOptBtns(SKIN_TONE_DETAIL_OPTIONS, 'skin_tone_detail', 'grid-cols-5')}
+
+        {/* 取色（选填）：浏览器本机算，照片不出设备。口径见 docs/依据/18 §2.1/§2.4 */}
+        <SkinSampler
+          compact={compact}
+          onConfirm={(undertone, sample) => {
+            // ⛔ 只碰冷暖这一格：深浅那栏照片判不了明暗（18 §2.3），留给用户自己确认
+            updateMany({ skin_tone: undertone, skin_hue: sample.h, skin_hex: sample.hex })
+          }}
+          onClear={() => {
+            // 第十三阶段·§四·3：只撤这一屏取出来的两个连续值（色相角 + 取样 hex），
+            // ⛔ 不动 `skin_tone`——清掉后色彩侧要退回手选肤色档（18 §三 缺测降级链）。
+            // 这里必须显式写 `undefined` 而不能 delete 一份拷贝再交给 updateMany：
+            // `updateMany` 是 {...profile, ...patch}，patch 里没这个键时旧值会原样活下来。
+            updateMany({ skin_hue: undefined, skin_hex: undefined })
+          }}
+        />
 
         <div className="text-xs mb-2 mt-4" style={{ color: 'var(--muted)' }}>
           色彩纯度（选填，与冷暖·深浅合起来定到十二型）
@@ -606,7 +647,7 @@ export default function PersonalProfileForm({
 
       {/* ── 分区3: 体型分析 ── */}
       <section className={sectionClass} style={sectionStyle}>
-        <div className="section-title">体型分析{requiredStar}</div>
+        <div className="section-title">体型分析</div>
 
         <div className="text-xs mb-2" style={{ color: 'var(--muted)' }}>
           体型分类
@@ -654,7 +695,7 @@ export default function PersonalProfileForm({
 
       {/* ── 分区4: 五官细节 ── */}
       <section className={sectionClass} style={sectionStyle}>
-        <div className="section-title">五官细节{requiredStar}</div>
+        <div className="section-title">五官细节</div>
 
         <div className="text-xs mb-2" style={{ color: 'var(--muted)' }}>
           眼大小
@@ -689,7 +730,7 @@ export default function PersonalProfileForm({
 
       {/* ── 分区5: 风格偏好 ── */}
       <section className={sectionClass} style={sectionStyle}>
-        <div className="section-title">风格偏好{requiredStar}</div>
+        <div className="section-title">风格偏好</div>
 
         <div className="text-xs mb-2" style={{ color: 'var(--muted)' }}>
           风格偏好
@@ -714,7 +755,7 @@ export default function PersonalProfileForm({
 
       {/* ── 分区6: 改善目标 ── */}
       <section className={sectionClass} style={sectionStyle}>
-        <div className="section-title">改善目标{requiredStar}</div>
+        <div className="section-title">改善目标</div>
 
         <div className="text-xs mb-2" style={{ color: 'var(--muted)' }}>
           身高愿望
@@ -734,7 +775,7 @@ export default function PersonalProfileForm({
 
       {/* ── 分区7: 其他偏好 ── */}
       <section className={sectionClass} style={sectionStyle}>
-        <div className="section-title">其他偏好{requiredStar}</div>
+        <div className="section-title">其他偏好</div>
 
         <div className="text-xs mb-2" style={{ color: 'var(--muted)' }}>
           季节

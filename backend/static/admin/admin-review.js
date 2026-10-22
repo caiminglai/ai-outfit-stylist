@@ -88,6 +88,90 @@ function savePrice() {
 // 凭证筛选下拉每改一次发一次请求，响应回来的先后顺序不保证 ⇒ 旧条件那条后到会顶掉新结果。
 var _depositGate = seqGate();
 
+/* ── 经营读数三张卡（第十二阶段·第一步，docs/依据/20 §七）──
+   数全在 SQL 里现算（services/paidReport.js 的 businessSummary），这里只做显示，
+   ⛔ 不在前端补任何算式：一旦在这里"顺手算一下"，就有了第二把尺子。 */
+
+function money(v) {
+  var n = Number(v);
+  return isFinite(n) ? '¥' + n.toFixed(2) : '—';
+}
+
+function pct(v) {
+  // 分母为 0 时后端回 null ⇒ 显示「—」。⛔ 不许显示 0%：那是把"还没数据"说成"转化率 0"。
+  if (v === null || v === undefined || !isFinite(Number(v))) return '—';
+  return (Number(v) * 100).toFixed(1) + '%';
+}
+
+function line(label, value, hint) {
+  return '<div style="display:flex;justify-content:space-between;gap:12px;font-size:13px;">' +
+    '<span style="color:var(--muted);">' + escapeHtml(label) + (hint ? '<br><span style="font-size:11px;">' + escapeHtml(hint) + '</span>' : '') + '</span>' +
+    '<b>' + value + '</b></div>';
+}
+
+/**
+ * 🔴 第十四阶段·第一步 C3：比率与它的分子/分母一起显示。
+ * 原来这里只有「支付率 60.0%」，看不出 3/5 还是 300/500；分母在服务层算好（`*_rate_den`），
+ * 这一层只做拼接，⛔ 不在前端补算式。分母为 0 时比值是 null ⇒ 只出「—」，⛔ 把"没数据"显示成 0%。
+ */
+function lineNum(label, value, num, den, formula) {
+  var d = Number(den);
+  var hint =
+    (formula ? formula + '　' : '') +
+    (isFinite(d) && d > 0
+      ? '分子 ' + Number(num) + ' / 分母 ' + d
+      : '分母 0（这一路还没开过单）');
+  return line(label, value, hint);
+}
+
+function renderPaySummary(summary) {
+  var box = document.getElementById('pay-summary');
+  if (!box) return;
+  if (!summary || !summary.cumulative) {
+    box.innerHTML = cardFallback('经营读数：接口没回 summary 字段（后端版本不匹配）');
+    return;
+  }
+  var c = summary.cumulative;
+  var d = summary.last_30_days || {};
+  var days = summary.window_days || 30;
+  var one = '<div class="card" style="flex:1;min-width:260px;">';
+
+  box.innerHTML =
+    one + '<div class="inv-product-name">① 实收</div>' +
+      line('在线已到账', c.paid_orders + ' 笔 · ' + money(c.paid_amount_yuan), '近' + days + '天 ' + (d.paid_orders || 0) + ' 笔') +
+      line('付款人数', isFinite(Number(c.payers)) ? Number(c.payers) : '—', '按 user_id 去重') +
+      line('人工凭证已确认', c.proof_manual_orders + ' 笔 · ' + money(c.proof_manual_yuan), '已剔掉在线支付的镜像凭证') +
+      line('已交付报告', c.claims + ' 份', '近' + days + '天 ' + (d.claims || 0) + ' 份；其中人工凭证那一路 ' + (c.claims_manual || 0) + ' 份') +
+      line('最近到账', escapeHtml(c.last_paid_at_beijing || '—'), '东八区') +
+    '</div>' +
+    one + '<div class="inv-product-name">② 掉在中段的</div>' +
+      line('下单还没付', c.created_orders + ' 笔 · ' + money(c.created_amount_yuan), '30 分钟内还可能付') +
+      line('超时已关闭', c.closed_orders + ' 笔 · ' + money(c.closed_amount_yuan), '跑了的单，⛔ 不影响后到的回调入账') +
+      line('凭证待确认', c.proof_pending + ' 笔', '下面那张列表就是逐条审这个') +
+      line('凭证被驳回', c.proof_rejected + ' 笔') +
+    '</div>' +
+    one + '<div class="inv-product-name">③ 漏斗（分母写在数旁边）</div>' +
+      lineNum('支付率', pct(c.pay_rate), c.paid_orders, c.pay_rate_den, 'paid /（paid+created+closed）') +
+      lineNum(
+        '领取率·在线',
+        pct(c.claim_rate),
+        isFinite(Number(c.claims_online)) ? c.claims_online : c.claims,
+        c.claim_rate_den,
+        '在线那一路的报告行数 / 在线 paid 单数'
+      ) +
+      lineNum(
+        '领取率·含人工凭证',
+        pct(c.claim_all_rate),
+        c.claims,
+        c.claim_all_rate_den,
+        '报告行数 /（在线 paid 单数＋人工已核凭证）；其中凭证那一路 ' + (c.claims_manual || 0) + ' 份'
+      ) +
+      lineNum('凭证通过率', pct(c.proof_pass_rate), c.proof_approved, c.proof_pass_rate_den, 'approved /（三态之和）') +
+      '<div style="color:var(--muted);font-size:11px;margin-top:8px;">时间口径：' +
+        escapeHtml(summary.time_axis || 'UTC') + '</div>' +
+    '</div>';
+}
+
 function loadDeposits() {
   var tok = _depositGate.begin();
   var container = document.getElementById('deposit-container');
@@ -105,12 +189,17 @@ function loadDeposits() {
     if (!_depositGate.isCurrent(tok)) return;
     container.className = '';
     container.innerHTML = '<div class="error-msg">加载失败: ' + escapeHtml(e.message) + '</div>';
+    // 读数卡跟着列表一起失败时也要收口，不能永远停在"加载中..."
+    renderPaySummary(null);
   });
 }
 
 function renderDeposits(payload) {
   var container = document.getElementById('deposit-container');
   container.className = '';
+  // 读数卡先渲染：它跟下面的 list 是同一次请求带回的，但口径是全库，
+  // 而且 list 为空时下面会提前 return——那时三张卡更要显示（空库的 0 是真读数）。
+  renderPaySummary(payload && payload.summary);
   // 接口现在回 { list, total, limit }：list 是被 limit 截过的最近一段，total 才是全库条数。
   // 原来这里写 rows.length，凭证一旦超过 200 条，"共 200 条"就是假的（还有多少没显示看不出来）。
   var rows = (payload && payload.list) || [];

@@ -62,6 +62,7 @@ module.exports = {
   parsePagination,
   getSessionId,
   parseJsonField,
+  parseIdList,
   asText,
   asNumber,
   asId,
@@ -73,6 +74,7 @@ module.exports = {
   tally,
   getCurrentSeason,
   normalizeItem,
+  projectWardrobeForEngine,
 }
 
 // ============================================================
@@ -120,6 +122,28 @@ function parseJsonField(val) {
   if (Array.isArray(v)) return v
   if (typeof v === 'string') return v.trim() ? [v.trim()] : []
   return [] // 对象/数字/布尔：这不是标签列表，按空处理比抛错好
+}
+
+/**
+ * 解析"id 列表"类 JSON 字段（今天就是 `wardrobe_outfits.item_ids` 那一列），
+ * **保证返回去重后的正整数数组**。
+ *
+ * 与 `parseJsonField` 的差别是**口径**不是形状：那一支要的是标签字符串，原样交给调用方；
+ * 这一支要的是能进 `WHERE id IN (…)` 的数，所以脏元素（0／负数／'abc'/对象）必须在这里丢掉，
+ * ⛔ 不许原样递出去当 id 用（那等于把"这件不属于任何人"的假行喂给查询）。
+ * 🔴 唯一真相源：`services/wearPreference.js`（读这个人自己的日记）与
+ * `services/collabFilter.js`（读别人的日记）都从这里取，⛔ 不许再写第三份。
+ */
+function parseIdList(val) {
+  const out = []
+  const seen = new Set()
+  for (const x of parseJsonField(val)) {
+    const n = Number(x)
+    if (!Number.isInteger(n) || n <= 0 || seen.has(n)) continue
+    seen.add(n)
+    out.push(n)
+  }
+  return out
 }
 
 /**
@@ -309,7 +333,11 @@ function normalizeItem(row, tagFields) {
     'lip_shape_fit',
     'neck_length_fit',
   ]
-  const fields = tagFields || defaults
+  // 🔴 10-22 第十三阶段·一f：只认"真的是数组"的那一份词表。
+  // `routes/recommend.js` 原来写 `rows.map(normalizeItem)`，`Array.map` 把**下标**当第二个参数喂进来，
+  // 下标 ≥1 是truthy 数字 ⇒ `for (const f of 1)` 当场 `TypeError: fields is not iterable`。
+  // 这里再加一道形状闸门：⛔ 不许把非数组（数字/字符串/对象）当词表用，一律回默认表。
+  const fields = Array.isArray(tagFields) ? tagFields : defaults
   const item = { ...row }
   for (const f of fields) {
     // 只处理这一行真有的列，不给响应凭空加字段
@@ -337,4 +365,39 @@ function asId(raw) {
   const n = Number(s)
   // id 从 1 起（INTEGER PRIMARY KEY 自增），0 与超出安全整数范围的都不认
   return Number.isSafeInteger(n) && n > 0 ? n : null
+}
+
+/**
+ * 把一行衣橱（已过 `normalizeItem`）投影成**推荐引擎要的 `wardrobe_items` 那份形状**。
+ *
+ * 2026-10-21 第九阶段·第一步从 `routes/wardrobe.js` 的那段行内 map 搬过来当唯一真相源
+ * （`docs/依据/17-协同过滤输入输出规范-20261021.md` §五 第 2 条：`/api/recommend/engine`
+ * 也要注入衣橱行，两处各抄一份字段清单，迟早出现"一边带 fit_type、另一边漏"的假象）。
+ *
+ * 每一格为什么在名单里（原注释逐字搬过来，⛔ 别删）：
+ *  - `fit_style`/`fabric_weight`：展示标签（fit_style 10-19 第三阶段起不进任何算式，两档值域撑不起四档松量）
+ *  - `fit_type`：量不了尺寸的人只靠这一格让松量估得出来（10-19 第三阶段·模块一）。
+ *    ⛔ 这一列必须在投影里，漏了它引擎就永远读不到版型 ⇒ 兜底估算整条断线。
+ *  - 四格成品实测尺寸：引擎的 bodyFit 现在只认这几个数（10-19 第二阶段「最后一公里」）。
+ * @param {object} i 一行衣橱（normalizeItem 之后）
+ * @returns {object} 引擎直接能用的那一格
+ */
+function projectWardrobeForEngine(i) {
+  return {
+    id: i.id,
+    name: i.name,
+    category: i.category,
+    color: i.color,
+    pattern: i.pattern,
+    fit_style: i.fit_style,
+    fabric_weight: i.fabric_weight,
+    fit_type: i.fit_type,
+    shoulder_cm: i.shoulder_cm,
+    bust_cm: i.bust_cm,
+    length_cm: i.length_cm,
+    waistband_cm: i.waistband_cm,
+    style_tags: i.style_tags || [],
+    season_tags: i.season_tags || [],
+    occasion_tags: i.occasion_tags || [],
+  }
 }

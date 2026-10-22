@@ -3,14 +3,17 @@
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>✨</text></svg>" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" /><meta name="description" content="私人形象定制AI：把色彩、版型、体型、偏好拆成能测的量，再按有出处的规则解释为什么这样穿好看。专属于中国人的穿衣量化系统。" /><meta property="og:type" content="website" /><meta property="og:site_name" content="私人形象定制AI" /><meta property="og:title" content="AI形象顾问 — 你的私人穿搭助手" /><meta property="og:description" content="色彩、版型、体型、偏好四条轴各自量化，量不到的地方直接写没量到。" /><link rel="canonical" href="https://style.sparklove.cn/" />
     <meta name="theme-color" content="#0d1117" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <title>AI形象顾问 — 你的私人穿搭助手</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;700&display=swap" rel="stylesheet" media="print" onload="this.media='all'" />
+    <!-- 10-22 第十四阶段·第一步 X9：删掉三条 Google Fonts 链接（preconnect ×2 + 样式表 ×1）。
+         现量依据：全仓 CSS 的 font-family 名单里没有 'Noto Sans SC'（`src/index.css:64-70` 走的是
+         苹方／微软雅黑／Segoe UI 系统栈），这三条拉的是**没人引用的字体**；境内访问 fonts.gstatic.com
+         取不到 ⇒ 每台手机进首页都白等两次连接失败。⛔ 不自带字体文件（那是新依赖＋掏钱的事，归你拍板）。
+         ⚠️ 本文件**保留**这两处域名字面量（就是这段说明里的），所以 X9 的验收闸不写成"grep 域名为 0"——
+         那条字面判据被自己的注释打假红。逐字判据见 依据/22 §十一 与本轮追加的台账。 -->
   </head>
   <body>
     <div id="root"></div>

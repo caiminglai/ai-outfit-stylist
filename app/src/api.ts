@@ -4,6 +4,7 @@
  * 支持的 API:
  * - 顾客临时会话(创建/推荐/同步/删除)
  * - 规则引擎推荐
+ * - 规则反馈 / 人 × 衣服 评分（两张表，语义不同，见 postItemFeedback 上方注释）
  * - 个人衣橱管理(CRUD/缺口分析/购物建议)
  * - 个人化妆品柜管理(CRUD/缺口分析/保质期检查)
  * - 个人配饰柜管理(CRUD/缺口分析)
@@ -24,6 +25,7 @@ import type {
   EnhancedText,
   HoroscopeData,
   ProfileTag,
+  RankScore,
   RuleBrowseItem,
   RuleBrowseQuery,
   SeasonalReminder,
@@ -32,6 +34,7 @@ import type {
   TryonResult,
   WardrobeGapResult,
   WardrobeItem,
+  WardrobeOutfit,
   WeatherData,
   WeatherProfile,
 } from './types'
@@ -327,6 +330,21 @@ function getStoreName(): string {
   return localStorage.getItem(STORE_KEY) || ''
 }
 
+/**
+ * 门店快速模式这一次填表所属的会话号（`customer_sessions.session_id`，形如 `sess_…`）。
+ * 10-21 第十二阶段·第一步：领取付费细账时要把它一起交给后端。
+ * 原因在库里：门店那条 `recommendation_logs` 行的 `user_id` 恒为 NULL
+ * （`customer_sessions` 压根没有这一列，`backend/db/schema.sql:269`），
+ * 只按人查依据永远查不到 ⇒ 付了钱的门店顾客一律撞 409「找不到你的填表记录」。
+ * ⛔ 不进长期档案、⛔ 不当身份用：它只是"这一屏的数据来自哪次填表"的回指，
+ * 后端按 `user_id = 我 OR session_id = 这个号` 取最新一条（`services/paidReport.js` 的 `findBasis`）。
+ */
+const CUSTOMER_SESSION_KEY = 'style_ai_customer_session'
+
+export function getCustomerSessionId(): string {
+  return localStorage.getItem(CUSTOMER_SESSION_KEY) || ''
+}
+
 export async function createCustomerSession(
   profileData: CustomerProfile,
 ): Promise<CustomerSession> {
@@ -335,7 +353,10 @@ export async function createCustomerSession(
     headers: headers(),
     body: JSON.stringify({ profile_data: profileData, store: getStoreName() }),
   })
-  return unwrap(res)
+  const session = await unwrap<CustomerSession>(res)
+  // 记一次门店会话号：只给「我的报告」领取时回指用，见 getCustomerSessionId 注释
+  if (session.session_id) localStorage.setItem(CUSTOMER_SESSION_KEY, session.session_id)
+  return session
 }
 
 export async function syncCustomerToCloud(
@@ -353,7 +374,10 @@ export async function deleteCustomerSession(sessionId: string): Promise<{ delete
     method: 'DELETE',
     headers: headers(),
   })
-  return unwrap(res)
+  const out = await unwrap<{ deleted: boolean }>(res)
+  // 这次删的正是一直记着的那个号 ⇒ 回指跟着没，留着只会让领取时查一条已不存在的会话
+  if (getCustomerSessionId() === sessionId) localStorage.removeItem(CUSTOMER_SESSION_KEY)
+  return out
 }
 
 export async function getCustomerRecommendation(
@@ -378,34 +402,175 @@ export async function getCustomerRecommendation(
 export async function getEngineRecommendation(
   profile: CustomerProfile,
   mode: 'store' | 'personal' = 'store',
+  /** 🔴 10-21 第十三阶段·第一步 §四·1（「推荐时现取天气一起带上」）：可选城市。
+   *  白名单只认后端 `weatherService` 那一份（前端从 `/weather` 那条既有链路的城市表取），
+   *  ⛔ 不许在前端抄第二份名单。没带 ⇒ 请求与改前逐字节相同；带了且取到了 ⇒ 只当**这一屏**排序的输入，
+   *  ⛔ 不落库、⛔ 不进长期档案。⛔ 不做 IP／定位自动猜城（`19` §一 已裁）。 */
+  city?: string,
 ): Promise<{
   recommendation: EngineRecommendation
   mode: string
   privacy_notice: string
+  /** 'live'＝本次真的按体感温度折了天气档；'failed'＝名单外或上游没取到，名单照出 */
+  weather_source?: 'live' | 'failed'
+  /** 'failed' 时后端给的那句人话（含可选城市名单回显） */
+  weather_notice?: string
   /** 本次与长期档案的交互:used_fields=从档案补进来的字段中文名,saved_fields=本次存进档案的字段数,tags=算完落库的标签 */
   archive?: { used_fields: string[]; saved_fields: number; tags?: ProfileTag[] }
 }> {
   const res = await fetchWithTimeout(`${BASE}/recommend/engine`, {
     method: 'POST',
     headers: headers(),
-    body: JSON.stringify({ profile, mode }),
+    // 不带 city 时这个键**根本不写进 body**（⛔ 写 `city: undefined`——JSON.stringify 会丢掉它，
+    // 但显式不拼更稳，也不会让"改前逐字节相同"这条回归锚依赖序列化行为）
+    body: JSON.stringify(city ? { profile, mode, city } : { profile, mode }),
   })
   return unwrap(res)
 }
 
 // ============ 规则反馈 API(点一次记一行,换主意覆盖旧的那行) ============
 
-/** 这条建议准不准:useful=有用 / inaccurate=不准 */
+/**
+ * 10-19 第三阶段·模块三：反馈从"两个按钮"升级成"两个按钮 + 两把星 + 一份打分快照"。
+ * 快照（`rank`）传的是这张卡片自己的 `item.rank`（后端 rankDims 的出账结构原样带回来），
+ * 它是回归的自变量：**今天的公式配不上昨天的评价**，所以现在不快照就再也补不回来。
+ * ⛔ 星级与快照都不给 ⇒ 后端把那几格当"这次没动"，老行为一个字节不变。
+ */
+export type FeedbackExtras = {
+  /** 审美星级 1~5（这套搭配好不好看）；undefined＝不改，null＝清空 */
+  aesthetic_score?: number | null
+  /** 合身星级 1~5（上衣穿在身上合不合身）；undefined＝不改，null＝清空 */
+  fit_score?: number | null
+  /** 这条评价具体落在衣橱哪件上（卡片来自衣柜行才有） */
+  wardrobe_item_id?: number | null
+  /** 打分那一刻的综合分与三维分 */
+  rank?: RankScore | null
+}
+
+/**
+ * 这条建议准不准:useful=有用 / inaccurate=不准 / rated=只打了两把星、没点按钮
+ * （`rated` 是 10-20 第八阶段·一b 加的,与后端 services/ruleFeedback.js 的 SIGNALS 一字一样）
+ */
 export async function postRuleFeedback(
   groupId: number,
   category: string,
-  signal: 'useful' | 'inaccurate',
-): Promise<{ group_id: number; signal: string; feedback_up: number; feedback_down: number }> {
+  signal: 'useful' | 'inaccurate' | 'rated',
+  extras: FeedbackExtras = {},
+): Promise<{
+  group_id: number
+  signal: string
+  feedback_up: number
+  feedback_down: number
+  aesthetic_score?: number | null
+  fit_score?: number | null
+}> {
   const res = await fetchWithTimeout(`${BASE}/recommend/feedback`, {
     method: 'POST',
     headers: headers(),
-    body: JSON.stringify({ group_id: groupId, category, signal }),
+    body: JSON.stringify({ group_id: groupId, category, signal, ...extras }),
   })
+  return unwrap(res)
+}
+
+/**
+ * 🔴 10-22 第十四阶段·第一步 X4「最后一颗星也可以抹掉」：撤掉自己在这条规则上的整行反馈。
+ *
+ * 为什么要有它：POST 那一路把"只打星、没表态"那一档要求**至少一把星**（后端 :303 防空壳行），
+ * 于是用户把最后一颗星也点掉时，前端无论怎么送都是 400——星能打上、抹不掉，只能改成别的数。
+ * 撤销改走这个口：`deleted:1` 表示真删了一行，`deleted:0` 表示本来就没评过（幂等，重复点不报错）。
+ * ⛔ 不要在 POST 里送"两把星全 null"来实现撤销。
+ * 路径按 `docs/依据/22` §五 定的是 `/feedback/group`（与衣橱那条 `/feedback/item` 成对）。
+ */
+export async function deleteRuleFeedback(groupId: number): Promise<{
+  group_id: number
+  deleted: number
+}> {
+  const res = await fetchWithTimeout(
+    `${BASE}/recommend/feedback/group?group_id=${encodeURIComponent(String(groupId))}`,
+    { method: 'DELETE', headers: headers() },
+  )
+  return unwrap(res)
+}
+
+// ============ 人 × 衣服 评分 API（10-21 第九阶段·第一步） ============
+
+/**
+ * 这条口**不是** `postRuleFeedback` 的另一种写法，两张表语义不同（`docs/依据/17` §二）：
+ * - `feedback_events`＝**这条规则准不准**（人×规则，会回写规则的好评差评数）；
+ * - `item_feedback` ＝**这件衣服你穿得怎么样**（人×衣服，⛔ 不回写规则计数）。
+ *
+ * 为什么非要另开一张：衣橱那一路的候选 `group_id` 是 null，而 `feedback_events` 建表时写了
+ * `group_id NOT NULL`＋`UNIQUE(user_id, group_id)`（`backend/db/schema.sql:301/:320`），
+ * 收不下它——前端那句 `item.group_id > 0` 因此连评分控件都不渲染，量过尺寸的衣服反而不能打分。
+ * 星级与 `undefined＝不动／null＝清空` 的契约原样继承上面那把尺子，不在这里另起一套。
+ */
+export type ItemFeedbackExtras = {
+  /** 审美星级 1~5（这件好不好看）；不给键＝不改，null＝清空 */
+  aesthetic_score?: number | null
+  /** 合身星级 1~5（这件上身合不合身）；不给键＝不改，null＝清空 */
+  fit_score?: number | null
+  /** 这次打分算在哪个场合（只认规则库在用的那五个词，表外词后端 400） */
+  occasion?: string | null
+  /** 打分那一刻的排序分快照（二维：color/body），回归样本的自变量 */
+  rank?: RankScore | null
+}
+
+/** 库里这一件上已经存的分（GET 回填用；`rank_snapshot` 是后端内部字段，这里不取） */
+export type ItemFeedbackRow = {
+  wardrobe_item_id: number
+  aesthetic_score: number | null
+  fit_score: number | null
+  occasion: string | null
+  signal: string | null
+  updated_at: string
+}
+
+export async function postItemFeedback(
+  wardrobeItemId: number,
+  extras: ItemFeedbackExtras = {},
+): Promise<{
+  wardrobe_item_id: number
+  actor_key: string
+  aesthetic_score: number | null
+  fit_score: number | null
+  occasion: string | null
+  signal: string | null
+  has_snapshot: boolean
+}> {
+  const res = await fetchWithTimeout(`${BASE}/recommend/feedback/item`, {
+    method: 'POST',
+    headers: headers(),
+    body: JSON.stringify({ wardrobe_item_id: wardrobeItemId, ...extras }),
+  })
+  return unwrap(res)
+}
+
+/**
+ * 读回自己在这些件上已有的星（回填那两把星，⛔ 拿不到别人的分）。
+ * ids 为空就不发请求：后端拿到空列表也是空，白挨一次限流。
+ */
+export async function getItemFeedback(ids: number[]): Promise<{ items: ItemFeedbackRow[] }> {
+  if (!ids.length) return { items: [] }
+  const res = await fetchWithTimeout(`${BASE}/recommend/feedback/items?ids=${ids.join(',')}`, {
+    headers: headers(),
+  })
+  return unwrap(res)
+}
+
+/**
+ * 🔴 10-21 第十三阶段·第一步 §四·2「衣橱的星可以撤」：撤掉自己在某一件上的评分。
+ * 后端三条口径（`docs/依据/21` §四·2）：只按 `actor_key` 删自己的行；不是你的衣服／不存在 ⇒ 404；
+ * 本来就没评过 ⇒ 200 带 `deleted:0`（幂等，重复点不报错）。
+ * ⛔ 这一条不动 `feedback_events`、不回滚规则的好评差评数——那是"这条规则准不准"，另一层语义。
+ */
+export async function deleteItemFeedback(wardrobeItemId: number): Promise<{
+  wardrobe_item_id: number
+  deleted: number
+}> {
+  const res = await fetchWithTimeout(
+    `${BASE}/recommend/feedback/item?wardrobe_item_id=${encodeURIComponent(String(wardrobeItemId))}`,
+    { method: 'DELETE', headers: headers() },
+  )
   return unwrap(res)
 }
 
@@ -491,6 +656,37 @@ export async function listWardrobeItems(): Promise<WardrobeItem[]> {
   return data.items ?? []
 }
 
+// 扫码查重的返回（2026-10-20 第五阶段·第一步「门店扫码快速录入」）。
+// 两张表分开回，因为「这件我衣柜里有没有」和「这件在店里是什么」是两个问题：
+// mine 命中 ⇒ 别再录一遍；store 命中 ⇒ 表单预填名称/品类/颜色/图/价。
+export interface SkuLookup {
+  sku: string
+  in_wardrobe: boolean
+  in_inventory: boolean
+  mine: WardrobeItem[]
+  store: Array<{
+    id: number
+    name: string | null
+    sku: string | null
+    category_code: string | null
+    category_name: string | null
+    style_tags: string[]
+    color_tags: string[]
+    season_tags: string[]
+    fit_skin_tones: string[]
+    price: number | null
+    image_url: string | null
+    stock: number | null
+  }>
+}
+
+/** 按吊牌条码/店内编号查一次（扫码枪敲完自动回车走这条） */
+export async function lookupWardrobeSku(sku: string): Promise<SkuLookup> {
+  const url = `${BASE}/wardrobe/sku?sku=${encodeURIComponent(sku)}`
+  const res = await fetchWithTimeout(url, { headers: headers() })
+  return unwrap(res)
+}
+
 // item 用 PutPayload 而不是 Partial：三柜的表单把 POST/PUT 共用一份打包，空的可选列发
 // null（PUT 那边 null 才表示"清空这列"）。POST 的写口对 null 与"没给"落库结果相同。
 export async function addWardrobeItem(item: PutPayload<WardrobeItem>): Promise<WardrobeItem> {
@@ -553,6 +749,82 @@ export async function rankTopsByBody(profile: CustomerProfile): Promise<TopFitRe
 
 export async function getWardrobeStatus(): Promise<WardrobeGapResult> {
   const res = await fetchWithTimeout(`${BASE}/wardrobe/status`, { headers: headers() })
+  return unwrap(res)
+}
+
+// ============ 穿搭日记 API（`wardrobe_outfits`，2026-10-20 第八阶段·一d）============
+
+/**
+ * 日记的写入形状。
+ * ⛔ 不用 `PutPayload<WardrobeOutfit>`：那会把 `id`/`session_id`/`user_id` 也摆进可选列，
+ * 而这三格归后端定（身份只认请求头里的 session，见后端 `optionalUser`/`getCurrentUser`），
+ * 前端发了也没用——留着只会让人以为"改个 user_id 就能冒充别人"。
+ */
+export interface OutfitDraft {
+  name: string
+  item_ids: number[]
+  occasion?: string | null
+  season?: string | null
+  rating?: number | null
+  notes?: string | null
+  is_favorite?: boolean
+  /**
+   * 🔴 2026-10-21 第十一阶段·第一步（docs/依据/19 §三 第 5 条）：
+   * 这三格沿用衣橱那三柜同一把尺子——**不传＝这一格不动，传 null＝清空**。
+   * 所以"清空天气"必须是 `null`，⛔ 不许是不传，也不许是空串（空串会被后端 400 说破）。
+   */
+  wear_date?: string | null
+  weather_level?: string | null
+  feels_like_c?: number | null
+}
+
+/**
+ * GET 的返回里带 `occasions`＝后端**当下真收**的场合词表（每次现从 `rule_conditions` 取）。
+ * 下拉必须吃这个，不许在前端抄第二份词表：抄了就等于"改了规则侧忘了改这里"，
+ * 而表外词会被后端 400（命不中任何规则 ⇒ 采了白采）。
+ * 🔴 第十一阶段同理带出 `weather_levels`（五档词表，真相源在 `services/weatherService.js`），
+ * 日记表单那五个档位按钮必须从这里拿（docs/依据/19 §三 第 1 条 ＋ §七 第 2 条）。
+ */
+export interface OutfitListResult {
+  outfits: WardrobeOutfit[]
+  count: number
+  occasions: string[]
+  weather_levels?: string[]
+}
+
+export async function listWardrobeOutfits(): Promise<OutfitListResult> {
+  const res = await fetchWithTimeout(`${BASE}/wardrobe/outfits`, { headers: headers() })
+  return unwrap(res)
+}
+
+export async function createWardrobeOutfit(draft: OutfitDraft): Promise<WardrobeOutfit> {
+  const res = await fetchWithTimeout(`${BASE}/wardrobe/outfits`, {
+    method: 'POST',
+    headers: headers(),
+    body: JSON.stringify(draft),
+  })
+  return unwrap(res)
+}
+
+/** 改一笔日记：字段级"不传＝这一格不动，传 null＝清空"（与三柜 PUT 同一把尺子） */
+export async function updateWardrobeOutfit(
+  id: number,
+  patch: Partial<OutfitDraft> & { is_favorite?: boolean },
+): Promise<WardrobeOutfit> {
+  const res = await fetchWithTimeout(`${BASE}/wardrobe/outfits/${id}`, {
+    method: 'PUT',
+    headers: headers(),
+    body: JSON.stringify(patch),
+  })
+  return unwrap(res)
+}
+
+/** 删一笔日记：后端只删搭配这一行，不会动衣柜里的衣物 */
+export async function deleteWardrobeOutfit(id: number): Promise<{ deleted: boolean }> {
+  const res = await fetchWithTimeout(`${BASE}/wardrobe/outfits/${id}`, {
+    method: 'DELETE',
+    headers: headers(),
+  })
   return unwrap(res)
 }
 
@@ -786,4 +1058,112 @@ export async function directTryon(
     30000,
   )
   return unwrap(res)
+}
+
+// ============ 收款与交付 API（第十二阶段·第一步，docs/依据/20 §四/§八）============
+// 两条请求走的是**同一个端点** `GET /api/payment/my`：带 `report=` 才是领取那一路。
+// ⛔ 不新增 Header、⛔ 不换鉴权：沿用上面 headers() 那把 X-Session-Id。
+
+/** 已领报告的一行（回执里的数，⛔ 前端不推算） */
+export interface PaidReportRow {
+  out_trade_no: string
+  /**
+   * 🔴 第十四阶段·第一步 C1：凭证流那一路的 `out_trade_no` 是内部幂等键 `DEPOSIT-<id>`，
+   * **不是平台单号** ⇒ 这一行为 false 时前端不许显示"订单 xxxx"。老响应没这个键 ⇒ 可选。
+   */
+  is_platform_order_no?: boolean
+  /** `'online_order'`／`'manual_deposit'`；老响应没这个键时按在线单处理 */
+  source?: string
+  deposit_id?: number | null
+  amount: number | null
+  channel: string
+  /** 东八区显示串（后端 toBeijing 转过）；库里那列本身是 UTC */
+  paid_at: string | null
+  log_id: number
+  report_no: number
+  basis_log_id: number | null
+  granted_at: string | null
+}
+
+/** 权益读数：它只用来显示"还能领几份"，硬约束是一笔一报（按幂等键判） */
+export interface PaymentEntitlement {
+  granted: number
+  used: number
+  left: number
+  paid_orders: number
+  paid_amount: number
+  pending_orders: number
+  pending_amount: number
+  closed_orders: number
+  proof_approved: number
+  proof_amount: number
+  reports: PaidReportRow[]
+  claimable: Array<{
+    out_trade_no: string
+    amount: number
+    channel: string
+    paid_at: string | null
+  }>
+  /** 🔴 C1：人工确认后到账、还没领过的那几笔（领取方式＝`?proof=<deposit_id>`） */
+  claimable_proofs?: Array<{
+    deposit_id: number
+    amount: number
+    paid_at: string | null
+  }>
+}
+
+/** `GET /api/payment/my` 的只读支：凭证那八个键原样平铺（没有凭证时全为 null）+ 这三键 */
+export interface MyPaymentInfo {
+  id: number | null
+  channel: string | null
+  amount: number | null
+  proof_url: string | null
+  status: string | null
+  admin_note: string | null
+  created_at: string | null
+  approved_at: string | null
+  entitlement: PaymentEntitlement
+  orders: Array<{
+    out_trade_no: string
+    status: string
+    amount: number
+    paid_at: string | null
+    created_at_beijing: string | null
+  }>
+  time_axis?: string
+}
+
+/** 领取／复读回来的报告体（`report` 就是引擎那份结果，多一个 paid_report 回执块） */
+export interface PaidReportPayload {
+  report: EngineRecommendation
+  profile: CustomerProfile | null
+  mode: 'store' | 'personal'
+  log_id: number
+  fresh: boolean
+}
+
+export async function getPaymentEntitlement(): Promise<MyPaymentInfo> {
+  const res = await fetchWithTimeout(`${BASE}/payment/my`, { headers: headers() })
+  return unwrap<MyPaymentInfo>(res)
+}
+
+/**
+ * 领取（或复读）这一笔已付订单对应的深度细账。
+ * 这一支会在后端跑整趟推荐引擎，所以超时给到 30 秒；另有 10 次/分的服务端限流，
+ * 被限流时 unwrap() 会把后端那句"领取过于频繁"原话带回（不是笼统的 429）。
+ * `&session=` 带的是门店快速模式那次的会话号：那行填表记录没有 user_id，
+ * 后端只有拿到这个号才认得出"哪次填表算的"（⛔ 不带就退回只按人查，个人模式照常）。
+ */
+export async function claimPaidReport(
+  target: { outTradeNo: string } | { depositId: number },
+): Promise<PaidReportPayload> {
+  const basis = getCustomerSessionId()
+  // 🔴 C1：两条到账来路共用同一个口，只是入参不同——在线单给 `report=`，人工凭证给 `proof=`
+  const key =
+    'outTradeNo' in target
+      ? `report=${encodeURIComponent(target.outTradeNo)}`
+      : `proof=${encodeURIComponent(String(target.depositId))}`
+  const query = key + (basis ? `&session=${encodeURIComponent(basis)}` : '')
+  const res = await fetchWithTimeout(`${BASE}/payment/my?${query}`, { headers: headers() }, 30000)
+  return unwrap<PaidReportPayload>(res)
 }

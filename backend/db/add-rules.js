@@ -1351,7 +1351,7 @@ function addNewRules(db) {
   // `id INTEGER PRIMARY KEY AUTOINCREMENT`（schema.sql:177/206/217），主键本来就该交给 SQLite；
   // 更要紧的是整个脚本从头到尾不判"这条规则库里有没有"，⇒ 跑第二次就整批重复插，
   // 同一条规则在引擎里命中两遍、hit_count 也分家。幂等靠的是 rule_groups.source_key
-  // 那套（db/init.js:160 的唯一索引），这个历史脚本不走那条路，所以这里补一道按 name 的判存。
+  // 那套（db/init.js:175 的唯一索引），这个历史脚本不走那条路，所以这里补一道按 name 的判存。
   const existingNames = new Set(
     db
       .prepare('SELECT name FROM rule_groups')

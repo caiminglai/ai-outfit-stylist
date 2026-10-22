@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import type { CustomerProfile } from '../types'
+import SkinSampler from './SkinSampler'
 
 /**
  * 顾客数据收集表单 - 深色科技风
@@ -43,12 +44,19 @@ const FACE_SHAPE_OPTIONS = [
   { value: '长脸', label: '长脸', icon: '▯' },
 ] as const
 
+/**
+ * 体型：五档与后端引擎出的字一字一样（词表在 backend/services/bodyTypes.js）。
+ * 原来这里写的是「标准/偏瘦/偏胖/梨形/苹果形」——前三颗是 BMI 档不是体型，
+ * 最后一颗「苹果形」与引擎的「苹果型」差一个字，导致门店这 4 组穿搭规则从写下起一次没命中过
+ *（10-19 现量，判据见 bodyTypes.js 文件头）。偏瘦/偏胖这两档改由高矮胖瘦自动算的 bmi_level 接，
+ * 表单这里只留真正看得出 silhouette 的五档。
+ */
 const BODY_TYPE_OPTIONS = [
-  { value: '标准', label: '标准' },
-  { value: '偏瘦', label: '偏瘦' },
-  { value: '偏胖', label: '偏胖' },
+  { value: '沙漏型', label: '沙漏型' },
   { value: '梨形', label: '梨形' },
-  { value: '苹果形', label: '苹果形' },
+  { value: '苹果型', label: '苹果型' },
+  { value: '直筒型', label: '直筒型' },
+  { value: '倒三角型', label: '倒三角型' },
 ] as const
 
 /** 骨架量感:值与后端 FRAME_LEVEL 一字一样,与线条倾向合起来才判得出风格型 */
@@ -319,6 +327,25 @@ export default function CustomerForm({
             </button>
           ))}
         </div>
+        {/* 取色（选填）：浏览器本机算，照片不出设备。口径见 docs/依据/18 §2.1/§2.4 */}
+        <SkinSampler
+          compact={compact}
+          onConfirm={(undertone, sample) => {
+            // ⛔ 只碰冷暖这一格：深浅那栏照片判不了明暗（18 §2.3），留给用户自己确认
+            setOverride({
+              ...profile,
+              skin_tone: undertone,
+              skin_hue: sample.h,
+              skin_hex: sample.hex,
+            })
+          }}
+          onClear={() => {
+            // 第十三阶段·§四·3：只撤这一屏取出来的两个连续值（色相角 + 取样 hex），
+            // ⛔ 不动 `skin_tone`——清掉后色彩侧要退回手选肤色档（18 §三 缺测降级链），
+            // 把档位一起清了等于抹掉用户自己选的东西；也不发任何请求（库里没有取色结果可删）。
+            setOverride({ ...profile, skin_hue: undefined, skin_hex: undefined })
+          }}
+        />
         {renderTriRow(
           '色彩纯度（选填，定到色彩十二型）',
           '净亮＝穿饱和亮色更精神；柔雾＝穿灰调莫兰迪更耐看；拿不准选中间',
@@ -363,6 +390,9 @@ export default function CustomerForm({
         }}
       >
         <div className="section-title">体型</div>
+        <div className="text-xs mb-2" style={{ opacity: 0.7 }}>
+          胸臀差不多又有腰＝沙漏型；胯比胸宽＝梨形；腰腹最粗＝苹果型；胸腰臀接近＝直筒型；肩宽胯窄＝倒三角型。拿不准就不选，胖瘦那一维由高矮体重自动算。
+        </div>
         <div className={`grid grid-cols-5 ${gap}`}>
           {BODY_TYPE_OPTIONS.map((opt) => (
             <button

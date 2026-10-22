@@ -33,6 +33,16 @@ var EVIDENCE_BADGE_CLASS = { A: 'badge-green', B: 'badge-accent', C: 'badge-oran
 var PREVIEW_META_KEYS = {
   group_id: 1, group_name: 1, priority: 1, score: 1, explanation: 1,
   evidence_level: 1, color_fit: 1, body_fit: 1, feedback: 1, condition_details: 1,
+  // 10-19 第二阶段：综合排序分（对象）＋这条候选来自衣柜哪一行（内部 id / 来源标记）
+  rank: 1, source: 1, wardrobe_item_id: 1,
+  // 10-20 第六阶段·第一步：色彩接线的三笔账目字段（basis=怎么认出色来的、parts=参与呼应的件数、
+  // color_text=衣橱那条取色用的原串）。都要印在"上衣贴合度"那一行里，不单独打英文键。
+  color_basis: 1, color_parts: 1, color_text: 1,
+  // 10-21 第十三阶段·一 §二·3 借色＋§二·4 关系色的五笔出处（同上，只在贴合度那一行说，不单独打英文键）
+  color_basis_source: 1, color_borrowed: 1, color_borrowed_from: 1,
+  color_borrowed_position: 1, color_relational_from: 1, color_relational: 1, color_top_band: 1,
+  // 10-21 第十三阶段·一 §三·4：版型档推断的两件出处（同上，只在身材适配度那一行说）
+  fit_type_inferred: 1, fabric_weight_inferred: 1,
 };
 
 /**
@@ -671,12 +681,29 @@ function runPreview() {
               html += '<span style="color:var(--orange);">' + escapeHtml(ACTION_LABEL_MAP[k] || k) + '：</span>' +
                 '<span style="color:var(--green);">' + escapeHtml(String(v)) + '</span><br>';
             });
-            // 色度学贴合分:只有上衣结论认得出色名且档案有肤色档时才有
+            // 色度学贴合分:上衣结论认得出色名（或至少认得出"深/浅"这一档）且档案有肤色档时才有
             if (item.color_fit) {
               var f = item.color_fit;
-              html += '<span style="color:var(--orange);">上衣贴合度：</span>' +
-                '<span style="color:var(--green);">' + escapeHtml(f.score + '/100（' + f.top_label + ' ' + f.top_hex +
-                  '，与肤色 ΔE00 ' + f.deltaE00 + '、色相角差 ' + f.dHue + '°、明度差 ' + f.dL + '）') + '</span><br>';
+              // 10-20：这一分的来路（basis）要在后台看得见——L5 明度档那条没有 hex，
+              // ΔE00/色相角/明度差全是 null，照原样印就是「ΔE00 null、色相角差 null°」，
+              // 看起来像系统坏了，实际是"这句文案只说了深浅，没给具体色"。
+              var BASIS_CN = {
+                hex: '直接色值', 'table-key': '色名精确', 'strip-color': '去尾色字',
+                'add-color': '补尾色字', synonym: '同义词归一', 'in-text': '句内扫描',
+                'lab-object': 'Lab 直传', 'lightness-band': '仅明度档位',
+              };
+              var basisTxt = BASIS_CN[f.basis] || f.basis || '未标注';
+              if (f.basis === 'lightness-band') {
+                html += '<span style="color:var(--orange);">上衣贴合度：</span>' +
+                  '<span style="color:var(--green);">' + escapeHtml(f.score + '/100（' + f.top_label +
+                    '·' + basisTxt + '，无具体色 ⇒ 只按衣装明度方向给分，不测色差）') + '</span><br>';
+              } else {
+                // {L,a,b} 直传没有 hex 可印（改前这里会印出 "null"）
+                var hexTxt = f.top_hex ? ' ' + f.top_hex : '';
+                html += '<span style="color:var(--orange);">上衣贴合度：</span>' +
+                  '<span style="color:var(--green);">' + escapeHtml(f.score + '/100（' + f.top_label + hexTxt +
+                    '·' + basisTxt + '，与肤色 ΔE00 ' + f.deltaE00 + '、色相角差 ' + f.dHue + '°、明度差 ' + f.dL + '）') + '</span><br>';
+              }
             }
             // 身材贴合分:这件上衣的修形方向 vs 这个人的比例偏差(缺测的轴不进总分)
             if (item.body_fit) {
@@ -687,6 +714,22 @@ function runPreview() {
               html += '<span style="color:var(--orange);">上衣身材适配度：</span>' +
                 '<span style="color:var(--green);">' + escapeHtml(b.score + '/100（' + ax +
                   '；未计入 ' + (b.axes_missing || []).length + ' 维）') + '</span><br>';
+            }
+            // 综合排序分：名次就是它决定的（10-19 第二阶段「换脑」），三个分量与缺测折扣都要摊开
+            if (item.rank) {
+              var rk = item.rank;
+              var dd = (rk.dims || []).filter(function (d) {
+                return d.score !== null && d.score !== undefined && d.weight > 0;
+              }).map(function (d) {
+                return d.name_cn + ' ' + Math.round(d.score) + '×' + Math.round(d.weight * 100) / 100;
+              }).join(' + ');
+              var noDim = (rk.dims || []).filter(function (d) {
+                return !(d.score !== null && d.score !== undefined && d.weight > 0);
+              }).map(function (d) { return d.name_cn; });
+              html += '<span style="color:var(--orange);">综合排序分：</span>' +
+                '<span style="color:var(--green);">' + escapeHtml(rk.score + '/100（' + dd +
+                  '，实测覆盖折扣 ' + rk.coverage + '⇒乘 ' + rk.factor +
+                  (noDim.length ? '；没算:' + noDim.join('、') : '') + '）') + '</span><br>';
             }
             html += '</div>';
           });

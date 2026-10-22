@@ -127,6 +127,25 @@ const MISSING_COLUMNS = [
   // 衣橱单品的版型与面料厚薄:上衣打分要吃的两格,老库不补列就只能判色名判不了剪裁
   ['user_wardrobe', 'fit_style', 'TEXT'],
   ['user_wardrobe', 'fabric_weight', 'TEXT'],
+  // 10-19 第二阶段「最后一公里」:上衣打分改吃成品实测尺寸这四格(肩宽/胸围/衣长/腰头高),
+  // 不再从名称与标签里猜"宽松""落肩"。同样**不设 DEFAULT**——NULL＝没量＝那一维不出分。
+  ['user_wardrobe', 'shoulder_cm', 'REAL'],
+  ['user_wardrobe', 'bust_cm', 'REAL'],
+  ['user_wardrobe', 'length_cm', 'REAL'],
+  ['user_wardrobe', 'waistband_cm', 'REAL'],
+  // 10-19 第三阶段「注水」：量不了四格的人先选一档版型，松量按区间中值估（覆盖率里按半格计）。
+  // 同样不设 DEFAULT——NULL＝没选＝不估，缺测不出分。
+  ['user_wardrobe', 'fit_type', 'TEXT'],
+  // 2026-10-20 第五阶段·第一步「门店扫码快速录入」:吊牌条码／店内编号原样存这一格。
+  // ⛔ 不设 DEFAULT(NULL＝这件不是扫来的)、⛔ 不建唯一索引(同一人可以有两件同款,
+  // 游客还共用会话)⇒ 扫重了由录入框查库时提醒,不在写入口拦。
+  ['user_wardrobe', 'sku', 'TEXT'],
+  // 10-19 第三阶段·模块三「校准」：两把星级 + 打分那一刻的三维分快照 + 具体落在哪件衣服。
+  // 老库不补这三列，回归脚本读表就直接 SQLITE_ERROR；不设 DEFAULT＝历史行全是"没打星"。
+  ['feedback_events', 'aesthetic_score', 'INTEGER'],
+  ['feedback_events', 'fit_score', 'INTEGER'],
+  ['feedback_events', 'rank_snapshot', 'TEXT'],
+  ['feedback_events', 'wardrobe_item_id', 'INTEGER'],
   // 八字五行(第二条判定依据)的输入;不填则整条依据缺席
   ['body_metrics', 'birth_date', 'TEXT'],
   ['body_metrics', 'birth_hour', 'TEXT'],
@@ -136,6 +155,12 @@ const MISSING_COLUMNS = [
   // 所以新加一列从现在开始记活跃(见 middleware/auth.js 的 getCurrentUser)。
   // 不设 DEFAULT:NULL＝"本轮迁移后还没观测过活跃",执法只能等下一轮数据攒够再开。
   ['users', 'last_active_at', 'TEXT'],
+  // 2026-10-21 第十一阶段·第一步「穿搭日记×天气」(docs/依据/19 §二):日记终于记得住
+  // "哪天穿的、那天多冷"。三格全**不设 DEFAULT**——NULL＝没记＝偏好层那一维整块缺席(硬规矩 2)。
+  // ⛔ 不许拿 created_at 顶替 wear_date:提交时间不是穿着时间,补记昨天的会被记成今天(那是假数据)。
+  ['wardrobe_outfits', 'wear_date', 'TEXT'],
+  ['wardrobe_outfits', 'feels_like_c', 'REAL'],
+  ['wardrobe_outfits', 'weather_level', 'TEXT'],
 ]
 
 function initMissingColumns() {
@@ -158,6 +183,12 @@ function initMissingColumns() {
   )
   // 种子靠这个唯一标记判断"库里有没有这条规则";手工建的规则是 NULL,SQLite 允许 NULL 重复
   db.exec('CREATE UNIQUE INDEX IF NOT EXISTS ix_rule_groups_source_key ON rule_groups(source_key)')
+  // 扫码录入 = 一次等值查找,所以给 sku 那一格建索引。普通索引(非唯一):同一会话允许两件同款。
+  db.exec('CREATE INDEX IF NOT EXISTS ix_user_wardrobe_sku ON user_wardrobe(sku)')
+  // 第十一阶段·第一步:日记按天分组(报告与未来的回归都要按 wear_date 取)。
+  // ⛔ 不写在 schema.sql 的索引段:老库跑到那一段时 wear_date 还没补上,CREATE INDEX 直接报错
+  // (那里 user_wardrobe.sku 已踩过一次,注释在 schema.sql:381-382)。
+  db.exec('CREATE INDEX IF NOT EXISTS ix_wardrobe_outfits_wear_date ON wardrobe_outfits(wear_date)')
 }
 
 /**

@@ -80,7 +80,8 @@ var VALUE_LABELS = {
     'color_season': '色彩四季型（算出）', 'color_season_12': '色彩十二型（算出）', 'kibbe_type': '风格型（算出）',
   },
   // feedback_events.signal —— 与后端 services/ruleFeedback.js 的 SIGNALS 一字一样,改那边要改这里
-  'feedback_events.signal': { 'useful': '有用', 'inaccurate': '不准' },
+  // 10-20 第八阶段·一b：`rated`＝只打了两把星、没点👍/👎（它不进好评/差评计数）
+  'feedback_events.signal': { 'useful': '有用', 'inaccurate': '不准', 'rated': '只打星·未表态' },
   // photos.type
   'photos.type': { 'face': '面部', 'body': '全身', 'cloth': '衣物', 'tryon': '试穿' },
   // admin_users.role

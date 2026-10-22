@@ -285,6 +285,48 @@ test('衣橱 fit_style 填了不认得的值 ⇒ 400 说破，不再静默抹成
   )
 })
 
+test('衣橱 fit_type（10-19 第三阶段·模块一）：四档落库、认不到的值 400、PUT 传 null 清空', () => {
+  const s = sid('ward-fit-type')
+  const ok = call(findRoute(wardrobeRouter, 'post', '/items'), {
+    headers: { 'x-session-id': s },
+    body: { name: '廓形衬衫', category: '上衣', fit_type: '廓形' },
+  })
+  assert.strictEqual(ok.statusCode, 200, JSON.stringify(ok.body))
+  assert.strictEqual(ok.body.data.fit_type, '廓形', 'POST 回来的那一行要带版型')
+  assert.strictEqual(
+    memDb.prepare('SELECT fit_type FROM user_wardrobe WHERE id = ?').get(ok.body.data.id).fit_type,
+    '廓形',
+    '真的落进那一列',
+  )
+
+  const bad = call(findRoute(wardrobeRouter, 'post', '/items'), {
+    headers: { 'x-session-id': s },
+    body: { name: '衬衫', category: '上衣', fit_type: '紧身' },
+  })
+  assert.strictEqual(bad.statusCode, 400, JSON.stringify(bad.body))
+  assert.match(bad.body.error.message, /fit_type 只能是 修身\/合身\/宽松\/廓形/)
+
+  // 没填版型 ⇒ 这一列 NULL（后端不强制必填，"必选"那条闸门在前端表单）
+  const blank = call(findRoute(wardrobeRouter, 'post', '/items'), {
+    headers: { 'x-session-id': s },
+    body: { name: '衬衫', category: '上衣' },
+  })
+  assert.strictEqual(blank.statusCode, 200, JSON.stringify(blank.body))
+  assert.strictEqual(blank.body.data.fit_type, null)
+
+  const cleared = call(findRoute(wardrobeRouter, 'put', '/items/:itemId'), {
+    params: { itemId: String(ok.body.data.id) },
+    headers: { 'x-session-id': s },
+    body: { fit_type: null },
+  })
+  assert.strictEqual(cleared.statusCode, 200, JSON.stringify(cleared.body))
+  assert.strictEqual(
+    memDb.prepare('SELECT fit_type FROM user_wardrobe WHERE id = ?').get(ok.body.data.id).fit_type,
+    null,
+    'PUT 传 null＝明确清空这一档（清空后不再估松量）',
+  )
+})
+
 test('衣橱 PUT 认不出的厚薄同样 400，且原有的好值不动', () => {
   const s = sid('ward-enum-put')
   const row = addWardrobe(s, { fit_style: '合体', fabric_weight: '中' })

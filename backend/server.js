@@ -138,9 +138,9 @@ const apiLimiter = rateLimit({
   // `/health`（不带 /api）本来就不在这道闸范围内，两条入口现在口径一致。
   // 判据读 originalUrl 而不是 req.path：这道闸挂在 `app.use('/api/')` 上，Express 会把
   // 挂载前缀从 req.url 里切掉 ⇒ 中间件里 req.path 只剩 '/health'（10-13 现量：写成
-  // req.path === '/api/health' 时豁免整个不生效，第 101 条照样 429）。
+  // req.path === '/api/health' 时豁免整个不生效，第 101 条照样 429）。🔴 第十四阶段追加 `/api/models/list` 进同一条豁免（取证与代价账见 docs/依据/22-…md §十二.9a 与路线 §五十三.2）：展厅待机态一开屏就 fetch 它＝"打开首页就送一次额度"，国内移动网络与门店 WiFi 普遍共用出口 IP ⇒ 桶是十几个人共享的，撞空后 429 被 showApiError 变成整屏"无法加载人物模型"；它虽有 ETag＋no-cache（routes/models.js:145-146）但闸在路由前面 ⇒ 304 照样吃额度，条件请求省字节省不到这一格；豁免代价＝零（一条 SELECT COUNT 加一遍已启用列表，无用户输入、无副作用）。
   skip: (req) =>
-    req.originalUrl.split('?')[0] === '/api/health' ||
+    ['/api/health', '/api/models/list'].includes(req.originalUrl.split('?')[0]) ||
     req.originalUrl.startsWith('/api/models/file/') ||
     req.originalUrl.startsWith('/api/payment/notify') ||
     req.originalUrl.startsWith('/api/payment/order/') ||
@@ -372,11 +372,11 @@ app.use('/admin', (req, res) => {
 // ===== 前端静态文件服务(esbuild 构建产物)=====
 const frontendDist = path.join(__dirname, '..', 'app', 'dist')
 if (fs.existsSync(frontendDist)) {
-  // serve 静态资源
-  app.use('/assets', express.static(path.join(frontendDist, 'assets')))
-  // 展厅 importmap 里的 /three/** 由 vite 从 app/public/three 拷进 dist/three，必须显式挂载；
-  // 漏挂载时它会落到下面的 SPA 兜底，被当成 index.html(text/html) 返回，浏览器直接拒绝执行模块链。
-  app.use('/three', express.static(path.join(frontendDist, 'three')))
+  // serve 静态资源。🔴 第十四阶段：/assets 是 vite 的内容哈希产物（如 CabinetManager-CEKUQ9l7.js），文件名即版本 ⇒ 钉一年 immutable。10-22 现量：改前它回 `Cache-Control: public, max-age=0`，弱 ETag 让回访走 304（0 字节）而不是重下 222,777 B，省的是每个资产一次往返——首页入口 5 个资产＝5 次，手机 4G 上一次往返就够看见差别。/three 不是哈希名（vite 把 app/public/three 原样拷过来），只给 1 小时：升级 three 时不会把旧字节钉一年。取证与账见 docs/依据/22-…md §十二.9b。
+  const assetCache = { maxAge: '1y', immutable: true }
+  app.use('/assets', express.static(path.join(frontendDist, 'assets'), assetCache))
+  // 展厅 importmap 里的 /three/** 由 vite 从 app/public/three 拷进 dist/three，必须显式挂载；漏挂载时它会落到下面的 SPA 兜底，被当成 index.html(text/html) 返回，浏览器直接拒绝执行模块链。
+  app.use('/three', express.static(path.join(frontendDist, 'three'), { maxAge: '1h' }))
   // 域名根目录的裸文件（favicon、微信业务域名校验文件 WW_verify_xxx.txt 等）必须先于 SPA 兜底命中，
   // 否则会被 index.html 顶替成 200 + text/html，平台侧静默校验失败。index:false 让 / 仍走下面的兜底。
   app.use(express.static(frontendDist, { index: false }))

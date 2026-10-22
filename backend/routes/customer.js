@@ -313,7 +313,10 @@ router.post('/session/:sessionId/recommend', (req, res) => {
     }
 
     const profile = parseProfileData(session.profile_data)
-    const recommendation = buildRecommendation(profile, mode)
+    // 第三参数不动（默认写命中次数），第四参数带上这条会话 ⇒ 隐性偏好乘子生效（日记 0 条时恰好是 1）。
+    // 这里只有 session 一档身份（customer_sessions 表没有 user_id 列，现量 db/schema.sql:269-278），
+    // 而日记的归属口径是 session∪user 并集，按 session 查得到的那部分照样算。
+    const recommendation = buildRecommendation(profile, mode, true, { sessionId })
 
     // 保存推荐日志（与个人模式走同一条写入路径,归属沿用会话登记的那家店）
     const logId = writeRecommendationLog({

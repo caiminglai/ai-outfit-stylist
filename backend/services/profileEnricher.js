@@ -14,6 +14,8 @@ const { analyzeBazi, analyzeDay, parseBirthDate } = require('./baziWuxing')
 const { ownValue } = require('../utils/common')
 const { beijingDateStr, beijingParts } = require('../utils/beijingTime')
 const { bmiValue, healthBand } = require('./bmi')
+const { BODY_TYPE_BY_KEY, normalizeBodyType } = require('./bodyTypes')
+const { estimateBodyDims } = require('./bodyDimEstimator')
 
 // 简易内存缓存（避免重复计算相同 profile）
 const _enrichCache = new Map()
@@ -86,10 +88,18 @@ function computeBodyShape(bust, waist, hip, shoulder) {
   const whDiff = h - w
 
   if (Math.abs(bwDiff - whDiff) < 5 && bwDiff > 10) {
-    return { body_shape: '沙漏型', body_shape_key: 'hourglass', body_shape_status: 'good' }
+    return {
+      body_shape: BODY_TYPE_BY_KEY.hourglass,
+      body_shape_key: 'hourglass',
+      body_shape_status: 'good',
+    }
   }
   if (whDiff > bwDiff + 5) {
-    return { body_shape: '梨形', body_shape_key: 'pear', body_shape_status: 'normal' }
+    return {
+      body_shape: BODY_TYPE_BY_KEY.pear,
+      body_shape_key: 'pear',
+      body_shape_status: 'normal',
+    }
   }
   if (bwDiff > whDiff + 5) {
     const s = _safeFloat(shoulder)
@@ -98,14 +108,22 @@ function computeBodyShape(bust, waist, hip, shoulder) {
     if (s <= 0) return { body_shape_status: 'unmeasured' }
     if (s > h * 0.45) {
       return {
-        body_shape: '倒三角型',
+        body_shape: BODY_TYPE_BY_KEY.inverted_triangle,
         body_shape_key: 'inverted_triangle',
         body_shape_status: 'normal',
       }
     }
-    return { body_shape: '苹果型', body_shape_key: 'apple', body_shape_status: 'warning' }
+    return {
+      body_shape: BODY_TYPE_BY_KEY.apple,
+      body_shape_key: 'apple',
+      body_shape_status: 'warning',
+    }
   }
-  return { body_shape: '直筒型', body_shape_key: 'rectangle', body_shape_status: 'normal' }
+  return {
+    body_shape: BODY_TYPE_BY_KEY.rectangle,
+    body_shape_key: 'rectangle',
+    body_shape_status: 'normal',
+  }
 }
 
 // ============================================================
@@ -765,6 +783,16 @@ function enrichProfile(profile) {
   if (!p.body_type && p.body_type_detail) {
     p.body_type = p.body_type_detail
   }
+  // 0.1 体型词形归一（10-19 第一阶段·止血第 1 条）。老档案与老表单存的是「苹果形」，
+  // 引擎判定与规则库存值认的是「苹果型」——严格 AND 下这一字之差＝那 4 组 store 穿搭规则
+  // 对这个顾客根本不存在（现量 10-19：rule_conditions 里 {"body_type":"苹果形"} 4 条，
+  // 一次没命中过；判据见 bodyTypes.js 文件头）。
+  // 认不出的取值原样留着：「标准」这类老自填值翻成五档之一＝编造体型，宁可让它继续不命中。
+  // 引擎侧归一 + 规则侧归一（recommendEngine.COND_VALUE_ALIASES）两道一起上，
+  // 是为了让"迁移脚本跑没跑"不再决定规则生不生效——服务器那份运行库被 skip-worktree 钉住，
+  // 发布窗口里漏跑一次迁移只该留下后台的老名字，不该再静默吃掉一整组规则。
+  const normalizedBodyType = normalizeBodyType(p.body_type)
+  if (normalizedBodyType && normalizedBodyType !== p.body_type) p.body_type = normalizedBodyType
   if (!p.skin_tone && p.skin_tone_detail) {
     p.skin_tone = p.skin_tone_detail
   }
@@ -848,6 +876,20 @@ function enrichProfile(profile) {
   Object.assign(p, deriveAgeFields(p.birth_date))
   // 6.8 八字五行(第二条判定依据;没填出生日期就整块缺席,不影响第一批那 20 条四季型规则)
   Object.assign(p, computeBaziFields(p.birth_date, p.birth_hour))
+  // 6.9 智能估算净胸围/净肩宽(第五阶段·第一步「只填身高体重」)。
+  //     🔴 只挂**独立的 body_est 通道**，⛔ 绝不改写 p.bust / p.shoulder
+  //     （docs/依据/13-体型估算输入输出规范-20261020.md §五 第 7 条：档案里那两格
+  //     "用户没填就是没填"这件事必须一直成立，否则他下次填了实测值没人知道哪个是真的）。
+  //     ⛔ 也不喂 computeBodyShape（:838 那段用的是量到的 bust/waist/hip）、不喂规则条件字段
+  //     （引擎是严格 AND，估算值一进 profile.bust 就会命中一堆本该"没量⇒不命中"的规则）。
+  //     这份数唯一的出口是 topFitBody 的 person_cm.bust/shoulder（合身层拿成衣实测做减法的那两个原值）。
+  //     输入不合格 ⇒ estimateBodyDims 返回 null ⇒ 这一格就是 null，不给默认值。
+  p.body_est = estimateBodyDims({
+    gender: p.gender,
+    height: p.height,
+    weight: p.weight,
+    age: p.age,
+  })
 
   // 7. 脸型-全维度建议
   if (face_shape) {
