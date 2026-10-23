@@ -16,6 +16,7 @@
 
 const db = require('../db/init')
 const { FIELD_LABELS } = require('./ruleExplainer')
+const { strictNum, limitOf } = require('./bodyLimits')
 const { asText, asNumber, ownValue, stripIdentityFields } = require('../utils/common')
 
 /**
@@ -52,15 +53,21 @@ const TAG_DEFS = [
   { key: 'kibbe_type', label: '风格型（算出）' },
 ]
 
-/** profile 字段 ⇄ 身体档案列；kind 决定校验方式 */
+/**
+ * profile 字段 ⇄ 身体档案列；kind 决定校验方式
+ * ⚠️ `kind: 'num'` 的项**不带自己的 min/max**：界一律从 `bodyLimits.js` 按列名取（DR1，10-23 第六十四轮）。
+ * 改前这张表自带一套 50~250／20~300 的松界，而前端 `saveProfileArchive()` 走的正是这条路
+ * （全仓 0 处调 `/analysis/body`，10-23 现量），于是 `/body` 收紧了、真正写库的那条没收紧。
+ * 在这里再写一份数字＝把第二把尺子请回来。
+ */
 const BODY_FIELDS = [
-  { key: 'height', column: 'height_cm', kind: 'num', min: 50, max: 250 },
-  { key: 'weight', column: 'weight_kg', kind: 'num', min: 20, max: 300 },
-  { key: 'bust', column: 'bust_cm', kind: 'num', min: 40, max: 200 },
-  { key: 'waist', column: 'waist_cm', kind: 'num', min: 30, max: 200 },
-  { key: 'hip', column: 'hip_cm', kind: 'num', min: 40, max: 220 },
-  { key: 'shoulder', column: 'shoulder_width_cm', kind: 'num', min: 20, max: 80 },
-  { key: 'leg_length', column: 'leg_length_cm', kind: 'num', min: 30, max: 160 },
+  { key: 'height', column: 'height_cm', kind: 'num' },
+  { key: 'weight', column: 'weight_kg', kind: 'num' },
+  { key: 'bust', column: 'bust_cm', kind: 'num' },
+  { key: 'waist', column: 'waist_cm', kind: 'num' },
+  { key: 'hip', column: 'hip_cm', kind: 'num' },
+  { key: 'shoulder', column: 'shoulder_width_cm', kind: 'num' },
+  { key: 'leg_length', column: 'leg_length_cm', kind: 'num' },
   { key: 'neck_length', column: 'neck_length', kind: 'text' },
   { key: 'shoulder_type', column: 'shoulder_type', kind: 'text' },
   { key: 'body_type', column: 'body_type', kind: 'text' },
@@ -105,12 +112,20 @@ function isFilled(val) {
   return true
 }
 
-/** 数值列校验，越界或非法当没填 */
-function cleanNum(val, min, max) {
-  const n = Number(val)
-  if (isNaN(n)) return null
-  if (n < min || n > max) return null
-  return n
+/**
+ * 数值列校验（界从 `bodyLimits.js` 按列名取，DR1，10-23 第六十四轮）
+ * 改前这里越界直接 `return null`——保存草稿的人不知道哪一格被扔，而且它握着一把比
+ * `/analysis/body` 松得多的界（身高 50~250 vs 140~220）。现在两个入口共用一份界，
+ * 但本条路径**不能回 400**：它是前端 1.5 秒防抖的自动保存（`ExhibitionHall.tsx:178`），
+ * 400 会把整份表单打回去、并且每次 keystroke 都响一次。所以这里的口径是
+ * 「这一格不写 + 在返回里点名」，由 `saveArchive` 汇成 `rejected` 数组回吐给调用方。
+ * ⛔ 在这里另写一份 min/max——那等于把第二把尺子请回来。
+ */
+function cleanNum(column, val) {
+  const r = strictNum(column, val)
+  if (r.absent) return { value: null, reason: null }
+  if (r.error) return { value: null, reason: r.error }
+  return { value: r.value, reason: null }
 }
 
 /** 文本列校验：只留短字符串，挡掉脚本塞进来的长垃圾 */
@@ -121,15 +136,27 @@ function cleanText(val) {
   return s
 }
 
-/** 从 profile 里取该列对应的值（按 source 顺序取第一个填了的） */
-function pick(profile, field) {
+/**
+ * 从 profile 里取该列对应的值（按 source 顺序取第一个填了的）
+ * 传了 `rejected` 数组时，数值格被拒会往里推一条 `{key,label,input,reason}`；
+ * 没传（面容列那条循环，全是文本）行为与改前一样，只是数值界换成了共用的那份。
+ */
+function pick(profile, field, rejected) {
   const names = field.source || [field.key]
   for (const name of names) {
-    if (isFilled(profile[name])) {
-      return field.kind === 'num'
-        ? cleanNum(profile[name], field.min, field.max)
-        : cleanText(profile[name])
+    if (!isFilled(profile[name])) continue
+    if (field.kind !== 'num') return cleanText(profile[name])
+    const r = cleanNum(field.column, profile[name])
+    if (r.reason && rejected) {
+      const raw = profile[name]
+      rejected.push({
+        key: field.key,
+        label: (limitOf(field.column) || {}).label || field.column,
+        input: typeof raw === 'number' || typeof raw === 'string' ? String(raw).slice(0, 40) : null,
+        reason: r.reason,
+      })
     }
+    return r.value
   }
   return null
 }
@@ -286,6 +313,32 @@ function loadPrefill(userId) {
 }
 
 /**
+ * 从一份"要展示给顾客看的表单视图"里挑出**填了但因为不合界而没进档案**的数值格
+ * （DR1 追加，10-23 第六十四轮）。
+ *
+ * 为什么 `GET /archive` 需要它：`loadPrefill` 的契约是"把上次填的表单原样回吐"，
+ * 草稿与快照列存的是**输入**，所以身高 300 这种被拒的值也会照样出现在
+ * "我们替你记了什么"那张清单里——库里 `height_cm` 是 NULL，页面却说记了 300
+ * （10-23 真实例现量：`PUT /archive` 收 300 ⇒ 库里 NULL，同一条会话 `GET /archive` 回 `"height":300`）。
+ *
+ * 本轮的口径：⛔ 动 `fields`（那是顾客端已在渲染的清单，砍掉一行＝悄悄丢数据，
+ * 而且"为什么少了身高"这种话术要靠前端才讲得清），改成**追加**一条 `not_recorded`。
+ * 待办记在 §12.15：顾客端把这条数组显示成"这一项没被记下，因为…"。
+ *
+ * @param {object} profile 展示视图（通常就是 `loadPrefill` 的返回值）
+ * @returns {Array<{key,label,input,reason}>} 被尺子拒掉、因而不在档案里的数值格
+ */
+function unrecordedNumCells(profile) {
+  const out = []
+  if (!profile || typeof profile !== 'object' || Array.isArray(profile)) return out
+  for (const field of BODY_FIELDS) {
+    if (field.kind !== 'num') continue
+    pick(profile, field, out)
+  }
+  return out
+}
+
+/**
  * 档案打底，当次表单覆盖
  * @param {object} profile 本次提交
  * @param {object} archive loadArchive 的结果
@@ -310,15 +363,20 @@ function mergeWithArchive(profile, archive) {
  * 把本次新填的条件写回档案（没填的不动，不会被清空）
  * @param {number} userId
  * @param {object} profile 本次提交（原始，未合并档案）
- * @returns {{body: number, face: number}} 各表写入的字段数
+ * @returns {{body: number, face: number, rejected: Array}} 各表写入的字段数；
+ *   `rejected` ＝ 这次**填了但因为不合界而没写进档案**的数值格，每条
+ *   `{key, label, input, reason}`（DR1，10-23 第六十四轮）。
+ *   改前这些格子被 `cleanNum` 静默抹成 null，顾客看到"已保存"，库里却什么都没变；
+ *   本条路径不能回 400（它是自动保存的草稿），所以改成"不写 + 点名"，
+ *   由调用方决定要不要把 `reason` 显示出来（顾客端当前只读 `body`/`face`，⛔ 本轮不动前端）。
  */
 function saveArchive(userId, profile) {
-  const saved = { body: 0, face: 0 }
+  const saved = { body: 0, face: 0, rejected: [] }
   if (!userId) return saved
 
   const bodyRow = {}
   for (const field of BODY_FIELDS) {
-    const val = pick(profile, field)
+    const val = pick(profile, field, saved.rejected)
     if (val !== null) bodyRow[field.column] = val
   }
   // 体型允许只填细分（个人表单）：body_type 为空时拿 body_type_detail 补上
@@ -382,6 +440,55 @@ function saveArchive(userId, profile) {
 }
 
 /**
+ * S6（10-19 蓝图短期项，10-23 落）：免费场样本不再整存 result JSON（现量平均 6,236 B/行，
+ * 10 万用户一年 21 GB 就是这么来的），只存两样：
+ *   shown —— 每个品类这一屏实际展示的名单（按展示序；规则行记 group_id，衣橱行记 w<衣橱行id>）
+ *   snap  —— 每品类前 3 条的 rank 三维分快照（score/coverage/dims），够回答"当时为什么排这个位次"
+ *            ⚠️ 10-23 现量：rank 只挂在穿搭（`rankAndTruncate` 只重排那一类，引擎 :1683），
+ *            其余四类的条目没有 rank ⇒ snap 今天只有穿搭那几条。这是**行为的如实记录**，
+ *            不是丢数据：名单 shown 五类都在，回归要的三个数只在穿搭那一维存在。
+ * ⛔ 付费报告行不走这里（paidReport.js 自己插整份 result——那是交付物本体，replay 要原样回放）。
+ * 判据来源：蓝图 §3.4 结论三 + `21` §rankDims 的三维出账形状。
+ */
+const LOG_SNAP_CATEGORIES = ['穿搭', '妆容', '发型', '配饰', '姿势']
+const LOG_SNAP_MAX = 3
+
+function _slimLogResult(result) {
+  const shown = {}
+  const snap = []
+  const src = result && typeof result === 'object' ? result : {}
+  for (const cat of LOG_SNAP_CATEGORIES) {
+    const arr = Array.isArray(src[cat]) ? src[cat] : []
+    const ids = []
+    arr.forEach((raw, idx) => {
+      const it = raw && typeof raw === 'object' ? raw : {}
+      const who =
+        it.group_id != null
+          ? it.group_id
+          : it.wardrobe_item_id != null
+            ? `w${it.wardrobe_item_id}`
+            : null
+      if (who !== null) ids.push(who)
+      if (idx < LOG_SNAP_MAX && it.rank && typeof it.rank === 'object') {
+        const dims = {}
+        for (const d of Array.isArray(it.rank.dims) ? it.rank.dims : []) {
+          if (d && typeof d.key === 'string') dims[d.key] = d.score ?? null
+        }
+        snap.push({
+          c: cat,
+          g: who,
+          s: it.rank.score ?? null,
+          cov: it.rank.coverage ?? null,
+          d: dims,
+        })
+      }
+    })
+    if (ids.length > 0) shown[cat] = ids
+  }
+  return { _log_slim: 2, shown, snap }
+}
+
+/**
  * 落一条样本：输入快照 + 输出 + 是谁 + 哪家店
  * 快照里不留昵称与手机号：样本要长期留存，身份信息不需要
  * @returns {number|null} 日志 id
@@ -415,7 +522,9 @@ function writeRecommendationLog({ sessionId, userId, storeId, mode, profile, res
         asNumber(storeId, null),
         asText(mode) || 'store',
         JSON.stringify(snapshot),
-        JSON.stringify(result || {}),
+        // S6（10-23）：这里存的是**瘦身样本**（名单＋名次快照），不是整份 result。
+        // 整份 result 只有付费那一行需要（交付物），那条走 paidReport.js 自己的 INSERT。
+        JSON.stringify(_slimLogResult(result)),
       )
     return Number(info.lastInsertRowid)
   } catch (err) {
@@ -477,6 +586,7 @@ module.exports = {
   saveDraft,
   describeProfile,
   loadPrefill,
+  unrecordedNumCells,
   mergeWithArchive,
   saveArchive,
   writeRecommendationLog,

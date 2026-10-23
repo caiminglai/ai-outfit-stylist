@@ -622,14 +622,47 @@ function evaluateGroup(group, conditions, profile) {
 }
 
 /**
+ * S5（10-19 蓝图短期项，10-23 落）：把一批命中规则组的计数一次写库。
+ * 改前每条命中各发一条 `UPDATE … WHERE id = ?` 并重新 prepare，一场 11~14 次写（§3.4 结论二）。
+ * 统计列写失败⛔ 不许影响推荐本体——catch 后 warn，与改前同一把尺子。
+ * ⛔ 别把它扩成"定时队列"：现在同请求内落库，比蓝图允许的分钟级延迟更强一致，
+ *    测试里断言的"领取重放不抬计数"（incrementHitCount=false 那一路）也因此照旧成立。
+ * @param {number[]} ids
+ * @returns {number} 实际写库的组数
+ */
+function _flushHitCounts(ids) {
+  if (!Array.isArray(ids) || ids.length === 0) return 0
+  const uniq = [...new Set(ids)]
+  try {
+    db.prepare(
+      `UPDATE rule_groups SET hit_count = hit_count + 1, last_hit_at = datetime('now') WHERE id IN (${uniq
+        .map(() => '?')
+        .join(',')})`,
+    ).run(...uniq)
+    return uniq.length
+  } catch (err) {
+    console.warn(`[推荐引擎] 批量命中计数写入失败（${uniq.length} 组）: ${err.message}`)
+    return 0
+  }
+}
+
+/**
  * 匹配规则并打分
  * @param {object} profile - 顾客数据
  * @param {string} mode - 推荐模式 store/personal
  * @param {string|null} category - 推荐类别
  * @param {boolean} incrementHitCount - 是否累加命中次数
+ * @param {Array<number>=} hitCollector - S5（10-23）：给了就把命中 id 攒进去、由调用方一次批量落库；
+ *                                       不给（外部四参直调、喂源码工装）就本批就地一次写。
  * @returns {Array} 命中的规则组列表
  */
-function matchRules(profile, mode = 'store', category = null, incrementHitCount = true) {
+function matchRules(
+  profile,
+  mode = 'store',
+  category = null,
+  incrementHitCount = true,
+  hitCollector = null,
+) {
   // 构建查询
   // mode='all' 表示门店与个人通用(第二批色彩/比例类规则不分两套口径)
   let query = "SELECT * FROM rule_groups WHERE enabled = 1 AND (mode = ? OR mode = 'all')"
@@ -698,6 +731,9 @@ function matchRules(profile, mode = 'store', category = null, incrementHitCount 
 
   // 逐组评估
   const matched = []
+  // S5（10-19 蓝图短期项，10-23 落）：命中先记在内存里，评估完一次批量落库。
+  // 改前每命中一条就同步 UPDATE 一次且每次重新 prepare，一场 11~14 次写（§3.4 结论二现量）。
+  const hitIds = []
   for (const group of groups) {
     const conditions = conditionsByGroup[group.id] || []
 
@@ -743,16 +779,9 @@ function matchRules(profile, mode = 'store', category = null, incrementHitCount 
         condition_details: conditionDetails,
       })
 
-      // 累加命中次数
-      if (incrementHitCount) {
-        try {
-          db.prepare(
-            "UPDATE rule_groups SET hit_count = hit_count + 1, last_hit_at = datetime('now') WHERE id = ?",
-          ).run(group.id)
-        } catch (err) {
-          console.warn(`[推荐引擎] 规则组 ${group.id} 命中次数写入失败: ${err.message}`)
-        }
-      }
+      // 累加命中次数（S5，10-23 落）：这里不再逐条 UPDATE——先攒进 hitIds，
+      // 出循环后按"有没有 collector"决定本批就地一次写、还是交给 buildRecommendation 跨品类合并写。
+      if (incrementHitCount) hitIds.push(group.id)
     }
   }
 
@@ -762,6 +791,12 @@ function matchRules(profile, mode = 'store', category = null, incrementHitCount 
   // 只排两级时，并列的先后完全由 SELECT 的返回序决定（这条 SQL 没有 ORDER BY），
   // 而报告端只取前 3 条 ⇒ 重建一次库、top3 可能整体换人。id 兜底把顺序定死成建规先后。
   matched.sort((a, b) => b.priority - a.priority || b.score - a.score || a.group_id - b.group_id)
+
+  // S5 落库点①：无人代收时本批一次写完（净效果与改前逐条写相同：每条命中 hit_count+1）。
+  if (incrementHitCount) {
+    if (Array.isArray(hitCollector)) hitCollector.push(...hitIds)
+    else _flushHitCounts(hitIds)
+  }
 
   return matched
 }
@@ -784,13 +819,13 @@ function matchRules(profile, mode = 'store', category = null, incrementHitCount 
 //
 // 三个分量各自本来就是 0~100 的量（规则基础分由下面的 RANK_RULE_REF 归一出来），
 // 缺哪一维就把那一维的权重退掉、按在场维归一化，再整体乘一个覆盖率折扣 ——
-// **绝不给缺测补 0 分，也绝不给缺测补高分**（docs/依据/README.md:61「缺测不出分」（硬规矩 2））。
+// **绝不给缺测补 0 分，也绝不给缺测补高分**（docs/依据/README.md:64「缺测不出分」（硬规矩 2））。
 //
 // 第四阶段·第一步为什么不只改权重：只把 w1 从 0.2 压到 0.1，对"一维算法都没出分"的条目
 // 几乎没有影响——它的 raw 仍是规则分自己归一出来的那个数（在场维归一化会把权重和约掉），
 // 只多挨 0.68→0.64 的一点折扣。10-19 现量的榜首 68 分那条就是这么来的。
 // 所以这一轮配了后两件：缺席惩罚把它压到 51.2（按公式推导：raw 100 × 折扣 0.64 × 惩罚 0.8，
-// 逐条实测见 docs/第四阶段进展报告-20261020.md），强制在场保证算法条目一定进前 8 被看见。
+// 逐条实测见 docs/进展报告/第四阶段进展报告-20261020.md），强制在场保证算法条目一定进前 8 被看见。
 
 /**
  * 综合分权重。**产品可调的唯一入口**：改这三个数就够了，别处不再各写一遍。
@@ -855,7 +890,7 @@ const RANK_COVERAGE_FLOOR = 0.6
  *      这一个事实，不是每缺一维再表达一遍。
  *   3) 与 `RANK_COVERAGE_FLOOR` 的折扣**叠乘**（不互斥、不取大）。后果是纯规则条目
  *      拿到 0.64×0.8=0.512 的合成因子——这是刻意的：它一次都没量过、一个字都没算过，
- *      不该继续靠 priority 一个人占榜首。实测表见 docs/第四阶段进展报告-20261020.md。
+ *      不该继续靠 priority 一个人占榜首。实测表见 docs/进展报告/第四阶段进展报告-20261020.md。
  * ⚠️ C 档手拍值：0.8 没有文献依据，是"要让算法缺席的条目明显让位"的产品判断。
  */
 const RANK_ALGO_ABSENCE_PENALTY = 0.8
@@ -1121,7 +1156,7 @@ function rankAndTruncate(list, wardrobeRows, prefProfile = null, collabModel = n
  *     理由＝Alipour 2026 实测非受控成像下固定阈值分型 22.9% ＜ 基线 51.3%（`依据/02` §2 第 4 条），
  *     现量反例：`#E8C4B8` 经 `hexToLab` 得 L=81.89，比华裔 P95＝65.87 高 16 个点（`依据/04` §1.4）。
  *     ⛔ 更不许拿人群 P50（L 58.58／C 20.61）去补一个"看起来像实测"的明度——
- *     那是 `docs/依据/README.md:61` 硬规矩 2 逐字禁止的动作。
+ *     那是 `docs/依据/README.md:64` 硬规矩 2 逐字禁止的动作。
  *  ② **深浅档没选 ⇒ 照片那一维不接管**（`source` 永远不等于 `photo_sample`）。
  *     用户只确认冷暖、深浅留空时照样出分：`冷皮/自然/暖皮` 三个词本身就在这张 8 档表里。
  *  ③ 三样都拿不到 ⇒ 返回 `lab:null`，调用方把 null 原样交给 `colorFit` ⇒ 它回 null ⇒
@@ -1379,8 +1414,11 @@ function buildRecommendation(
   }
 
   // 4. 规则引擎匹配(使用增强后的 profile)
+  // S5（10-19 蓝图短期项，10-23 落）：五个品类的命中在内存里攒着，全部评估完一次批量落库。
+  // 改前每条命中各发一条独立 UPDATE、每次还重新 prepare ⇒ 一场 11~14 次写（蓝图 §3.4 结论二现量）。
+  const hitCollector = []
   for (const cat of CATEGORIES) {
-    const matched = matchRules(enriched, mode, cat, incrementHitCount)
+    const matched = matchRules(enriched, mode, cat, incrementHitCount, hitCollector)
     for (const m of matched) {
       const recommendation = {
         group_id: m.group_id,
@@ -1770,6 +1808,9 @@ function buildRecommendation(
   if (opts.keep_ranked_out && result['穿搭']._dropped) {
     result._computed.ranking.beyond_top_n = result['穿搭']._dropped
   }
+
+  // S5 落库点②：五个品类的命中跨类合并，一场一次 UPDATE（改前 11~14 次）。
+  if (incrementHitCount) _flushHitCounts(hitCollector)
 
   return result
 }

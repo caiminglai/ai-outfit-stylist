@@ -15,8 +15,10 @@ const {
   loadTags,
   saveArchive,
   saveDraft,
+  unrecordedNumCells,
 } = require('../services/profileArchive')
 const { clearFeedback } = require('../services/ruleFeedback')
+const { BODY_COLUMN_ORDER, strictNum, crossCheckErrors } = require('../services/bodyLimits')
 const { UPLOAD_DIR, asId } = require('../utils/common')
 
 const router = express.Router()
@@ -55,19 +57,19 @@ router.get('/face/:photoId', loginRequired, (req, res) => {
   }
 })
 
-/** 校验数值参数，返回安全值或 null */
-function safeNum(val, min, max) {
-  const n = parseFloat(val)
-  if (isNaN(n)) return null
-  if (min !== undefined && n < min) return null
-  if (max !== undefined && n > max) return null
-  return n
-}
+/**
+ * POST /body 数值档的生理范围界（DR1，10-19 蓝图 §5.3：老界 [50,300]／[20,500]
+ * 身高 300cm＋体重 20kg 照过，而且越界值被 safeNum 静默抹成 null，填的人不知道哪格被扔）。
+ * 10-23 第六十四轮把这张表**挪进 `services/bodyLimits.js`**：原来 `profileArchive.js` 的
+ * `BODY_FIELDS` 还握着第二把更松的尺子，而顾客真正走的写库路径是那条（见该文件头注释），
+ * 界留在本文件等于只收紧了没人走的那扇门。本路由只按 `BODY_COLUMN_ORDER` 逐格取值。
+ * BMI 12~50 与「腰围>胸围+15」两条交叉判据在 `crossCheckErrors()` 里。
+ */
 
 /**
  * 校验分类文本参数，返回安全值或 null
  * neck_length / body_type 存的是"短/中/长"、"梨形/苹果型"这类选项，不是数字。
- * 拿 safeNum 校验会把用户选的"短"读成 NaN ⇒ NULL，等于把人填的分类档案悄悄清空；
+ * 拿数值尺子（原 safeNum，现 strictBodyNum）校验会把用户选的"短"读成 NaN ⇒ 误报 400；
  * 直接绑原值又会在收到对象/数组时被 better-sqlite3 挡成 TypeError ⇒ 500。
  * 与 profileArchive.cleanText 同一条尺子：只留 ≤40 字符的字符串。
  */
@@ -83,23 +85,35 @@ router.post('/body', loginRequired, (req, res) => {
   try {
     const userId = req.user.id
     const body = req.body || {}
+    // 交叉判据要拿"这次提交后档案会长什么样"来算，所以先读现状再校验。
+    // ⚠️ existing 必须保持"没有行就是 undefined"：下面 `if (existing)` 靠它分 INSERT/UPDATE 两条路，
+    // 在这行就 `|| {}` 会把新用户读成真对象 ⇒ 走 UPDATE 打在不存在的行上，静默丢整次提交（10-23 现量）。
+    // 合并视图另开一个 merged，只给交叉判据喂"没提交的格用档案旧值补"。
+    const existing = db.prepare('SELECT * FROM body_metrics WHERE user_id = ?').get(userId)
+    const merged = existing || {}
 
-    const cleaned = {
-      height_cm: safeNum(body.height_cm, 50, 300),
-      weight_kg: safeNum(body.weight_kg, 20, 500),
-      shoulder_width_cm: safeNum(body.shoulder_width_cm, 20, 100),
-      waist_cm: safeNum(body.waist_cm, 30, 200),
-      hip_cm: safeNum(body.hip_cm, 30, 200),
-      bust_cm: safeNum(body.bust_cm, 30, 200),
-      leg_length_ratio: safeNum(body.leg_length_ratio, 0.3, 0.8),
-      neck_length: cleanText(body.neck_length),
-      body_type: cleanText(body.body_type),
+    const cleaned = {}
+    const errors = []
+    for (const column of BODY_COLUMN_ORDER) {
+      const r = strictNum(column, body[column])
+      if (r.absent) continue
+      if (r.error) errors.push(r.error)
+      else cleaned[column] = r.value
+    }
+    cleaned.neck_length = cleanText(body.neck_length)
+    cleaned.body_type = cleanText(body.body_type)
+
+    // DR1 ③ 交叉合理性：单格都在界内不代表组合合理，交给同一条尺子的交叉判据。
+    // 这次没提交的格用档案旧值补——库里旧格虽是按老界收进来的，组合齐了才判，只拦新组合。
+    errors.push(...crossCheckErrors({ ...merged, ...cleaned }))
+    if (errors.length > 0) {
+      return sendError(res, `填的数里有不合常理的：${errors.join('；')}。请核对后再提交`, 400)
     }
 
-    // 只写这次真的填了的列:没带或填歪的列保留档案原值,与长期档案"只增不清"一致。
+    // 只写这次真的提交了的列:没带的列保留档案原值,与长期档案"只增不清"一致。
+    // 填歪的不再静默丢弃——上面已经拦下并回 400 点名哪一格（DR1，10-23 落）。
     // 老逻辑无条件 UPDATE 全列 ⇒ 一次只发身高体重的局部提交,会把之前量好的三围、颈长清成 NULL。
     const columns = Object.keys(cleaned).filter((c) => cleaned[c] !== null)
-    const existing = db.prepare('SELECT * FROM body_metrics WHERE user_id = ?').get(userId)
 
     if (existing) {
       if (columns.length > 0) {
@@ -153,6 +167,8 @@ router.get('/archive', loginRequired, (req, res) => {
       profile,
       fields: describeProfile(profile),
       tags: loadTags(req.user.id),
+      // 填了但被尺子拒掉的数值格（库里没有这些值；见 profileArchive.unrecordedNumCells 的注释）
+      not_recorded: unrecordedNumCells(profile),
     })
   } catch (err) {
     console.error('[分析] 获取长期档案失败:', err)

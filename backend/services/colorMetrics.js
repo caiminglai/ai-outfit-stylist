@@ -1381,7 +1381,11 @@ function colorFit(skin, topColor, opts) {
   const hueApplies = skinLab.C >= ACHROMATIC_C && topLab.C >= ACHROMATIC_C
   const hueContrastRaw = 0.5 + _clamp01(dHue / 360) // Schloss & Palmer 第②句：图形色(衣)对背景(脸)，色相差越大越被偏好
   const hueContrast = hueApplies ? hueContrastRaw : 0.5
-  const brighten = _clamp01((skinLab.L - topLab.L) / 40) // Zhang 2025：衣装越暗，脸越显白
+  // 🔴 S1（10-19 蓝图短期项，10-23 落）：分母 40⇒80 且**中心化 0.5**。只改分母过不了蓝图自己的
+  // 验收（61% 的配对卡的是 0 端：衣服只要不比脸暗就恒 0，分母动它一个都不降），必须把"同明度"
+  // 从 0 分挪成 0.5 中性——方向仍是 Zhang 2025"衣装越暗脸越显白"，暗 40⇒趋 1、亮 40⇒趋 0，
+  // 中段由 dL 连续区分（改前白/亮黄/浅粉在这轴恒同分）。⛔ 别抄旧文档里的 "/40"。
+  const brighten = _clamp01(0.5 + (skinLab.L - topLab.L) / 80)
   const chromaMatch = 1 - _clamp01(Math.abs(dC) / 60)
   const gate = fusionGate(dE)
   const contrastScore =

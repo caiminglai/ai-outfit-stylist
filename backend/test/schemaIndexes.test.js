@@ -96,7 +96,7 @@ test('users.last_active_at：schema.sql 有列，且 init.js 的 MISSING_COLUMNS
 test('user_wardrobe 成衣实测四列：schema.sql 有列、init.js 补列、且一律不设 DEFAULT', () => {
   // 10-19 第二阶段「最后一公里」：topFitBody 的修形向量只吃这四列。
   // 没列 ⇒ 老库永远量不到 ⇒ bodyFit 整块缺席；有 DEFAULT ⇒ 没量也被填成个数，直接违反
-  // docs/依据/README.md:61「缺测不出分」（硬规矩 2）——所以这三条都要有断言钉住。
+  // docs/依据/README.md:64「缺测不出分」（硬规矩 2）——所以这三条都要有断言钉住。
   const cols = memDb
     .prepare('SELECT name, type, dflt_value FROM pragma_table_info(?)')
     .all('user_wardrobe')

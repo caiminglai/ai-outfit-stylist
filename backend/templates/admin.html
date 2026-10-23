@@ -27,6 +27,8 @@
     <button class="nav-btn" data-section="functions">函数逻辑</button>
     <button class="nav-btn" data-section="source">源代码</button>
     <button class="nav-btn" data-section="routes">接口路由</button>
+    <button class="nav-btn" data-section="skill">编程水平与路线</button>
+    <a class="nav-link" href="/admin/learn" target="_blank" rel="noopener">教我编程 ↗</a>
   </nav>
 </header>
 
@@ -56,6 +58,7 @@
         <div class="sidebar-item active" data-nav="rules"><span>📋</span><span>规则编辑器</span></div>
         <div class="sidebar-item" data-nav="inventory"><span>📦</span><span>库存管理</span></div>
         <div class="sidebar-item" data-nav="models"><span>🎭</span><span>模型管理</span></div>
+        <div class="sidebar-item" data-nav="skill"><span>🧗</span><span>编程水平与路线</span></div>
       </div>
     </div>
     <div class="sidebar-group">
@@ -284,6 +287,20 @@
       <h2>接口路由列表</h2>
       <div id="routes-container" class="loading">加载中...</div>
     </div>
+
+    <!-- Section: 编程水平与独立路线（10-22 第五十九轮）
+         内容全在本页加载时由 admin-skill.js 渲染，⛔ 不打任何接口、不写库。
+         数据与判据都在 static/admin/admin-skill.js 顶部（SKILL_AXES / SKILL_STAGES），
+         要改口径改那份文件；本 section 的三个 id 被 backend/test/adminSkillPage.test.js 钉住。 -->
+    <div id="section-skill" class="section">
+      <h2>编程水平与独立路线</h2>
+      <div id="skill-body" class="loading">加载中...</div>
+      <p class="note">
+        这一页只说"你现在在哪、还差什么"。真要动手学，导航栏最后一颗
+        <a href="/admin/learn" target="_blank" rel="noopener">「教我编程 ↗」</a>
+        是另一份东西：11 课＋4 个附录，逐行引用本仓库的真实文件与行号，每课自带一条能复制去跑的命令。
+      </p>
+    </div>
   </div>
 </main>
 
@@ -360,7 +377,8 @@
   4. admin-models.js  — 3D模型管理（依赖 utils）
   5. admin-data.js    — 数据浏览/表结构/函数/源码/路由（依赖 utils）
   6. admin-review.js  — 收款凭证 / 创作者作品审核（依赖 utils）
-  7. 内联初始化脚本   — Token验证 + 导航绑定 + 初始加载
+  7. admin-skill.js   — 编程水平与独立路线（依赖 utils 的 escapeHtml/showToast；⛔ 不打接口）
+  8. 内联初始化脚本   — Token验证 + 导航绑定 + 初始加载
 ════════════════════════════════════════════════ -->
 <script src="/static/admin/admin-utils.js"></script>
 <script src="/static/admin/admin-rules.js"></script>
@@ -368,6 +386,7 @@
 <script src="/static/admin/admin-models.js"></script>
 <script src="/static/admin/admin-data.js"></script>
 <script src="/static/admin/admin-review.js"></script>
+<script src="/static/admin/admin-skill.js"></script>
 <script>
 /* Token 验证（页面入口守卫） */
 (function() {

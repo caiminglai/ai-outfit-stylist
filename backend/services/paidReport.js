@@ -617,6 +617,29 @@ function businessSummary() {
   }
 }
 
+/**
+ * S6 滚动清理（10-19 蓝图短期项，10-23 落）：免费场样本保留 90 天，付费报告行**永久豁免**。
+ * 判据就是本文件 `:59` 那把 `IS_REPORT`，⛔ 不在别处复制第二份谓词。
+ * 被清掉的是"领取重放用的依据行"：付款人隔了 90 天以上再来领，会得到既有的 409 话术
+ * （"请先在展厅生成一次方案"）而不是错拿旧档——报告本体不受影响（它的快照在报告行自己身上，
+ * `deliver()` 插入时复制了一份 `input_snapshot`）。
+ * 时间轴与全库同尺：SQLite `datetime('now')` 的 UTC 串，⛔ 不许在这里塞 ISO 或东八区串
+ * （`:470` 上方那段注释说透了为什么）。
+ * @param {number} days 保留天数（默认 90，测试传小值）
+ * @returns {number} 删除行数
+ */
+function pruneOldLogs(days = 90) {
+  const d = Number.isInteger(days) && days >= 1 ? days : 90
+  const cutoff = db.prepare("SELECT datetime('now', ?) AS t").get(`-${d} days`).t
+  const info = db
+    .prepare(
+      'DELETE FROM recommendation_logs WHERE created_at IS NOT NULL AND created_at < ? AND NOT ' +
+        IS_REPORT,
+    )
+    .run(cutoff)
+  return info.changes
+}
+
 module.exports = {
   entitlement,
   claimReport,
@@ -627,4 +650,5 @@ module.exports = {
   toBeijing,
   ONLINE_MIRROR,
   isOnlineMirror,
+  pruneOldLogs,
 }

@@ -94,10 +94,10 @@
 │   │   ├── add-rules.js              # 历史规则批量导入脚本(现以 seed/rules.json 为准)
 │   │   └── migrate_cn_category.js    # 中文分类迁移脚本
 │   ├── utils/                        # common.js / logger.js / model-utils.js / response.js
-│   ├── templates/                    # 管理后台 HTML(admin.html / admin-login.html)
-│   ├── static/                       # 管理后台 CSS/JS
+│   ├── templates/                    # 管理后台 HTML(admin.html / admin-login.html / learn-to-code.html＝/admin/learn 那份教程页)
+│   ├── static/                       # 管理后台 CSS/JS(⚠️ `.prettierignore` 与 `eslint.config.js` 都把 static/ 和 templates/ 整目录排除 ⇒ 这一片代码不过 CI 任何一道门，改动只能靠各自的 test 钉住)
 │   ├── uploads/                      # 用户上传(gitignore)
-│   ├── test/                         # 单元测试 50 个文件(尺子=ls backend/test/*.test.js | wc -l,10-22 05:3x 现量;node --test,非 vitest):推荐引擎/审美规则/今天这身/档案增强/日记×天气/付款即交付/版型推断(fitInference)＋采集三断点(phase13CollectionRoutes)
+│   ├── test/                         # 单元测试 56 个文件(尺子=ls backend/test/*.test.js | wc -l,10-22 21:3x 现量;node --test,非 vitest):推荐引擎/审美规则/今天这身/档案增强/日记×天气/付款即交付/版型推断(fitInference)＋采集三断点(phase13CollectionRoutes)＋后台「编程水平与独立路线」页(adminSkillPage)＋独立教程页(learnPage——⚠️ static/ 与 templates/ 不过 prettier/eslint,这两页只认各自的 test 这一把尺)
 │   ├── scripts/                      # 一次性维护脚本(非运行时必需)
 │   │   ├── flatten-textures.js       # 纹理文件扁平化
 │   │   ├── rebuild-db.js             # 重建数据库 + 更新模型字段
@@ -539,12 +539,15 @@ npm run format:check
 │  │     ├─ admin-models.js
 │  │     ├─ admin-review.js
 │  │     ├─ admin-rules.js
+│  │     ├─ admin-skill.js
 │  │     ├─ admin-utils.js
 │  │     └─ admin.css
 │  ├─ templates
 │  │  ├─ admin-login.html
-│  │  └─ admin.html
+│  │  ├─ admin.html
+│  │  └─ learn-to-code.html
 │  ├─ test
+│  │  ├─ adminSkillPage.test.js
 │  │  ├─ aestheticRules.test.js
 │  │  ├─ aestheticRules2.test.js
 │  │  ├─ auditFixes20261012.test.js
@@ -562,6 +565,7 @@ npm run format:check
 │  │  ├─ fullLook.test.js
 │  │  ├─ guardHelpers.test.js
 │  │  ├─ healthRateLimitExempt.test.js
+│  │  ├─ learnPage.test.js
 │  │  ├─ logicConsistency20261014.test.js
 │  │  ├─ logicFixes20261013.test.js
 │  │  ├─ modelFileTrailingSlash.test.js
@@ -623,6 +627,7 @@ npm run format:check
 │  │  ├─ 19-穿搭日记与天气输入输出规范-20261021.md
 │  │  ├─ 20-付款即交付输入输出规范-20261021.md
 │  │  ├─ 21-算法四轴输入输出规范-20261021.md
+│  │  ├─ 22-用户体验与商业模式输入输出规范-20261022.md
 │  │  ├─ papers
 │  │  │  ├─ 4.这样穿很美 平价搭出时尚范 (（日）典子，杨孟芳译).pdf
 │  │  │  ├─ BS-7754-1994-en.pdf
@@ -706,15 +711,19 @@ npm run format:check
 │  │  └─ 站3深夜轮-限流豁免与定位符重扫-20261013.md
 │  ├─ 形象设计模型-现状与路线.md
 │  ├─ 架构审计与优化蓝图-20261019.md
-│  ├─ 第四阶段进展报告-20261020.md
-│  ├─ 第五阶段进展报告-20261020.md
-│  ├─ 第六阶段进展报告-20261020.md
-│  ├─ 第八阶段进展报告-20261020.md
-│  ├─ 第九阶段进展报告-20261021.md
-│  ├─ 第十阶段进展报告-20261021.md
-│  ├─ 第十一阶段进展报告-20261021.md
-│  ├─ 第十二阶段进展报告-20261021.md
-│  ├─ 第十三阶段进展报告-20261022.md
+│  ├─ README.md                       # 文档地图:先读这页再决定翻哪份(10-22 建档,10-23 整合轮更新)
+│  ├─ 形象细账-R14P01-2026_10_21.html  # 第十四阶段 R14P01 顾客端现场细账(离线可读单文件)
+│  ├─ 进展报告                        # 各阶段改完之后的"现场记录",10-23 起十份集中放这个子目录
+│  │  ├─ 第四阶段进展报告-20261020.md
+│  │  ├─ 第五阶段进展报告-20261020.md
+│  │  ├─ 第六阶段进展报告-20261020.md
+│  │  ├─ 第八阶段进展报告-20261020.md
+│  │  ├─ 第九阶段进展报告-20261021.md
+│  │  ├─ 第十阶段进展报告-20261021.md
+│  │  ├─ 第十一阶段进展报告-20261021.md
+│  │  ├─ 第十二阶段进展报告-20261021.md
+│  │  ├─ 第十三阶段进展报告-20261022.md
+│  │  └─ 第十四阶段进展报告-20261022.md
 ├─ npm-patch.js
 ├─ README.md
 └─ VISION.md

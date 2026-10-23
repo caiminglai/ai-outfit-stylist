@@ -90,6 +90,16 @@ jobs:
       #    （no-console 87／prefer-const 30／no-unused-vars 25）、`node --test` **795 pass／0 fail**、`test/*.test.js` **54** 份；
       #    app lint **0 error／13 warning**（set-state-in-effect 8／only-export-components 4／exhaustive-deps 1）。
       #    ⓵ eslint 两侧都只卡 error，warning 不会把 CI 跑红；⓶ 上面 10-14 那几行是当时的真实读数，留档不改写。）
+      #   （2026-10-22 18:5x 追加·后台「编程水平与独立路线」页现量，覆盖上一行的用例数与份数：`node --test` **800 pass／0 fail**、
+      #    `test/*.test.js` **55** 份（新增的 5 条全在 `adminSkillPage.test.js`）；backend lint 仍 **0 error／142 warning**、app 仍 **0 error／13 warning**，两侧 `format:check` rc=0。
+      #    ⚠️ 这一页本身（`static/admin/admin-skill.js`＋`templates/admin.html`＋`admin.css`）**不在 CI 的射程内**——`.prettierignore` 与 `eslint.config.js` 都把 `static/` 和 `templates/` 整目录排除，
+      #    所以 CI 绿不等于这页没坏；上一条就栽在这儿（`.loading` 排版类没清、数据里的 Markdown 原样露出，单测当时全绿、只有真浏览器看得见）。）
+      #   （2026-10-22 21:3x 追加·独立教程页 /admin/learn 现量，覆盖上一行的用例数与份数：`node --test` **806 pass／0 fail**、
+      #    `test/*.test.js` **56** 份（新增的 6 条全在 `learnPage.test.js`）；backend lint 仍 **0 error／142 warning**、app 仍 **0 error／13 warning**，
+      #    两侧 `format:check` rc=0、app `tsc -b`＋`vite build` rc=0（本轮 `app/` 一行没动，仍跑一次作对照）。
+      #    ⚠️ 这一页（`templates/learn-to-code.html` 81,045 B）连同后台那颗按钮（`templates/admin.html`＋`static/admin/admin.css`）**同样不在 CI 射程内**——
+      #    `.prettierignore` 与 `eslint.config.js` 都把 `static/` 和 `templates/` 整目录排除；它的门只有 `test/learnPage.test.js` 一把尺：
+      #    54 条蓝底 `文件:行号` 逐条验「文件在场＋行号不越界」，另钉 `Dockerfile` 的 `COPY backend/ ./`（现量第 32 行）与 compose `volumes:`（现量第 29 行）两条内容级锚点。）
       # format:check 每次动完代码都要两侧各跑一次 `npm run format` 再验 rc=0——
       # 第二十五轮（3ba0647）就是漏了这一步，推上去 CI 直接红；10-11 已补跑（app 5 / backend 24 个文件纯排版，
       # 另 routes/models.js 本轮另有功能改动，算在第 25 个里）。

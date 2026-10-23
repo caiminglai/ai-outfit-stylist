@@ -1,0 +1,1566 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>照着这个项目学编程 · 站3 教材页</title>
+    <meta name="robots" content="noindex, nofollow" />
+    <style>
+      :root {
+        --bg: #f6f7f9;
+        --paper: #ffffff;
+        --ink: #17202b;
+        --muted: #5b6675;
+        --line: #dfe3ea;
+        --accent: #1f6feb;
+        --code-bg: #12203a;
+        --code-ink: #e6edf7;
+        --ok: #12784a;
+        --warn: #b3541e;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #0f1419;
+          --paper: #161c23;
+          --ink: #e6edf3;
+          --muted: #9aa7b4;
+          --line: #2a333d;
+          --accent: #58a6ff;
+          --code-bg: #0b1118;
+          --code-ink: #dbe6f2;
+          --ok: #3fb97f;
+          --warn: #e0883f;
+        }
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--ink);
+        font: 16px/1.75 -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC',
+          'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+      }
+      header.top {
+        position: sticky;
+        top: 0;
+        z-index: 20;
+        background: var(--paper);
+        border-bottom: 1px solid var(--line);
+        padding: 10px 18px;
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        flex-wrap: wrap;
+      }
+      header.top h1 {
+        font-size: 17px;
+        margin: 0;
+        font-weight: 700;
+      }
+      header.top .sub {
+        color: var(--muted);
+        font-size: 13px;
+      }
+      header.top .bar {
+        flex: 1 1 180px;
+        min-width: 140px;
+        height: 8px;
+        background: var(--line);
+        border-radius: 99px;
+        overflow: hidden;
+      }
+      header.top .bar i {
+        display: block;
+        height: 100%;
+        width: 0;
+        background: var(--ok);
+        transition: width 0.25s;
+      }
+      header.top a {
+        font-size: 13px;
+        color: var(--accent);
+        text-decoration: none;
+        white-space: nowrap;
+      }
+      .wrap {
+        display: flex;
+        gap: 24px;
+        max-width: 1240px;
+        margin: 0 auto;
+        padding: 20px 18px 120px;
+        align-items: flex-start;
+      }
+      nav.toc {
+        position: sticky;
+        top: 62px;
+        flex: 0 0 258px;
+        max-height: calc(100vh - 80px);
+        overflow: auto;
+        background: var(--paper);
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        padding: 12px 14px;
+        font-size: 13.5px;
+      }
+      nav.toc b {
+        display: block;
+        font-size: 12px;
+        color: var(--muted);
+        letter-spacing: 0.04em;
+        margin: 10px 0 4px;
+      }
+      nav.toc a {
+        display: block;
+        color: var(--ink);
+        text-decoration: none;
+        padding: 3px 8px;
+        border-radius: 6px;
+        line-height: 1.5;
+      }
+      nav.toc a:hover {
+        background: var(--bg);
+      }
+      nav.toc a.here {
+        background: color-mix(in srgb, var(--accent) 16%, transparent);
+        color: var(--accent);
+        font-weight: 600;
+      }
+      main {
+        flex: 1 1 auto;
+        min-width: 0;
+      }
+      section.les {
+        background: var(--paper);
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        padding: 20px 24px 22px;
+        margin: 0 0 20px;
+        /* 顶栏是 sticky（header.top），目录跳过去时不预留这一截就会被压住标题 */
+        scroll-margin-top: 76px;
+      }
+      section.les > h2 {
+        font-size: 21px;
+        margin: 0 0 2px;
+      }
+      section.les > .aim {
+        color: var(--muted);
+        font-size: 14px;
+        margin: 0 0 14px;
+      }
+      h3 {
+        font-size: 15.5px;
+        margin: 20px 0 6px;
+        padding-left: 9px;
+        border-left: 3px solid var(--accent);
+      }
+      p {
+        margin: 9px 0;
+      }
+      ul,
+      ol {
+        margin: 9px 0;
+        padding-left: 22px;
+      }
+      li {
+        margin: 5px 0;
+      }
+      code {
+        font: 13px/1.6 ui-monospace, SFMono-Regular, Consolas, 'Liberation Mono', monospace;
+        background: color-mix(in srgb, var(--ink) 8%, transparent);
+        border: 1px solid var(--line);
+        border-radius: 4px;
+        padding: 1px 5px;
+        word-break: break-all;
+      }
+      pre {
+        position: relative;
+        background: var(--code-bg);
+        color: var(--code-ink);
+        border-radius: 9px;
+        padding: 12px 14px;
+        overflow: auto;
+        font-size: 13px;
+        line-height: 1.65;
+      }
+      pre code {
+        background: none;
+        border: 0;
+        padding: 0;
+        color: inherit;
+        word-break: normal;
+      }
+      pre .cp {
+        position: absolute;
+        top: 7px;
+        right: 8px;
+        font-size: 11.5px;
+        color: #9fb4cc;
+        background: #1b2b42;
+        border: 1px solid #33465f;
+        border-radius: 5px;
+        padding: 2px 7px;
+        cursor: pointer;
+      }
+      pre .cp:hover {
+        color: #fff;
+      }
+      span.loc {
+        font: 12.5px/1.5 ui-monospace, Consolas, monospace;
+        color: var(--accent);
+        background: color-mix(in srgb, var(--accent) 10%, transparent);
+        border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
+        border-radius: 5px;
+        padding: 1px 6px;
+        white-space: nowrap;
+      }
+      span.ext {
+        font: 12.5px/1.5 ui-monospace, Consolas, monospace;
+        color: var(--warn);
+        border: 1px dashed color-mix(in srgb, var(--warn) 55%, transparent);
+        border-radius: 5px;
+        padding: 1px 6px;
+        word-break: break-all;
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(255px, 1fr));
+        gap: 12px;
+        margin: 12px 0;
+      }
+      .card {
+        border: 1px solid var(--line);
+        border-radius: 9px;
+        padding: 10px 13px;
+        background: color-mix(in srgb, var(--bg) 55%, var(--paper));
+        font-size: 14px;
+      }
+      .card b {
+        display: block;
+        margin-bottom: 3px;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        margin: 12px 0;
+        font-size: 14px;
+      }
+      th,
+      td {
+        border: 1px solid var(--line);
+        padding: 7px 10px;
+        text-align: left;
+        vertical-align: top;
+      }
+      th {
+        background: color-mix(in srgb, var(--bg) 60%, var(--paper));
+        font-weight: 600;
+      }
+      .tip {
+        border-left: 3px solid var(--ok);
+        background: color-mix(in srgb, var(--ok) 8%, transparent);
+        padding: 8px 12px;
+        border-radius: 0 8px 8px 0;
+        margin: 12px 0;
+        font-size: 14px;
+      }
+      .trap {
+        border-left: 3px solid var(--warn);
+        background: color-mix(in srgb, var(--warn) 9%, transparent);
+        padding: 8px 12px;
+        border-radius: 0 8px 8px 0;
+        margin: 12px 0;
+        font-size: 14px;
+      }
+      label.chk {
+        display: flex;
+        gap: 9px;
+        align-items: flex-start;
+        font-size: 14.5px;
+        padding: 6px 8px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        margin: 6px 0;
+        cursor: pointer;
+        min-height: 44px;
+      }
+      label.chk:hover {
+        background: color-mix(in srgb, var(--accent) 6%, transparent);
+      }
+      label.chk input {
+        width: 17px;
+        height: 17px;
+        margin-top: 4px;
+        flex: 0 0 auto;
+      }
+      label.chk.on {
+        border-color: var(--ok);
+        background: color-mix(in srgb, var(--ok) 8%, transparent);
+      }
+      footer {
+        color: var(--muted);
+        font-size: 13px;
+        padding: 8px 24px 40px;
+      }
+      @media (max-width: 900px) {
+        .wrap {
+          flex-direction: column;
+        }
+        nav.toc {
+          position: static;
+          flex: 0 0 auto;
+          max-height: none;
+          width: 100%;
+        }
+      }
+      @media print {
+        nav.toc,
+        header.top .bar,
+        pre .cp {
+          display: none;
+        }
+        body {
+          background: #fff;
+          color: #000;
+        }
+        section.les {
+          border: 0;
+          page-break-inside: avoid;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header class="top">
+      <h1>照着这个项目学编程</h1>
+      <span class="sub">站3 教材页 · 不是评测，是课</span>
+      <span class="bar"><i id="prog"></i></span>
+      <span class="sub" id="progn">0 / 0</span>
+      <a href="/admin">← 回后台</a>
+    </header>
+
+    <div class="wrap">
+      <nav class="toc" id="toc">
+        <b>主线（按顺序上）</b>
+        <a href="#L0">0 · 先把工具摆好</a>
+        <a href="#L1">1 · 程序最小组合：数据＋判断＋重复</a>
+        <a href="#L2">2 · 一条请求的旅行</a>
+        <a href="#L3">3 · 数据落在哪：SQL 与那个 .db</a>
+        <a href="#L4">4 · 界面为什么动</a>
+        <a href="#L5">5 · 测试是合同，不是形式</a>
+        <a href="#L6">6 · 四道门：改完凭什么敢说没坏</a>
+        <a href="#L7">7 · 让它跑起来：本机、副本、容器</a>
+        <a href="#L8">8 · git：三个位置与一次提交</a>
+        <a href="#L9">9 · 用脚本量一个项目</a>
+        <a href="#L10">10 · 独立做完一轮改动</a>
+        <b>随身附录</b>
+        <a href="#A">A · 术语速查 30 条</a>
+        <a href="#B">B · 报错 → 人话 → 动作</a>
+        <a href="#C">C · 你手里已有的手册怎么配课</a>
+        <a href="#D">D · 卡住了怎么开口问</a>
+      </nav>
+
+      <main>
+        <section class="les" id="how">
+          <h2>这门课怎么用</h2>
+          <p class="aim">三条规矩，先看完再上课。</p>
+          <p>
+            <b>一、全部教材就是你自己的项目。</b>
+            每一课都指着仓库里的真文件和真行号（蓝底那种就是行号，VSCode 里按
+            <code>Ctrl＋G</code> 输行号直接跳）。我不给你玩具例子，学完你就能读懂自己这套东西。
+          </p>
+          <p>
+            <b>二、一课 30 到 50 分钟，别贪。</b>
+            每课最后一栏是「过了吗」，勾上就打卡，进度条存在你这台浏览器里（刷新不丢，换浏览器不带走）。
+            三课连着学不如一天一课——编程是手感活。
+          </p>
+          <p>
+            <b>三、命令一律复制去跑，别手敲。</b>
+            每个灰底代码块右上角有「复制」。跑之前看一眼它在哪个目录：写
+            <code>cd E:/website/3.personal-image-ai/backend</code>
+            的就在后端目录跑。⛔ 任何一课都不许碰服务器，也不许对
+            <code>backend/db/styleai.db</code> 写。
+          </p>
+          <div class="tip">
+            学到什么程度算毕业：<b>你能自己做完一轮小改动</b>——说清改哪儿、改完跑得绿、真打开看一眼、写得了台账、按自己的手提交。
+            不需要你能从零写出推荐引擎，那一层是我和 AI 干的活。
+          </div>
+        </section>
+
+        <section class="les" id="L0">
+          <h2>第 0 课 · 先把工具摆好</h2>
+          <p class="aim">目标：让 VSCode 和终端变成你顺手的东西，别再为"打不开、进错目录"耗时间。</p>
+
+          <h3>现在就做（10 分钟）</h3>
+          <ol>
+            <li>
+              VSCode 里 <code>文件 → 打开文件夹</code>，选
+              <span class="ext">E:/website/3.personal-image-ai</span>。
+              ⚠️ 是打开<b>文件夹</b>，不是打开单个文件；只开一个文件你就看不见目录树，也跳不了引用。
+            </li>
+            <li>
+              <code>Ctrl＋Shift＋E</code> 打开左侧资源管理器，<code>Ctrl＋T</code> 输入
+              <code>bmi</code> 找到 <span class="loc">backend/services/bmi.js</span>，
+              然后 <code>Ctrl＋G</code> 输 <code>39</code> 跳过去。
+            </li>
+            <li>
+              <code>Ctrl＋`</code>（反引号，Tab 上面那颗）打开内置终端，粘这一段看版本：
+              <pre><button class="cp">复制</button><code>node -v
+npm -v
+git -v</code></pre>
+              三行都回版本号就算通了。<code>node -v</code> 回"不是内部或外部命令"⇒ 终端没找到 Node，先别上课。
+            </li>
+          </ol>
+
+          <h3>要知道的四件事</h3>
+          <div class="grid">
+            <div class="card">
+              <b>路径用正斜杠 /</b>
+              <code>E:/website/3.personal-image-ai/backend</code> 这种写法在 PowerShell、Git
+              Bash、Node 里都认。反斜杠在代码字符串里是转义符，会把你的路径吃掉一半。
+            </div>
+            <div class="card">
+              <b>两个终端不是一回事</b>
+              PowerShell 用 <code>$env:PORT</code>，Git Bash 用
+              <code>PORT=5000 node server.js</code>。我给的命令按 <b>Git Bash</b> 写，你就用
+              VSCode 终端默认的 Git Bash，别混。
+            </div>
+            <div class="card">
+              <b>「工作目录」决定一切</b>
+              同一条 <code>npm test</code>，在 <code>backend/</code> 里是后端 56 份测试，在
+              <code>app/</code> 里根本没有这条脚本。跑命令前先 <code>pwd</code> 看一眼。
+            </div>
+            <div class="card">
+              <b>仓库里没有根 package.json</b>
+              站3 是两个包：<span class="loc">backend/package.json</span> 和
+              <span class="loc">app/package.json</span>，各自一套依赖和脚本。这是新手最容易撞的第一堵墙。
+            </div>
+          </div>
+
+          <h3>过了吗</h3>
+          <label class="chk"
+            ><input type="checkbox" data-k="L0a" />VSCode 开着整个项目文件夹，能看见 backend 与 app
+            两棵树</label
+          >
+          <label class="chk"
+            ><input type="checkbox" data-k="L0b" />Ctrl＋G 能跳到 bmi.js 第 39 行</label
+          >
+          <label class="chk"
+            ><input type="checkbox" data-k="L0c" />终端里 <code>node -v</code>／<code>npm -v</code
+            />/<code>git -v</code> 三条都回版本号</label
+          >
+        </section>
+
+        <section class="les" id="L1">
+          <h2>第 1 课 · 程序最小组合：数据＋判断＋重复</h2>
+          <p class="aim">
+            目标：读懂一个不连库、不联网的纯函数，并且第一次亲手把测试跑红。教材是
+            <span class="loc">backend/services/bmi.js</span>（81 行）。
+          </p>
+
+          <h3>先读四段，就四段</h3>
+          <table>
+            <tr>
+              <th>位置</th>
+              <th>这几行在干什么</th>
+              <th>你学到的语法</th>
+            </tr>
+            <tr>
+              <td><span class="loc">backend/services/bmi.js:20-25</span></td>
+              <td>
+                一张"档位表"：数组里装着四个对象，每个对象有档位名、颜色状态、下界
+                <code>lo</code>、上界 <code>hi</code>。
+              </td>
+              <td>数组 <code>[]</code>、对象 <code>{}</code>、<code>const</code>、<code>Infinity</code></td>
+            </tr>
+            <tr>
+              <td><span class="loc">backend/services/bmi.js:39-44</span></td>
+              <td>
+                算 BMI 本体：把厘米化成米，两个数都必须在数学上成立，否则
+                <code>return null</code>。
+              </td>
+              <td>函数、参数、<code>Number()</code>、<code>||</code>、提前 return</td>
+            </tr>
+            <tr>
+              <td><span class="loc">backend/services/bmi.js:51-62</span></td>
+              <td>
+                查档：先四舍五入到一位小数（<code>Math.round(b * 10) / 10</code>），再用
+                <code>find</code> 找第一个命中的档。
+              </td>
+              <td><code>find()</code>、箭头函数 <code>(x) =&gt; ...</code>、三元以外的兜底 <code>||</code></td>
+            </tr>
+            <tr>
+              <td><span class="loc">backend/services/bmi.js:81</span></td>
+              <td>
+                出口这一行决定了别人能拿到什么。文件里写了五个名字，外面
+                <code>require</code> 只能拿到这五个。
+              </td>
+              <td><code>module.exports</code>、CommonJS 模块</td>
+            </tr>
+          </table>
+
+          <p>
+            第 42 行那一整句是这门课最该记住的东西：<code>if (!Number.isFinite(h) ||
+            !Number.isFinite(w) || h &lt;= 0 || w &lt;= 0) return null</code>。翻译成人话——
+            <b>量不到的事，绝不编一个数出来。</b>
+            文件头上 L6-L8 那段注释写了为什么要单独开这个文件：同一条算式原先在三个地方各写一遍，
+            慢慢地"量不到怎么表示、什么时候取整"就漂了。这一条是所有工程的起点：<b>同一个规则只留一处</b>。
+          </p>
+
+          <h3>现在就做：第一次把测试跑红（15 分钟）</h3>
+          <p>步骤别换顺序，第二步是我自己现跑过的，结果我写在旁边。</p>
+          <pre><button class="cp">复制</button><code>cd E:/website/3.personal-image-ai/backend
+node --test test/bmi.test.js</code></pre>
+          <p>应当看到 5 条 ✔（读数：<code>tests 5 / pass 5 / fail 0</code>）。</p>
+          <ol>
+            <li>
+              打开 <span class="loc">backend/services/bmi.js:22</span>，把「正常」档的
+              <code>hi: 24</code> 改成 <code>hi: 22</code>，<code>Ctrl＋S</code> 存盘。
+            </li>
+            <li>
+              再跑一次上面那条 <code>node --test</code>。应当<b>红 2 条</b>（实测
+              <code>pass 3 / fail 2</code>），红字里会出现 23.9 和「正常」——那就是被你改坏的约定。
+            </li>
+            <li>
+              <code>Ctrl＋Z</code> 撤销、存盘、再跑，回到 5 条全绿。⛔ 别用
+              <code>git checkout</code> 撤销，先养"改完自己收拾干净"的习惯。
+            </li>
+          </ol>
+
+          <div class="trap">
+            <b>一个我亲自踩的假成功，你要带走。</b>
+            我本来准备的教学例子是改 L23（把「偏胖」档的 <code>lo: 24</code> 改成 <code>20</code>），
+            我觉得测试一定会红。我自己先跑了一遍——<b>不红，5 条照样全过</b>。原因是
+            <code>find</code> 取的是<b>第一个</b>命中的档，23.9 先被上面那行「正常」接住了，
+            你改的那个数字根本没被走到。 ⇒ 两条终身习惯：
+            ① <b>改了没红不等于改对了</b>，也可能是测试压根没管这条路；
+            ② <b>说一个结果之前自己先跑一遍</b>。
+          </div>
+
+          <h3>过了吗</h3>
+          <label class="chk"
+            ><input type="checkbox" data-k="L1a" />能说出 <code>bmiValue(165, 0)</code>
+            为什么回 <code>null</code> 而不是回 0</label
+          >
+          <label class="chk"
+            ><input type="checkbox" data-k="L1b" />亲手把 <code>node --test test/bmi.test.js</code>
+            跑红过，并看得懂红字里在说哪个数</label
+          >
+          <label class="chk"
+            ><input type="checkbox" data-k="L1c" />能解释为什么改 L23 的 <code>lo: 24</code>
+            测试不红（提示：<code>find</code> 取第一个命中）</label
+          >
+        </section>
+
+        <section class="les" id="L2">
+          <h2>第 2 课 · 一条请求的旅行</h2>
+          <p class="aim">
+            目标：从浏览器地址栏一路看到数据库门口。教材是
+            <span class="loc">backend/routes/weather.js</span>（68 行，全站最短的路由）加
+            <span class="loc">backend/server.js:160</span> 那几行接线。
+          </p>
+
+          <h3>五个必看的落点</h3>
+          <table>
+            <tr>
+              <th>位置</th>
+              <th>干什么</th>
+              <th>人话</th>
+            </tr>
+            <tr>
+              <td><span class="loc">backend/routes/weather.js:5-8</span></td>
+              <td><code>require</code> 把要用的东西请进来</td>
+              <td>先声明"我要用谁"，后面才敢用</td>
+            </tr>
+            <tr>
+              <td><span class="loc">backend/routes/weather.js:10</span></td>
+              <td><code>express.Router()</code></td>
+              <td>这一堆网址先装进一个小盒子，最后由 server.js 挂上</td>
+            </tr>
+            <tr>
+              <td><span class="loc">backend/routes/weather.js:22-30</span></td>
+              <td>
+                <code>router.get('/', ...)</code>：取参数 → 验参数 → <code>await</code>
+                服务层 → 成功就发
+              </td>
+              <td>网址对上函数，函数只干三件事：验进、算、发回</td>
+            </tr>
+            <tr>
+              <td><span class="loc">backend/routes/weather.js:31-37</span></td>
+              <td>
+                <code>catch</code>：照服务层给的 <code>err.status</code> 发错误，没给才发 500
+              </td>
+              <td>失败也要说清"为什么失败"，不许甩一个含糊的 500</td>
+            </tr>
+            <tr>
+              <td><span class="loc">backend/server.js:342</span></td>
+              <td><code>app.use('/admin', adminRoutes)</code>；对照 <code>:160</code> 的 <code>app.use('/api/', apiLimiter)</code></td>
+              <td>挂载＝"哪个网址前缀归哪个盒子管"</td>
+            </tr>
+          </table>
+
+          <p>
+            <b>为什么要写 <code>await</code>。</b>问天气要去敲别人家的门（上游接口），来回要几百毫秒。
+            不加 <code>await</code>，代码不等它，拿回来的是一个还没装货的空盒子。
+            记一句：<b>会花时间的动作前面加 await，并且它一定可能在某一刻失败——所以必须包在 try/catch 里。</b>
+          </p>
+          <p>
+            <b>为什么要 <code>sendSuccess</code>／<code>sendError</code> 两个小函数。</b>看
+            <span class="loc">backend/utils/response.js:14-25</span>：成功永远长成
+            <code>{ success: true, data: ... }</code>，失败永远长成
+            <code>{ success: false, error: { code, message } }</code>。前端只按这一个形状读，
+            不用每个接口猜一次。<b>统一的返回形状，是多人／多页面项目不死掉的底线。</b>
+          </p>
+          <p>
+            <b>这一路里有道闸。</b><span class="loc">backend/server.js:125-126</span> 写着
+            15 分钟窗口、每 IP 100 次——顾客走的那条 <code>/api</code> 前缀全在这道闸后面。
+            而后台的 <code>/admin/api/*</code> 不吃这道闸，它有自己的 60 秒 600 次
+            （<span class="loc">backend/routes/admin.js:23-31</span>）。所以你写脚本狂刷
+            <code>/api</code> 时，屏幕上会出现「请求过于频繁」——<b>十有八九是你自己刷的</b>，
+            先去数自己的探针，别去找 bug。
+          </p>
+
+          <h3>现在就做：一次只读的旅行（10 分钟）</h3>
+          <p>
+            这条命令故意<b>不填城市</b>，所以它走不到上游、也不会改任何数据；我自己跑过，回的是
+            <code>HTTP/1.1 400 Bad Request</code>（前提：本地那个 5000 的容器在跑）。
+          </p>
+          <pre><button class="cp">复制</button><code>curl -s -i "http://127.0.0.1:5000/api/weather" | head -20</code></pre>
+          <p>
+            看两处：状态行是 <code>400</code>；正文里 <code>message</code> 写的是「缺少 location
+            参数，请提供城市名称」——这句原文就躺在
+            <span class="loc">backend/routes/weather.js:26</span>。<b>这就是"报错文案是给人读的"这句话的实现。</b>
+          </p>
+
+          <h3>过了吗</h3>
+          <label class="chk"
+            ><input type="checkbox" data-k="L2a" />能画出这条链：网址 → 路由 → 服务层 → 数据库／上游 →
+            统一形状发回</label
+          >
+          <label class="chk"
+            ><input type="checkbox" data-k="L2b" />亲眼跑过一次那条 <code>curl</code>，并从代码里找到那句
+            400 文案</label
+          >
+          <label class="chk"
+            ><input type="checkbox" data-k="L2c" />能说出 <code>/api</code> 与
+            <code>/admin/api</code> 两道闸各是多少、谁不吃哪道</label
+          >
+        </section>
+
+        <section class="les" id="L3">
+          <h2>第 3 课 · 数据落在哪：SQL 与那个 .db</h2>
+          <p class="aim">
+            目标：能读懂表结构，能自己写一句只读的
+            <code>SELECT</code>，并且永远分得清"活库"和"副本"。教材是
+            <span class="loc">backend/db/schema.sql</span>（687 行）和
+            <span class="loc">backend/routes/payment.js:44</span> 那一行查询。
+          </p>
+
+          <h3>三块必读</h3>
+          <p>
+            <b>① 开头那三行开关很关键。</b><span class="loc">backend/db/schema.sql:7-9</span>
+            开了 <code>WAL</code>、<code>synchronous=NORMAL</code>、外键。WAL 的意思：写入先进
+            <code>styleai.db-wal</code> 这个日志，再慢慢合回主库。所以你在
+            <code>backend/db/</code> 里看到 <code>.db</code>、<code>.db-wal</code>、<code>.db-shm</code>
+            <b>三个是一套</b>，⛔ 不能在服务还开着的时候乱删后两个。
+          </p>
+          <p>
+            <b>② 一张表就是一张 Excel。</b>比如 <span class="loc">backend/db/schema.sql:16-23</span>
+            的 <code>users</code>：<code>id</code> 自增主键（自己长号），<code>session_id</code>
+            唯一且必填（游客身份），<code>phone</code> 唯一但可空（没注册就没有），
+            <code>created_at</code> 默认取当前时间。读懂这几列，你就读懂了"顾客"在你系统里到底是什么。
+          </p>
+          <p>
+            <b>③ 查库就一行，但那个 <code>?</code> 是命。</b>
+            <span class="loc">backend/routes/payment.js:44</span> 是：
+          </p>
+          <pre><button class="cp">复制</button><code>const row = db.prepare('SELECT value FROM app_settings WHERE key = ?').get(PRICE_KEY)</code></pre>
+          <p>
+            <code>prepare</code> 写好句子，<code>?</code> 留坑，<code>get</code> 填坑并取一行。
+            ⛔ <b>永远不要把用户的输入用字符串拼进 SQL</b>——那一句拼错就是"库里所有表任人拿走"（术语叫 SQL
+            注入）。这一套用的是 <code>better-sqlite3</code>，它是<b>同步</b>的：不用
+            <code>await</code>，调用完立刻拿到结果，这也是它选它的原因。
+          </p>
+
+          <h3>现在就做：只读副本上查一次（20 分钟）</h3>
+          <div class="trap">
+            ⛔ 全程不碰 <code>backend/db/styleai.db</code> 本体。它还被 git 的
+            <code>skip-worktree</code> 钉住（提交不进版本，发布另有自检脚本），你在上面随手一写，
+            就等于随手改了线上业务数据。先<b>复制</b>一份到仓外。
+          </div>
+          <pre><button class="cp">复制</button><code>mkdir -p E:/website/files/learn-l3
+cp E:/website/3.personal-image-ai/backend/db/styleai.db E:/website/files/learn-l3/copy.db
+cd E:/website/3.personal-image-ai/backend
+node -e "const D=require('better-sqlite3')('E:/website/files/learn-l3/copy.db',{readonly:true});console.log(D.prepare(\"SELECT name FROM sqlite_master WHERE type='table' ORDER BY name\").all().length+' 张表');console.log(D.prepare('SELECT key,value FROM app_settings ORDER BY key').all())"</code></pre>
+          <p>
+            看到表数与 <code>app_settings</code> 里那些键值（收款金额就在里面），这一课就通了。
+            <code>{readonly:true}</code>
+            那一串是保险丝：写操作会当场报错，比事后道歉便宜。<b>请把它当习惯。</b>
+          </p>
+
+          <h3>过了吗</h3>
+          <label class="chk"
+            ><input type="checkbox" data-k="L3a" />能在 schema.sql 里找到任意两张表，说出它们靠哪一列相连</label
+          >
+          <label class="chk"
+            ><input type="checkbox" data-k="L3b" />在<b>副本</b>上用 <code>{readonly:true}</code>
+            跑通过一条 SELECT</label
+          >
+          <label class="chk"
+            ><input type="checkbox" data-k="L3c" />能说出为什么 .db 与它的 -wal/-shm 不能单删其中一个</label
+          >
+        </section>
+        <section class="les" id="L4">
+          <h2>第 4 课 · 界面为什么动</h2>
+          <p class="aim">
+            目标：看懂前端三件事——数据怎么进来、界面怎么画、请求怎么发出去。教材是
+            <span class="loc">app/src/components/ErrorBoundary.tsx</span>（90 行）和
+            <span class="loc">app/src/api.ts:235</span> 那一层。
+          </p>
+
+          <div class="tip">
+            ⛔ 别从展厅开始。<span class="loc">app/src/pages/ExhibitionHall.tsx</span> 有 1,390
+            行，里面还有 3D 模型；它是这个项目最难的文件，不是入门材料。前端一共 42 个
+            <code>.ts/.tsx</code>，从最小的那个读起。
+          </div>
+
+          <h3>三句话讲完 React</h3>
+          <ol>
+            <li>
+              <b>数据进来。</b>组件的输入叫
+              <code>props</code>（父组件塞给你的参数）和自己记的东西叫
+              <code>state</code>（状态）。看 <span class="loc">app/src/components/ErrorBoundary.tsx:3-11</span>：
+              <code>interface Props</code> 写"别人要给我什么"，<code>interface State</code> 写"我自己记什么"。
+            </li>
+            <li>
+              <b>按数据画界面。</b><span class="loc">app/src/components/ErrorBoundary.tsx:41</span>
+              的 <code>render()</code> 只做一件事：状态里
+              <code>hasError</code> 是真的就画兜底，是假的就是正常孩子。
+            </li>
+            <li>
+              <b>数据一变，画面重画。</b>
+              <span class="loc">app/src/components/ErrorBoundary.tsx:37-39</span>
+              那颗"重试"按钮里 <code>this.setState({ hasError: false })</code>——注意它没有去改
+              HTML，它只改状态，画面自己跟着变。<b>这是前端和后台最不一样的地方：你不操纵界面，你操纵数据。</b>
+            </li>
+          </ol>
+          <p>
+            顺带看懂 TypeScript：那个问号
+            <code>fallback?: React.ReactNode</code> 意思是"这颗可以不填"。类型就是填表说明——写清楚要什么，
+            少填、填错，构建阶段就报错（这也是为什么
+            <span class="loc">app/package.json:8</span> 的 build 是 <code>tsc -b &amp;&amp; vite build</code> 两段式：先体检再造货）。
+          </p>
+
+          <h3>前端怎么发请求</h3>
+          <p>
+            全项目发请求的手都在 <span class="loc">app/src/api.ts</span>（1,169
+            行）。核心那一行是
+            <span class="loc">app/src/api.ts:235</span>：<code>await fetch(url, { ...options,
+            signal: controller.signal })</code>。那个 <code>signal</code> 是<b>超时用的刹车</b>——
+            不装刹车，后端一旦卡住，顾客屏幕上就永远转圈，连报错都不给。
+          </p>
+          <p>
+            还有一条口径要你记住，它写在我给你写的那页教材旁边：
+            <span class="loc">backend/routes/weather.js:50-56</span>——上游没给体感温度就回
+            502 说破，<b>⛔ 不许前端自己补一个档</b>。第 1 课 L42 是同一句品德的第二遍：<b>量不到就说不，前端后端都不许编。</b>
+          </p>
+
+          <h3>现在就做：本地起前端，改一句文案（20 分钟）</h3>
+          <pre><button class="cp">复制</button><code>cd E:/website/3.personal-image-ai/app
+npm run dev</code></pre>
+          <p>
+            它回 <code>VITE v7.3.6 ready in 449 ms</code> 和
+            <code>Local: http://127.0.0.1:5173/</code>（这读数是我刚跑的）。开浏览器进
+            <b>5173</b>（不是 5000）。
+          </p>
+          <ol>
+            <li>
+              为什么 5173 能用到后端？因为
+              <span class="loc">app/vite.config.ts:20-27</span> 配了代理：<code>/api</code>、<code>/admin</code>、<code>/static</code>
+              等前缀统统转给 <code>localhost:5000</code>。前端开发跑 5173，后端还是那个容器。
+            </li>
+            <li>
+              随便找一个页面组件，改一句用户看得见的中文，<code>Ctrl＋S</code>
+              存盘——浏览器<b>不刷新</b>就变了。这就是热更新，也是为什么开发要用 5173。
+            </li>
+            <li>
+              现在打开 <code>http://127.0.0.1:5000/</code> 看看你刚那句改动——<b>看不见</b>。
+              别慌，这正是第 7 课要讲的事：<code>5000</code> 用的是镜像里编译好的
+              <code>dist</code>，源码改了要重新构建才进去。⛔ 不要为了看效果去动服务器。
+            </li>
+          </ol>
+          <p>看完记得回终端按 <code>Ctrl＋C</code> 把 5173 停掉（不停也不影响 5000）。</p>
+
+          <h3>过了吗</h3>
+          <label class="chk"
+            ><input type="checkbox" data-k="L4a" />能说出 props 与 state 的区别，并指出
+            ErrorBoundary 里哪一行是"改状态而不是改界面"</label
+          >
+          <label class="chk"
+            ><input type="checkbox" data-k="L4b" />本机跑通过 <code>npm run dev</code>，在 5173
+            上亲眼看过一次热更新</label
+          >
+          <label class="chk"
+            ><input type="checkbox" data-k="L4c" />能解释 5173 改了什么、5000
+            为什么暂时看不见</label
+          >
+        </section>
+
+        <section class="les" id="L5">
+          <h2>第 5 课 · 测试是合同，不是形式</h2>
+          <p class="aim">
+            目标：会读一份测试，并<b>自己写出第一条能跑的测试</b>。教材是
+            <span class="loc">backend/test/bmi.test.js</span>（70 行，全站最短）。
+          </p>
+
+          <h3>读四段</h3>
+          <table>
+            <tr>
+              <th>位置</th>
+              <th>这一手在教你什么</th>
+            </tr>
+            <tr>
+              <td><span class="loc">backend/test/bmi.test.js:17-31</span></td>
+              <td>
+                用 <code>for</code> 把 8 组坏值排着队喂进去（0、负数、null、'abc'、空串、Infinity）。<b>一条测试能覆盖一批输入</b>，
+                这就是"重复"的价值。
+              </td>
+            </tr>
+            <tr>
+              <td><span class="loc">backend/test/bmi.test.js:28</span></td>
+              <td>
+                <code>assert.strictEqual(实际, 期望, 人话说明)</code>。第三个参数很贵：红的时候它直接说"哪一组不该是什么"，
+                你就不必猜。<b>请养成每次都写第三参数的习惯。</b>
+              </td>
+            </tr>
+            <tr>
+              <td><span class="loc">backend/test/bmi.test.js:34-44</span></td>
+              <td>
+                边界归上档：<code>18.4→偏瘦</code>、<code>18.5→正常</code>、<code>24→偏胖</code>、<code>28→肥胖</code>。
+                <b>边界永远值得单独测</b>——线上出事的地方九成在边界上。
+              </td>
+            </tr>
+            <tr>
+              <td><span class="loc">backend/test/bmi.test.js:65-70</span></td>
+              <td>
+                顺手测消费点：<code>computeBmi</code> 必须等于"bmiValue + healthBand"。这条在守第 1 课那句"同一个规则只留一处"。
+              </td>
+            </tr>
+          </table>
+
+          <div class="tip">
+            <b>为什么有的代码必须自带尺子。</b>这个项目里
+            <span class="loc">backend/.prettierignore:7-8</span> 和
+            <span class="loc">backend/eslint.config.js:12-13</span> 把
+            <code>static/</code> 与 <code>templates/</code> 整目录排除了——后台页面和今天这份教材页
+            <b>不过 CI 任何一道门</b>。所以它们各自带了一份测试：
+            <span class="loc">backend/test/adminSkillPage.test.js</span> 和
+            <span class="loc">backend/test/learnPage.test.js</span>。<b>门管不到的地方，就得自己立牌子。</b>
+          </div>
+
+          <h3>现在就做：写你自己的第一条测试（15 分钟）</h3>
+          <p>
+            下面这份我实测跑过（<code>tests 1 / pass 1 / fail 0</code>）。先存到<b>仓外</b>练，别急着写进仓库：
+          </p>
+          <pre><button class="cp">复制</button><code>const test = require('node:test')
+const assert = require('node:assert')
+const { healthBand, bmiValue } = require('E:/website/3.personal-image-ai/backend/services/bmi.js')
+
+test('我自己加的：18.45 的人显示成 18.5，就该按 18.5 归正常', () => {
+  const r = healthBand(18.45)
+  assert.strictEqual(r.bmi, 18.5, '先取整再切档：印出来的数与档位必须是同一个数')
+  assert.strictEqual(r.bmi_level, '正常')
+  assert.strictEqual(healthBand(18.44).bmi_level, '偏瘦', '18.44 取整 18.4，仍在偏瘦')
+  assert.ok(bmiValue(165, 62) > 22 && bmiValue(165, 62) &lt; 23)
+})</code></pre>
+          <pre><button class="cp">复制</button><code>node --test E:/website/files/learn-l5-selftest.test.js</code></pre>
+          <p>
+            练完再玩一次破坏：把 <code>healthBand(18.44)</code> 那行的期望改成
+            <code>'正常'</code>，跑——它必须红。<b>一条测不出任何东西的测试，比没有测试更危险</b>，
+            因为它会让你以为有保险。
+          </p>
+
+          <h3>过了吗</h3>
+          <label class="chk"
+            ><input type="checkbox" data-k="L5a" />能说出 assert 的第三个参数是写给谁看的</label
+          >
+          <label class="chk"
+            ><input type="checkbox" data-k="L5b" />自己写的测试跑绿过一次，并且故意改错让它红过一次</label
+          >
+          <label class="chk"
+            ><input type="checkbox" data-k="L5c" />能说出后台页面为什么需要专属测试（提示：两道 ignore）</label
+          >
+        </section>
+
+        <section class="les" id="L6">
+          <h2>第 6 课 · 四道门：改完凭什么敢说没坏</h2>
+          <p class="aim">
+            目标：一轮改动之后，自己把门禁跑一遍，并且<b>看得懂红</b>。教材是两份
+            package.json 的 scripts。
+          </p>
+
+          <h3>这四道门各管什么</h3>
+          <table>
+            <tr>
+              <th>命令（在 backend/ 里）</th>
+              <th>管什么</th>
+              <th>红了怎么读</th>
+            </tr>
+            <tr>
+              <td><code>npm run format:check</code></td>
+              <td>
+                prettier 排版，只扫 <code>**/*.js</code>（见
+                <span class="loc">backend/package.json:11</span>）
+              </td>
+              <td>
+                列出的文件名＝格式不对，不是逻辑错。跑 <code>npm run format</code>
+                让它自己排好，再 check 一次。
+              </td>
+            </tr>
+            <tr>
+              <td><code>npm run lint</code></td>
+              <td>eslint 习惯（<span class="loc">backend/package.json:12</span>）</td>
+              <td>只有 <b>error</b> 会卡住；warning 不卡（现在 0 error／142 warning）。读规则名，别看条数吓人。</td>
+            </tr>
+            <tr>
+              <td><code>npm test</code></td>
+              <td>
+                <code>node --test "test/*.test.js"</code>（<span class="loc">backend/package.json:14</span>）——本仓是
+                Node 自带测试，<b>不是 vitest</b>
+              </td>
+              <td>看末尾 <code>pass/fail</code> 两行，再往上翻第一个 <code>✖</code>；那一句后面通常跟着你写的"人话说明"。</td>
+            </tr>
+            <tr>
+              <td><code>npm run build</code>（在 app/ 里）</td>
+              <td>
+                <code>tsc -b &amp;&amp; vite build</code>（<span class="loc">app/package.json:8</span>）：先类型体检，再打包
+              </td>
+              <td>类型错会指出文件与行；⚠️ 别用 <code>tsc --noEmit</code>，见下。</td>
+            </tr>
+          </table>
+
+          <div class="trap">
+            <b>三个真坑，都是这个项目自己踩出来的。</b>
+            ① <b><code>tsc --noEmit</code> 会假通过</b>：前端根 tsconfig
+            是"solution 型"（只管引用别的 tsconfig），<code>--noEmit</code> 对它回 0
+            却什么都没检查。只认 <code>tsc -b</code>（现成脚本是
+            <span class="loc">app/package.json:11</span> 的 <code>typecheck</code>）。
+            ② <b>管道会吞退出码</b>：<code>npm test | tail -3</code> 之后的
+            <code>$?</code> 是 <code>tail</code> 的，永远 0——红的会被读成绿的。要看退出码就别接管道，把输出重定向到文件再看
+            <code>$?</code>。③ <b>prettier 只管 <code>**/*.js</code></b>：HTML／CSS／后台
+            JS 根本不在射程内，"格式门绿了"不等于你改的那片被检查过。
+          </div>
+
+          <h3>现在就做：一次把三扇门跑完并留下退出码（10 分钟）</h3>
+          <pre><button class="cp">复制</button><code>cd E:/website/3.personal-image-ai/backend
+npm run format:check > E:/website/files/learn-l6-format.log 2>&1; echo "format rc=$?"
+npm run lint         > E:/website/files/learn-l6-lint.log  2>&1; echo "lint   rc=$?"
+npm test             > E:/website/files/learn-l6-test.log  2>&1; echo "test   rc=$?"
+tail -6 E:/website/files/learn-l6-test.log</code></pre>
+          <p>
+            三个 <code>rc=</code> 都应是 0，最后一行给你
+            <code>tests / pass / fail</code> 的分母。<b>读数要带分母和时刻</b>——下次跑数字一定变（今天后端是 806
+            条／56 份文件），变了不代表坏，代表有人加了东西。
+          </p>
+
+          <h3>过了吗</h3>
+          <label class="chk"
+            ><input type="checkbox" data-k="L6a" />三个 rc 都亲眼看过是 0，并知道哪个命令管排版</label
+          >
+          <label class="chk"
+            ><input type="checkbox" data-k="L6b" />能说出为什么 <code>npm test | tail -3</code> 之后不能信
+            <code>$?</code></label
+          >
+          <label class="chk"
+            ><input type="checkbox" data-k="L6c" />能说出前端只认 <code>tsc -b</code>、不认
+            <code>--noEmit</code> 的原因</label
+          >
+        </section>
+
+        <section class="les" id="L7">
+          <h2>第 7 课 · 让它跑起来：本机、副本、容器</h2>
+          <p class="aim">
+            目标：分得清"我在动哪个后端"，并且学会一件保命的事——<b>用副本试，别用活库试</b>。
+          </p>
+
+          <h3>同一个后端有三种跑法</h3>
+          <table>
+            <tr>
+              <th>跑法</th>
+              <th>命令</th>
+              <th>用哪个库</th>
+              <th>什么时候用</th>
+            </tr>
+            <tr>
+              <td>① 本机直跑</td>
+              <td>
+                <code>npm start</code>（<span class="loc">backend/package.json:7</span>）或
+                <code>npm run dev</code>（<code>:8</code>，<code>--watch</code>
+                改文件自动重启）
+              </td>
+              <td><b>活库</b> <code>backend/db/styleai.db</code></td>
+              <td>只是想让服务起来看看。⚠️ 会写真数据。</td>
+            </tr>
+            <tr>
+              <td>② 副本实例（教材正解）</td>
+              <td>
+                <code>PORT=5001 STYLEAI_DB_PATH=E:/website/files/learn-l7/copy.db node server.js</code>
+              </td>
+              <td>盘外<b>只读练手副本</b></td>
+              <td>任何"我想试试看改完会怎样"——用这条。</td>
+            </tr>
+            <tr>
+              <td>③ 容器 5000</td>
+              <td>
+                <code>docker compose -f E:/website/compose/docker-compose.yml up -d style-ai</code>
+              </td>
+              <td>挂载进去的 <code>backend/db</code></td>
+              <td>日常访问、也是现在你看到的这个 5000。</td>
+            </tr>
+          </table>
+          <p>
+            ② 那两个变量在
+            <span class="loc">backend/server.js</span> 里被读，作用就是把库路径和端口从默认值上掰开。<b>端口不撞车（5001 对
+            5000），库不在仓库里</b>——这样玩坏了也只是一个盘外文件。⚠️
+            <code>STYLEAI_DB_PATH</code> 指过去时，如果那个文件不存在，服务会当场建一个空库给你（不是坏消息，但你会以为数据丢了，别慌：那只是个新文件）。
+          </p>
+
+          <h3>容器只挂了四个目录，这是本课最要紧的一条</h3>
+          <p>
+            看 <span class="ext">E:/website/compose/docker-compose.yml:29-42</span>：<code>backend/db</code>、<code>backend/uploads</code>、<code>models</code>、<code>.env</code>，加上两个证书目录。
+            就这些。也就是说：
+          </p>
+          <ul>
+            <li>
+              <b>代码在镜像里</b>——<span class="loc">Dockerfile:32</span> 那句
+              <code>COPY backend/ ./</code> 是在<b>构建镜像那一刻</b>把 backend
+              整个拷进去的。你之后在盘上改的 <code>server.js</code>、<code>routes/admin.js</code>、<code>templates/learn-to-code.html</code>，
+              容器<b>一个都看不见</b>。
+            </li>
+            <li>
+              所以：改了后台页面、模板、后端路由 ⇒ 必须
+              <code>docker compose -f E:/website/compose/docker-compose.yml build style-ai</code> 再
+              <code>up -d style-ai</code>。改数据库内容不用（那是挂载的）。
+            </li>
+            <li>
+              这条正好解释了你今天可能撞上的事：这份教材是 5000
+              <b>重打过镜像之后</b>才出现的按钮。⛔ 打镜像与服务器发布是你的动作，不是我替你决定的。
+            </li>
+          </ul>
+
+          <h3>现在就做：先看，不动（10 分钟）</h3>
+          <pre><button class="cp">复制</button><code>docker compose -f E:/website/compose/docker-compose.yml ps
+docker compose -f E:/website/compose/docker-compose.yml logs --tail 20 style-ai</code></pre>
+          <p>
+            第一条列出五个容器（<code>style-ai-local</code> 在跑、端口 127.0.0.1:5000）；第二条读最近
+            20 行日志——<b>以后你排任何后端问题，第一件事就是看日志，不是猜。</b>
+          </p>
+
+          <h3>过了吗</h3>
+          <label class="chk"
+            ><input type="checkbox" data-k="L7a" />能说出三种跑法各用哪个库、为什么试错要用副本</label
+          >
+          <label class="chk"
+            ><input type="checkbox" data-k="L7b" />跑过 <code>docker compose ps</code>
+            与 <code>logs --tail 20 style-ai</code>，并从日志里认出至少一行</label
+          >
+          <label class="chk"
+            ><input type="checkbox" data-k="L7c" />能解释为什么改了 templates 里的页面，5000
+            上必须重新打镜像才看得到</label
+          >
+        </section>
+
+        <section class="les" id="L8">
+          <h2>第 8 课 · git：三个位置与一次提交</h2>
+          <p class="aim">目标：不再怕 git。先把"东西在哪三个位置"讲清，再练只读三连，最后练一次写。</p>
+
+          <h3>三个位置，一张嘴说得清</h3>
+          <table>
+            <tr>
+              <th>位置</th>
+              <th>是什么</th>
+              <th>对应命令</th>
+            </tr>
+            <tr>
+              <td>工作区</td>
+              <td>你盘上正在编辑的这些文件本身</td>
+              <td>你 <code>Ctrl＋S</code> 就改了它</td>
+            </tr>
+            <tr>
+              <td>暂存区（索引）</td>
+              <td>"这次提交我要带上哪些改动"的购物车</td>
+              <td><code>git add -u</code> 装进车</td>
+            </tr>
+            <tr>
+              <td>HEAD／仓库</td>
+              <td>已经落档的历史，一次提交一格</td>
+              <td><code>git commit</code> 落档；<code>git log</code> 翻档</td>
+            </tr>
+          </table>
+          <p>
+            为什么非要中间那个购物车：因为你可能同时改了 12 个文件，而这一次只想交其中 11 个。这个项目就有一条永远不进车的：
+            <code>backend/db/styleai.db</code>（运行时库，另有一条 <code>skip-worktree</code> 的钉子钉着它）。
+          </p>
+
+          <h3>只读三连：先练这个，永远安全</h3>
+          <pre><button class="cp">复制</button><code>cd E:/website/3.personal-image-ai
+git status --porcelain
+git diff --stat
+git log --oneline -3</code></pre>
+          <p>
+            三条都不改任何东西。<code>--porcelain</code> 是给机器读的一行一个文件（<code>M</code>
+            是改过、<code>??</code> 是还没进版本的新文件）；<code>diff --stat</code>
+            告诉你每个文件加了几行删了几行；<code>log --oneline</code>
+            是历史。<b>养成习惯：动手前后各跑一次这三条</b>，你会立刻知道自己有没有把事情弄干净。
+          </p>
+
+          <h3>一次真实的提交（照这个形状记）</h3>
+          <pre><button class="cp">复制</button><code>git add -u
+git restore --staged backend/db/styleai.db
+git add backend/templates/learn-to-code.html
+git commit -F E:/website/files/commit-msg.txt
+git status --porcelain
+git log --oneline -1</code></pre>
+          <ul>
+            <li><code>add -u</code> 只装"已跟踪且改过"的，不会把杂物带进去；新文件必须点名 <code>git add</code>。</li>
+            <li>
+              第二行是关键：<code>restore --staged</code>
+              <b>只把它从购物车拿出来，盘上那个文件一个字没动</b>。⛔ 千万别对它用
+              <code>checkout --</code> 或 <code>reset --hard</code>——那是"用仓库版本覆盖你盘上的运行库"，等于把真实业务数据抹掉。
+            </li>
+            <li>
+              中文提交说明走 <code>-F 文件</code>：直接
+              <code>-m "中文..."</code> 在这台机器上会变乱码（GBK
+              的坑），把话写进一个文件再让 git 读，就不会出事。
+            </li>
+          </ul>
+          <div class="trap">
+            还有个计数坑：<code>git status --porcelain</code> 遇到<b>中文文件名</b>会输出成
+            <code>"docs/\344\276\235..."</code> 这种八进制转义，还把引号带上。你要用它数分母，就得先算上这两层，否则会报成 0。
+            ⛔ 不要为了好看去关 <code>core.quotepath</code> 之外的配置——这条我提醒你，改配置由你自己决定。
+          </div>
+
+          <h3>过了吗</h3>
+          <label class="chk"
+            ><input type="checkbox" data-k="L8a" />能说出工作区／暂存区／HEAD 各是什么，购物车为什么有用</label
+          >
+          <label class="chk"
+            ><input type="checkbox" data-k="L8b" />跑过只读三连，并认出当前盘上有几个
+            <code>M</code>、几个 <code>??</code></label
+          >
+          <label class="chk"
+            ><input type="checkbox" data-k="L8c" />能说出为什么
+            <code>styleai.db</code> 只许 <code>restore --staged</code>、不许
+            <code>checkout --</code></label
+          >
+        </section>
+
+        <section class="les" id="L9">
+          <h2>第 9 课 · 用脚本量一个项目</h2>
+          <p class="aim">
+            这是你最强的一课：<b>不靠感觉、不靠别人说的数，自己现量。</b>教材是
+            <span class="ext">E:/website/站3产生临时文件/</span> 里那 20 来个
+            <code>.cjs</code> 工装，和它们旁边的台账
+            <span class="ext">E:/website/站3产生临时文件/这个文件夹里有什么-20261012.md</span>（14 KB，写明哪些件不能删、每件多大、为什么留）。
+          </p>
+
+          <h3>一条探针长什么样</h3>
+          <p>所谓"探针"就是一个只读的小脚本，三段：<b>取什么 → 算什么 → 打出来</b>。就这么多。</p>
+          <pre><button class="cp">复制</button><code>// 数一下后端有多少个 js 文件、总共多少行
+const fs = require('fs')
+const path = require('path')
+let files = 0
+let lines = 0
+;(function walk(dir) {
+  for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+    if (['node_modules', 'dist', 'vendor', '.git'].includes(e.name)) continue
+    const q = path.join(dir, e.name)
+    if (e.isDirectory()) walk(q)
+    else if (e.name.endsWith('.js')) {
+      files++
+      lines += fs.readFileSync(q, 'utf8').split('\n').length
+    }
+  }
+})('E:/website/3.personal-image-ai/backend')
+console.log('文件', files, '行', lines)</code></pre>
+          <p>
+            跑法：<code>node E:/website/files/我的探针.cjs</code>。它不连库、不发请求、不写文件，
+            <b>只读</b>——这就是安全边界。更常见的量法不用写脚本，一条命令就够：
+          </p>
+          <pre><button class="cp">复制</button><code>cd E:/website/3.personal-image-ai
+find backend -name '*.js' -not -path '*/node_modules/*' -not -path '*/vendor/*' -print0 | xargs -0 wc -l | tail -1
+find app/src \( -name '*.ts' -o -name '*.tsx' \) -print0 | xargs -0 wc -l | tail -1
+ls backend/test/*.test.js | wc -l</code></pre>
+          <p>
+            我刚才跑的读数（10-22 晚上，含这份教程页自己那份测试）：后端 <code>54,354</code> 行、前端 <code>app/src</code>
+            <code>14,015</code> 行、测试文件 <b>56 份</b>。<b>你跑一遍，数字以你那次为准</b>——
+            我这条只是告诉你"应该长这样"，不是让你抄我的数。
+          </p>
+
+          <h3>三条纪律（我在这项目上错过太多次，写成规矩）</h3>
+          <ol>
+            <li>
+              <b>报数必须带尺子。</b>同一个"多少"能有好几种量法（含不含
+              <code>test/</code>？含不含 <code>vendor/</code>？按文件数还是按行数？按盘上还是按
+              <code>HEAD</code>？）。写数的时候顺手把命令贴在旁边，下次能重算。
+            </li>
+            <li>
+              <b>判"没有"要更严。</b>搜不到不等于没有：文件名可能是中文、可能有区间缩写（<code>oa1~oa3</code>
+              那种要展开再搜）、工具可能静默失效。写"没有"之前，先证明"我的搜索确实能读到东西"（拿一个已知在的东西同批搜一遍）。
+            </li>
+            <li>
+              <b>用完就清。</b>临时件写进 <span class="ext">E:/website/站3产生临时文件/</span>
+              这类<b>仓外</b>目录，用完当场删掉并报一句"删前几件、删后几件"。仓库里
+              <code>??</code> 长期只留交付物，别人（包括未来的你）才看得清哪些是货、哪些是垃圾。
+            </li>
+          </ol>
+
+          <h3>过了吗</h3>
+          <label class="chk"
+            ><input type="checkbox" data-k="L9a" />自己跑过那两条 <code>find ... wc -l</code>，并记下自己的读数</label
+          >
+          <label class="chk"
+            ><input type="checkbox" data-k="L9b" />打开过 <span class="ext">E:/website/站3产生临时文件</span>
+            那份台账，知道哪些件不能删</label
+          >
+          <label class="chk"
+            ><input type="checkbox" data-k="L9c" />能说出"报数带尺子"在你上一次判断里会怎么写</label
+          >
+        </section>
+
+        <section class="les" id="L10">
+          <h2>第 10 课 · 独立做完一轮改动（毕业考）</h2>
+          <p class="aim">
+            终点不是"会写算法"，是<b>一轮小改动你自己走完</b>。下面这张表就是验收单，九步，一步一个判据。
+            建议第一次挑<b>最没风险</b>的活：改一句用户看得见的中文文案，或改一处文档数字。
+          </p>
+          <table>
+            <tr>
+              <th>#</th>
+              <th>做什么</th>
+              <th>做到什么算过</th>
+            </tr>
+            <tr>
+              <td>1</td>
+              <td>说清要改哪儿</td>
+              <td>一句话＋一个文件＋行号区间。说不清就是还没想好，别动手。</td>
+            </tr>
+            <tr>
+              <td>2</td>
+              <td>现量底数</td>
+              <td>
+                改前跑一遍：行数、<code>npm test</code> 的
+                <code>tests/pass/fail</code>、三个 <code>rc</code>。写下你自己的读数。
+              </td>
+            </tr>
+            <tr>
+              <td>3</td>
+              <td>留退路</td>
+              <td>
+                要动的东西先复制一份到仓外（尤其碰数据或整段删改时）。⛔
+                不要靠"我记得原来长什么样"。
+              </td>
+            </tr>
+            <tr>
+              <td>4</td>
+              <td>只改一片</td>
+              <td>一次改一个文件里的一小段，别顺手修三处——红了你不知道是谁。</td>
+            </tr>
+            <tr>
+              <td>5</td>
+              <td>跑测试</td>
+              <td>先跑那一个测试文件，再跑全量。红了先读红字里的"人话说明"。</td>
+            </tr>
+            <tr>
+              <td>6</td>
+              <td>跑四道门</td>
+              <td>第 6 课那段脚本，三个 rc 全 0；动了前端就加 <code>npm run build</code>。</td>
+            </tr>
+            <tr>
+              <td>7</td>
+              <td>真打开看一眼</td>
+              <td>
+                浏览器进 5173 或 5000，把改动那条路径<b>点一遍</b>。⚠️
+                这项目上栽过两次：单测 800 条全绿、页面整片是灰的；数据里写了 Markdown，屏幕上原样露星号。<b>测试证明的是逻辑，眼睛证明的是能用。</b>
+              </td>
+            </tr>
+            <tr>
+              <td>8</td>
+              <td>扫定位符</td>
+              <td>
+                你插过行／删过段的话，文档里"某文件第 N
+                行"那类引用就可能指错了。全仓搜一遍：<code>grep -rIn "文件名:[0-9]" --exclude-dir=node_modules --exclude-dir=dist .</code>
+              </td>
+            </tr>
+            <tr>
+              <td>9</td>
+              <td>记账＋提交</td>
+              <td>在文档末尾追加一条（带时刻、带读数、带没做到的事），然后第 8 课那五行进车、落档。</td>
+            </tr>
+          </table>
+          <div class="tip">
+            <b>毕业判据（三条全中就算过）：</b>① 九步没问我就能走完；② 中途出现过一次红，你自己读红字定位到了是哪一步；③
+            你的提交说明里写了"这轮我没能验的是什么"。<b>第三条最难，也最值钱。</b>
+          </div>
+        </section>
+
+        <section class="les" id="A">
+          <h2>附录 A · 术语速查（30 条，人话版）</h2>
+          <p class="aim">查完记得回到你项目里看它长什么样——术语只有见到实体才不会忘。</p>
+          <table>
+            <tr>
+              <th>词</th>
+              <th>一句话人话</th>
+              <th>在你项目哪儿</th>
+            </tr>
+            <tr><td>仓库 repo</td><td>一个项目＋它的全部历史</td><td><code>E:/website/3.personal-image-ai</code> 这个目录</td></tr>
+            <tr><td>依赖 / node_modules</td><td>别人写好的零件，装在你项目里</td><td><code>backend/node_modules</code>、<code>app/node_modules</code>（都不进版本）</td></tr>
+            <tr><td>锁文件</td><td>把零件版本钉死，谁装都一样</td><td><code>package-lock.json</code>（Dockerfile L11 那段注释讲过它救过一次构建）</td></tr>
+            <tr><td>脚本 scripts</td><td>起个好记的别名代替长命令</td><td><code>backend/package.json:6-15</code></td></tr>
+            <tr><td>路由 router</td><td>网址 ↔ 函数的对照表</td><td><code>backend/routes/*.js</code>（20 个）</td></tr>
+            <tr><td>中间件 middleware</td><td>轮到业务函数之前先过的一道关卡</td><td><code>backend/middleware/</code> 四个：auth / logger / rateLimit / upload</td></tr>
+            <tr><td>端点 endpoint</td><td>一个能被敲的网址</td><td><code>/api/weather</code>、<code>/admin/api/tables</code></td></tr>
+            <tr><td>请求头 header</td><td>随请求夹带的小纸条</td><td>顾客身份 <code>X-Session-Id</code>，后台 <code>Authorization</code></td></tr>
+            <tr><td>状态码</td><td>服务器回的一句话语气：2 成／4 你的错／5 我的错</td><td>400 见 <code>weather.js:26</code>，502 见 <code>weather.js:55</code></td></tr>
+            <tr><td>JSON</td><td>花括号方括号写数据的通用格式</td><td><code>utils/response.js:22</code> 那两句就是形状</td></tr>
+            <tr><td>序列化</td><td>内存里的对象 ↔ 字符串／字节，来回翻译</td><td>接口发回、库里存文本都要它</td></tr>
+            <tr><td>异步 / await</td><td>会花时间的动作，等它一下再往下</td><td><code>weather.js:29</code></td></tr>
+            <tr><td>回调 callback</td><td>把函数交给别人，让别人在合适的时机调你</td><td>⚠️ 本项目栽过一次：<code>.map(f)</code> 会把下标塞成第二个参数，1 件正常、2 件以上整批消失</td></tr>
+            <tr><td>环境变量 / .env</td><td>口令与配置不进代码，放本地文件</td><td><code>backend/.env</code>（挂载只读，⛔ 永不进仓库、永打印）</td></tr>
+            <tr><td>端口 port</td><td>同一台机器上不同服务的门牌号</td><td>5000 站3、3000 站1、5173 前端开发</td></tr>
+            <tr><td>日志 log</td><td>服务干活的流水账，出事第一眼看它</td><td><code>docker compose logs --tail 20 style-ai</code></td></tr>
+            <tr><td>表 / 列 / 主键</td><td>Excel 的页 / 表头 / 每行的唯一编号</td><td><code>schema.sql:16-23</code> 那张 <code>users</code></td></tr>
+            <tr><td>索引 index</td><td>书末的对照表，查得快但写时要维护</td><td><code>schema.sql</code> 里那些 <code>CREATE INDEX</code></td></tr>
+            <tr><td>WAL</td><td>写先进日志再合回主库，读写少打架</td><td><code>schema.sql:7</code>；所以有 <code>.db-wal</code>／<code>.db-shm</code></td></tr>
+            <tr><td>迁移 migration</td><td>给已存在的库改结构，且能重来能回退</td><td>加列走 <code>db/init.js</code> 的 <code>MISSING_COLUMNS</code></td></tr>
+            <tr><td>事务 transaction</td><td>一组写要么全成要么全不算</td><td>付款到账＋发权益这类必须一起成</td></tr>
+            <tr><td>SQL 注入</td><td>把用户输入拼进语句，等于让他改你的问题</td><td>解法就是那个 <code>?</code> 占位（<code>payment.js:44</code>）</td></tr>
+            <tr><td>限流 rate limit</td><td>同一人一段时间内最多敲多少次</td><td><code>/api</code> 100 次/15 分（<code>server.js:125-126</code>）；后台 600 次/60 秒</td></tr>
+            <tr><td>token / 鉴权</td><td>一张有期限的通行证，来了先验它</td><td>后台 24 小时签名 token，还回库确认账号没被停</td></tr>
+            <tr><td>构建 build</td><td>源码 → 能发布的产物，中间还做体检</td><td><code>app/package.json:8</code></td></tr>
+            <tr><td>内容哈希文件名</td><td>内容变了名字就变，于是可以永久缓存</td><td>出厂 HTML 里那些带长串尾巴的 js/css</td></tr>
+            <tr><td>静态资源</td><td>不用现算、照着发的文件</td><td><code>/static/*</code>（后台那几个 js 就在这）</td></tr>
+            <tr><td>缓存头 max-age / immutable / ETag</td><td>告诉浏览器"这个多久不用再来问我"</td><td>哈希件一年、HTML 0 秒</td></tr>
+            <tr><td>镜像 / 容器</td><td>装好一切的安装包 / 跑起来的那一份</td><td>镜像 <code>www-style-ai</code>，容器 <code>style-ai-local</code></td></tr>
+            <tr><td>反向代理 Caddy</td><td>门口的接待：按域名决定把客人领给哪个服务</td><td><code>E:/website/compose/caddy/</code></td></tr>
+            <tr><td>skip-worktree</td><td>git 假装没看见这个文件的改动</td><td>那条钉子在 <code>backend/db/styleai.db</code> 上，发布要另跑对账脚本</td></tr>
+          </table>
+        </section>
+
+        <section class="les" id="B">
+          <h2>附录 B · 报错 → 人话 → 动作</h2>
+          <p class="aim">都是这个项目真出过的，不是抄来的清单。看到红字先在这找，找不到就贴给我。</p>
+          <table>
+            <tr><th>红字（或其关键词）</th><th>人话</th><th>动作</th></tr>
+            <tr><td><code>EADDRINUSE :::5000</code></td><td>门牌号被人占了，你已经有一个在跑</td><td>要试新代码就换 5001；确要重启先 <code>netstat -ano | grep :5000</code> 看清是谁</td></tr>
+            <tr><td><code>请求过于频繁</code> / 429</td><td>限流闸拦的，十有八九是你自己的脚本刷的</td><td>先数自己发了多少条，别去改代码</td></tr>
+            <tr><td><code>ENOENT: no such file</code></td><td>路径拼错，最常见是反斜杠</td><td>一律改成正斜杠；<code>pwd</code> 确认工作目录</td></tr>
+            <tr><td><code>Cannot find module '../services/x'</code></td><td>你在错误的目录起服务，或相对路径写错</td><td><code>cd</code> 到 <code>backend/</code> 再 <code>node server.js</code></td></tr>
+            <tr><td><code>SQLITE_BUSY</code></td><td>同一个库被两边同时写</td><td>只留一个实例；副本另存一份库</td></tr>
+            <tr><td><code>SQLITE_IOERR_FSTAT</code></td><td>挂载的库文件本体没了（容器里那个挂载点悬着）</td><td>⛔ 别手痒删 <code>backend/db/</code> 里的 <code>-wal</code>／<code>-shm</code>；补回文件或重挂</td></tr>
+            <tr><td>prettier：<code>Some files have not been formatted</code></td><td>排版不合，不是逻辑错</td><td><code>npm run format</code> 再 <code>format:check</code></td></tr>
+            <tr><td>eslint 一长串 <code>warning</code></td><td>习惯提醒，不会把 CI 跑红</td><td>只处理 <code>error</code>；要清理 warning 先单独一轮，别混在功能里</td></tr>
+            <tr><td><code>tsc -b</code> 报 <code>TS2345 / TS2307</code></td><td>类型不匹配 / 模块找不到</td><td>看它给的行号；⛔ 别改用 <code>--noEmit</code> 蒙混（那是假通过）</td></tr>
+            <tr><td><code>npm ci</code> 报 <code>EUSAGE</code></td><td>锁文件里缺某个平台的依赖（历史坑）</td><td>读 <code>Dockerfile:9-13</code> 那段注释，别退回 <code>npm install</code></td></tr>
+            <tr><td><code>AssertionError [ERR_ASSERTION]</code></td><td>测试红，期望与实际不符</td><td>先读第三个参数那句人话，再读 diff</td></tr>
+            <tr><td>git 状态里 <code>"docs/\344\276\235..."</code></td><td>不是坏了，是中文名的八进制转义</td><td>数分母时要连着引号一起算</td></tr>
+            <tr><td>中文提交说明变乱码</td><td>命令行传中文吃了 GBK</td><td>写进文件，用 <code>git commit -F 文件</code></td></tr>
+            <tr><td>页面整片发灰／居中／间距怪</td><td>渲染换了内容没换 class（排版类还在）</td><td>先想 class，再想逻辑——这项目上真栽过一次</td></tr>
+            <tr><td>屏幕上出现 <code>**</code> 或 <code>`</code></td><td>Markdown 被当纯文本塞进了 HTML</td><td>数据里别写 Markdown；守卫测试会数它</td></tr>
+            <tr><td><code>TIME_WAIT</code> 还在，但 <code>LISTENING</code> 是 0</td><td>服务其实已经停了，那只是残余连接</td><td>判"通不通"只认 <code>LISTENING</code> 那列</td></tr>
+          </table>
+        </section>
+
+        <section class="les" id="C">
+          <h2>附录 C · 你手里已有的手册，配哪一课</h2>
+          <p class="aim">
+            这些不是网上下载的，是你自己攒在
+            <span class="ext">E:/website/files/9.html文档/</span> 里的（整个目录 78 件／约 39.9
+            MiB）。它们讲<b>通用</b>链路，我这页讲<b>你这一套</b>；配着看，别只看一边。⚠️
+            它们是本地文件，点不了链接——按路径去资源管理器里双击打开。
+          </p>
+          <table>
+            <tr><th>课</th><th>配这份</th><th>看它的哪部分</th></tr>
+            <tr><td>0</td><td><span class="ext">E:/website/files/9.html文档/vscode配置/2026-8-21/VSCode中国宝宝完全体配置手册_v3.0.md</span></td><td>快捷键与面板布局；同目录那份 <code>settings.json</code> 是你的配置真身</td></tr>
+            <tr><td>1、2、5</td><td><span class="ext">E:/website/files/9.html文档/Web开发完整链路指南_A4打印版 2.0.html</span>（202,824 B）</td><td>「第三部分：后端框架选型指南」之前的链路章节，对着本页第 2 课那张表看</td></tr>
+            <tr><td>3、4</td><td><span class="ext">E:/website/files/9.html文档/Web项目结构拆解指南_A4打印版 3.0.html</span>（68,246 B）</td><td>「第三部分：后端项目拆解」——用它校准：你项目里 <code>routes/services/db</code> 三层的分工是不是通用的那种</td></tr>
+            <tr><td>6、7 与附录 B</td><td><span class="ext">E:/website/files/9.html文档/Web项目问题排查与解决指南 4.0.html</span>（74,280 B）</td><td>「第三部分：后端问题排查」；本页附录 B 专收<b>你这套系统真报过的</b></td></tr>
+            <tr><td>7</td><td><span class="ext">E:/website/files/9.html文档/全栈运维手册_整合版.html</span>（68,888 B）</td><td>服务器运维与故障排查；本机 Docker 那套看 <span class="ext">E:/website/compose/SERVER-OPS.md</span></td></tr>
+            <tr><td>第 9 课之后想深挖算法</td><td><span class="ext">E:/website/files/9.html文档/算法知识大全.html</span>（77,193 B）与 <span class="ext">E:/website/files/9.html文档/三个网站项目算法选择完整指南.html</span></td><td>通用算法分类；你项目里那条"规则初筛→算法重排→Top N"读 <span class="loc">backend/services/recommendEngine.js</span>（1,815 行，最后才碰它）</td></tr>
+            <tr><td>规矩本身</td><td><span class="ext">E:/website/files/9.html文档/开发规则/1.全局规则/3.全局规则_融合版v4.md</span></td><td>你自己写的那 40 条硬规矩——本页第 9、10 课那三条纪律就是它的一部分投影</td></tr>
+            <tr><td>三站对照</td><td><span class="ext">E:/website/files/9.html文档/三站知识库·整合超大版_A4打印版 1.0.html</span>（1,022,897 B，最大那份）</td><td>别当教材读，当字典查</td></tr>
+          </table>
+          <p>
+            还有两处值得知道：
+            <span class="ext">E:/website/1.my-first-website</span>（23,697 行）与
+            <span class="ext">E:/website/2.my-two-website</span>（19,977 行）是同一套路子的另外两个项目，
+            <b>站2 最小，最适合"读一个我没参与过的项目"</b>这种练习；<code>站1</code> 里面那个 12
+            万行的 <code>obsidian\.obsidian\plugins\</code> 是别人写的插件，不算它的代码，别被行数吓到。
+          </p>
+        </section>
+
+        <section class="les" id="D">
+          <h2>附录 D · 卡住了怎么开口问（包括问 AI）</h2>
+          <p class="aim">你提问的质量决定你拿回的东西的质量。四段话，照抄形状：</p>
+          <ol>
+            <li><b>我要什么</b>：一句话说清结果（"把后台收款金额从 99 改成 88，并且前端跟着变"）。</li>
+            <li><b>它在哪</b>：文件＋行号（<code>backend/routes/payment.js:44</code> 这种），别说"那个付款的地方"。</li>
+            <li><b>我已经试过什么</b>：跑过哪条命令、回什么、我看到的现象是什么。</li>
+            <li><b>不许动的边界</b>：例如"别碰活库、别动服务器、口令我不给你"。</li>
+          </ol>
+          <p>反面样子（一句话就能看出为什么得不到好答案）："页面打不开，帮我看看"。⇒ 哪个页面、什么地址、报什么、你点过什么，全空。</p>
+          <div class="tip">
+            还有一条：<b>别人（包括我）给你的数，自己重跑一遍才算你的。</b>这页里每个行号、每条命令的结果，我都在自己机器上跑过；
+            但你看到"我跑出的读数"时，请把它当<b>形状参考</b>，不要当你的台账数字——这台机器只有你点过的才算点过。
+          </div>
+        </section>
+
+        <script>
+          ;(function () {
+            var KEY = 'learn-checks-v1'
+            var boxes = Array.prototype.slice.call(document.querySelectorAll('label.chk input[type=checkbox]'))
+            var saved = {}
+            try {
+              saved = JSON.parse(localStorage.getItem(KEY) || '{}') || {}
+            } catch (e) {
+              saved = {}
+            }
+            function paint() {
+              var n = 0
+              boxes.forEach(function (b) {
+                var lab = b.closest('label')
+                if (b.checked) {
+                  n++
+                  if (lab) lab.classList.add('on')
+                } else if (lab) {
+                  lab.classList.remove('on')
+                }
+              })
+              var bar = document.getElementById('prog')
+              var txt = document.getElementById('progn')
+              if (bar) bar.style.width = boxes.length ? ((n / boxes.length) * 100).toFixed(1) + '%' : '0'
+              if (txt) txt.textContent = n + ' / ' + boxes.length + ' 项已打卡'
+            }
+            boxes.forEach(function (b) {
+              var k = b.getAttribute('data-k')
+              if (saved[k]) b.checked = true
+              b.addEventListener('change', function () {
+                if (b.checked) saved[k] = 1
+                else delete saved[k]
+                try {
+                  localStorage.setItem(KEY, JSON.stringify(saved))
+                } catch (e) {
+                  /* 隐私模式下存不下，不拦打卡本身 */
+                }
+                paint()
+              })
+            })
+            paint()
+
+            document.querySelectorAll('pre').forEach(function (pre) {
+              var btn = pre.querySelector('.cp')
+              if (!btn) return
+              btn.addEventListener('click', function () {
+                var code = pre.querySelector('code')
+                var text = code ? code.textContent : ''
+                function done(ok) {
+                  btn.textContent = ok ? '已复制' : '手动选'
+                  setTimeout(function () {
+                    btn.textContent = '复制'
+                  }, 1600)
+                }
+                if (navigator.clipboard && navigator.clipboard.writeText) {
+                  navigator.clipboard.writeText(text).then(
+                    function () {
+                      done(true)
+                    },
+                    function () {
+                      fallback()
+                    }
+                  )
+                } else fallback()
+                function fallback() {
+                  var ta = document.createElement('textarea')
+                  ta.value = text
+                  ta.style.position = 'fixed'
+                  ta.style.left = '-9999px'
+                  document.body.appendChild(ta)
+                  ta.select()
+                  var ok = false
+                  try {
+                    ok = document.execCommand('copy')
+                  } catch (e) {
+                    ok = false
+                  }
+                  document.body.removeChild(ta)
+                  done(ok)
+                }
+              })
+            })
+
+            var links = Array.prototype.slice.call(document.querySelectorAll('nav.toc a'))
+            var map = {}
+            links.forEach(function (a) {
+              var id = a.getAttribute('href').slice(1)
+              var el = document.getElementById(id)
+              if (el) map[id] = a
+            })
+            function setActive(id) {
+              links.forEach(function (a) {
+                a.classList.remove('here')
+              })
+              if (map[id]) map[id].classList.add('here')
+            }
+            if ('IntersectionObserver' in window) {
+              var seen = {}
+              var io = new IntersectionObserver(
+                function (entries) {
+                  entries.forEach(function (en) {
+                    seen[en.target.id] = en.isIntersecting ? en.intersectionRatio : 0
+                  })
+                  var best = null
+                  var bestv = 0
+                  Object.keys(seen).forEach(function (k) {
+                    if (seen[k] > bestv) {
+                      bestv = seen[k]
+                      best = k
+                    }
+                  })
+                  if (best && bestv > 0) setActive(best)
+                },
+                { rootMargin: '-60px 0px -55% 0px', threshold: [0, 0.25, 0.5, 1] }
+              )
+              Object.keys(map).forEach(function (id) {
+                io.observe(document.getElementById(id))
+              })
+            }
+            links.forEach(function (a) {
+              a.addEventListener('click', function (ev) {
+                var id = a.getAttribute('href').slice(1)
+                var el = document.getElementById(id)
+                if (!el) return
+                ev.preventDefault()
+                // 先请求平滑滚。⚠️ 有些环境不认 behavior:'smooth'（系统关了动画、
+                // 或这台机器这类被程序驱动的浏览器）——那时点了跟没点一样。
+                // 所以 260 ms 后量一次位置：没动就直接跳过去，宁可不帅也不能不跳。
+                var sc = document.scrollingElement || document.documentElement
+                var from = sc.scrollTop
+                el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+                setActive(id)
+                setTimeout(function () {
+                  if (Math.abs(sc.scrollTop - from) < 4) el.scrollIntoView({ block: 'start' })
+                }, 260)
+              })
+            })
+          })()
+        </script>
+
+      </main>
+    </div>
+    <footer>
+      本页由站3 后台路由 <code>/admin/learn</code> 发出；正文里所有蓝底行号都由仓库测试
+      <code>backend/test/learnPage.test.js</code> 逐条核过：文件在场、行号不越界。
+    </footer>
+  </body>
+</html>

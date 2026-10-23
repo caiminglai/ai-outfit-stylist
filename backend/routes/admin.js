@@ -19,7 +19,7 @@ const router = express.Router()
 // 100 次/15 分钟的总闸挂在 `/api/` 前缀上,一条都管不到这里 —— 挂之前后台是裸奔状态:
 // 后台脚本循环写错、或 admin token 泄漏,都能不打招呼地把 SQLite 读写打满。
 // 60 秒 600 次(平均每秒 10 次)是人工点后台碰不到的量级,只挡跑飞,不影响正常操作。
-// 只挂 `/api` 子树:两个后台页面(`/`、`/login`)与 static JS 不吃这道闸。
+// 只挂 `/api` 子树:三个后台页面(`/`、`/login`、`/learn`)与 static JS 不吃这道闸。
 const adminApiLimiter = rateLimit({
   windowMs: 60 * 1000,
   max: 600,
@@ -53,6 +53,20 @@ router.get('/login', (req, res) => {
     return res.sendFile(htmlPath)
   }
   return res.status(404).send('<h1>登录页面未找到</h1>')
+})
+
+// 编程教程页:整份内容在 templates/learn-to-code.html 里,不读库、不调任何接口,
+// 所以它和 `/`、`/login` 一样不吃后台限流闸,也不加 adminLoginRequired —— 页面正文讲的是
+// "这个项目怎么读、怎么改",不含口令、密钥或任何只有登录者能看的数据。
+// ⚠️ backend/.prettierignore 与 eslint.config.js 都排除了 templates/ 与 static/,
+// 这份 HTML 排版与内容没有任何门禁兜底;它的行号锚点由 backend/test/learnPage.test.js
+// 逐条对着真实文件核验(文件在场 + 行号不越界),正文缺课或锚点越界会把测试跑红。
+router.get('/learn', (req, res) => {
+  const htmlPath = path.join(ADMIN_DIR, 'learn-to-code.html')
+  if (fs.existsSync(htmlPath)) {
+    return res.sendFile(htmlPath)
+  }
+  return res.status(404).send('<h1>learn-to-code.html 未找到</h1>')
 })
 
 // ============================================================

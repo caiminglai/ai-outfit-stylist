@@ -112,7 +112,7 @@ const dimCn = (n) => (CN_NUM[n] || String(n)) + '维'
  * 这决定下一步是该引导用户填星级，还是该修快照的写入路径。
  *
  * 三维里少任何一维（或那一格不是 0~100 的数）就整条剔除（listwise）：凸组合权重要求三维同尺，
- * 拿"缺 color 当 0 分"去拟合等于给缺测补分，直接违反 docs/依据/README.md:61「缺测不出分」（硬规矩 2）。
+ * 拿"缺 color 当 0 分"去拟合等于给缺测补分，直接违反 docs/依据/README.md:64「缺测不出分」（硬规矩 2）。
  */
 function collectSamples(rows, target, dims = DIM_KEYS) {
   const spec = TARGETS[target]

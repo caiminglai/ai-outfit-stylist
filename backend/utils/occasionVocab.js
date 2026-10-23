@@ -8,7 +8,7 @@
  * 现在日记（`routes/wardrobe.js`）与人×衣服评分（`services/itemFeedback.js`）共用这一个函数。
  *
  * ⚠️ 取不到词（老库这一格为空）时**只许留空**，不收自由文本——宁缺不猜，缺测不出分那条
- * （`docs/依据/README.md:61`，硬规矩 2）。
+ * （`docs/依据/README.md:64`，硬规矩 2）。
  */
 const db = require('../db/init')
 

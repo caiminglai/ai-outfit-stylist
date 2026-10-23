@@ -499,6 +499,23 @@ server.on('error', (err) => {
   }
 })
 
+// ===== S6 滚动清理（10-19 蓝图短期项，10-23 落）=====
+// 免费场推荐样本保留 90 天，付费报告行永久豁免（判据只有 services/paidReport.js 的 IS_REPORT 一把尺子）。
+// 启动 10 秒后清一次、之后每 6 小时一次；两个计时器都 .unref()，⛔ 不许拖住优雅关闭或"只 require 不 listen"的测试。
+// 清理失败不能带崩服务：吞掉并 warn 一行，下一轮定时再试。
+const LOG_PRUNE_EVERY_MS = 6 * 60 * 60 * 1000
+function runLogPrune(tag) {
+  try {
+    const { pruneOldLogs } = require('./services/paidReport')
+    const n = pruneOldLogs(90)
+    if (n > 0) logMsg(`[清理] ${tag}：删除超过 90 天的推荐样本 ${n} 行（报告行豁免）`)
+  } catch (err) {
+    console.warn(`[清理] 推荐样本滚动清理失败（${tag}）:`, err.message)
+  }
+}
+setTimeout(() => runLogPrune('启动首清'), 10000).unref()
+setInterval(() => runLogPrune('定时'), LOG_PRUNE_EVERY_MS).unref()
+
 // ===== 优雅关闭(SIGINT/SIGTERM)=====
 // 收到 Ctrl+C 或 kill 信号时:停止接受新连接 → 等待已有请求完成 → WAL checkpoint(TRUNCATE) → 退出
 let isShuttingDown = false

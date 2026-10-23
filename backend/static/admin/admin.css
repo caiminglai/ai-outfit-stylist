@@ -71,6 +71,24 @@ nav button.active {
   color: var(--accent); border-color: var(--accent);
   background: var(--accent-dim);
 }
+/* 指向 /admin/learn 教程页的那颗。⛔ 不能写成 .nav-btn：
+   admin.html 里的循环 document.querySelectorAll('.nav-btn') 会给它绑 switchSection，
+   而它是跳走的链接不是切面板——带错 class 会让后台点它时先把当前面板清成空白。 */
+nav a.nav-link {
+  display: inline-flex; align-items: center;
+  border: 1px dashed var(--purple); background: var(--purple-dim);
+  color: var(--purple); padding: 6px 14px; border-radius: 6px;
+  font: 500 12px/1 inherit; text-decoration: none; cursor: pointer;
+  transition: all .15s;
+}
+nav a.nav-link:hover { color: #fff; border-style: solid; border-color: var(--purple); }
+/* 面板里指向其他后台页的一句话说明（如路线页末尾指教程页那句） */
+p.note {
+  margin: 18px 0 0; padding: 10px 12px;
+  border-left: 3px solid var(--purple); border-radius: 0 6px 6px 0;
+  background: var(--panel-2); color: var(--muted); font-size: 12px; line-height: 1.7;
+}
+p.note a { color: var(--purple); }
 
 /* ── 统计概览条 ── */
 #stats-bar {
@@ -504,4 +522,27 @@ pre.code::-webkit-scrollbar-thumb { background: var(--line); border-radius: 4px;
 }
 .model-card-actions {
   display: flex; gap: 4px;
+}
+
+/* ── 后台「编程水平与独立路线」页的行内代码（2026-10-22 第五十九轮新建）──
+   admin.css 原来只有 pre.code（块级，第 369 行），没有裸 code 选择器 ⇒ 数据里的
+   <code>路径</code> 落到浏览器默认样式，字号偏大且和深色卡片不搭。
+   只挂 #skill-body 前缀：本页之外没有任何后台文件写过 <code>（全仓 grep 现量 0 处），
+   所以这条规则改不到别的页面。 */
+#skill-body code {
+  font: 12px/1.5 "SF Mono", Consolas, "Courier New", monospace;
+  background: #1e293b;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 1px 4px;
+  color: #e2e8f0;
+  word-break: break-all;
+}
+
+/* 路线页的十颗×五档自评旋钮：全站 .btn-sm 是 28×22（真浏览器实测），
+   这一页要点 50 次，比别的后台页密得多 ⇒ 只在本页把它们撑到 34×30。
+   同样挂在 #skill-body 下，别的页面不动。 */
+#skill-body .btn-sm {
+  min-width: 34px;
+  min-height: 30px;
 }

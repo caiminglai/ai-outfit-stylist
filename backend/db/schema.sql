@@ -345,7 +345,7 @@ CREATE TABLE IF NOT EXISTS user_wardrobe (
   -- 10-19 第二阶段「最后一公里」：四格**成品实测尺寸**（软尺平铺量，单位 cm，量法见
   -- services/fitSize.js 的 MEASURE_GUIDE 与 docs/依据/09）。上衣打分从这一轮起只吃这四格，
   -- 不再从 name/style_tags 里猜"宽松""落肩"这类中文词（那是伪量化）。
-  -- ⛔ 一律不设 DEFAULT：NULL 就是"没量"，缺测不出分（docs/依据/README.md:61（硬规矩 2）的同一句）。
+  -- ⛔ 一律不设 DEFAULT：NULL 就是"没量"，缺测不出分（docs/依据/README.md:64（硬规矩 2）的同一句）。
   -- shoulder_cm 成品肩宽（两肩缝点直线距离）／bust_cm 成品胸围（腋下水平绕一周×2 平铺值换算）
   -- ／length_cm 成品衣长（肩颈点到下摆）／waistband_cm 腰头高（收腰缝或下摆收口自身的高度）
   shoulder_cm REAL,
@@ -357,7 +357,7 @@ CREATE TABLE IF NOT EXISTS user_wardrobe (
   -- FIT_TYPE_EASE 区间**中值**估出来，让公式照样跑；估出来的那一维在覆盖率里只按**半格**计
   -- （10-19 第三阶段·模块二那条惩罚因此不会被"选个版型"绕开）。
   -- 优先级：bust_cm 有实测 ⇒ 只认实测，版型那一档不参与算分；两者都没有 ⇒ 这一维缺席。
-  -- ⛔ 同样不设 DEFAULT：NULL＝没选＝不估（docs/依据/README.md:61「缺测不出分」（硬规矩 2））。
+  -- ⛔ 同样不设 DEFAULT：NULL＝没选＝不估（docs/依据/README.md:64「缺测不出分」（硬规矩 2））。
   fit_type TEXT,
   style_tags TEXT,
   season_tags TEXT,
