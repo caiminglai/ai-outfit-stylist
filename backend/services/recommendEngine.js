@@ -1152,7 +1152,7 @@ function rankAndTruncate(list, wardrobeRows, prefProfile = null, collabModel = n
  *
  * 🔴 三条不许改的口径：
  *  ① **深浅（L 与 C）只认档名锚点，⛔ 不吃照片的绝对明度**。合成 Lab 的 L/C 一律取自
- *     `SKIN_TONE_ANCHORS`（C 档手拍表，文件头自注"不是文献值"），照片只贡献色相角 h。
+ *     `SKIN_TONE_ANCHORS`（10-29 起升 B 档：CIE 汇编华裔 404 人分位子样实测，仍非测色仪逐人实测），照片只贡献色相角 h。
  *     理由＝Alipour 2026 实测非受控成像下固定阈值分型 22.9% ＜ 基线 51.3%（`依据/02` §2 第 4 条），
  *     现量反例：`#E8C4B8` 经 `hexToLab` 得 L=81.89，比华裔 P95＝65.87 高 16 个点（`依据/04` §1.4）。
  *     ⛔ 更不许拿人群 P50（L 58.58／C 20.61）去补一个"看起来像实测"的明度——

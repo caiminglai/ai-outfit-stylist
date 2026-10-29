@@ -34,7 +34,7 @@ require.cache[initPath] = {
 const { buildRecommendation } = require('../services/recommendEngine')
 const { writeRecommendationLog, saveArchive } = require('../services/profileArchive')
 const { pruneOldLogs } = require('../services/paidReport')
-const { colorFit } = require('../services/colorMetrics')
+const { colorFit, SKIN_TONE_ANCHORS } = require('../services/colorMetrics')
 const { GARMENT_REF, bodyDeviation, topFitBody } = require('../services/topFitBody')
 const analysisRouter = require('../routes/analysis')
 
@@ -80,7 +80,8 @@ function mkUser(tag) {
 // 一、S1：brighten 中心化新形状（同明度=0.5，暗 40 拉满、亮 40 归零，中段连续）
 // ============================================================
 test('S1：同明度的上衣不再被钉死 0 分，而是中性 50', () => {
-  const r = colorFit('白皙', { L: 68, a: 0, b: 0 })
+  // "同明度"动态跟锚点不写死数值（10-29 重锚定后白皙 L=65.42，旧钉 68 必破）
+  const r = colorFit('白皙', { L: SKIN_TONE_ANCHORS['白皙'].L, a: 0, b: 0 })
   assert.ok(r, 'lab 对象入口应出分')
   assert.strictEqual(r.brighten, 50)
 })

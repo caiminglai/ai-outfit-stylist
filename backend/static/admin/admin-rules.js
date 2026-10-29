@@ -361,8 +361,8 @@ function buildRuleForm(rule) {
   html += '</div>';
 
   html += '<div class="form-row">';
-  html += '<div class="form-group"><label>依据档位</label><select id="rf-evidence">' + evidenceOptionsHtml(g.evidence_level) + '</select>' +
-    '<div style="font-size:11px;color:var(--muted);margin-top:4px;">只有 A/B 两档能对顾客说"科学依据";C 是行业体系、D 是命理,措辞要分开。留空=未标注,按 C 对待。</div></div>';
+  html += '<div class="form-group"><label>依据档位</label><select id="rf-evidence">' + evidenceOptionsHtml(g.evidence_level || 'C') + '</select>' +
+    '<div style="font-size:11px;color:var(--muted);margin-top:4px;">只有 A/B 两档能对顾客说"科学依据";C 是行业体系、D 是命理,措辞要分开。新建规则默认 C;留空=未标注,按 C 对待(2026-10-29 起存量已清零,请显式选档)。</div></div>';
   html += '</div>';
 
   html += '<div class="form-group"><label>规则说明</label><textarea id="rf-description" placeholder="描述该规则的适用场景和推荐逻辑">' + escapeHtml(g.description || '') + '</textarea></div>';

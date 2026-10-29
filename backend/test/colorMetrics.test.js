@@ -157,7 +157,7 @@ test('individualTypologyAngle + itaClass: 肤色越深 ITA 越低', () => {
     Math.abs(individualTypologyAngle({ L: 60, a: 0, b: 10 }) - 45) < 1e-9,
     'ITA 弧度未换成角度',
   )
-  assert.ok(Math.abs(fair - 52.1) < 0.2, `白皙锚点 ITA 应≈52.1°，实测 ${fair}`)
+  assert.ok(Math.abs(fair - 42.4) < 0.2, `白皙锚点 ITA 应≈42.4°（10-29 重锚定后实测 42.38），实测 ${fair}`)
   assert.strictEqual(itaClass(fair), 'light')
   assert.strictEqual(itaClass(null), null)
   assert.strictEqual(itaClass(60), 'very light')
@@ -314,13 +314,13 @@ test('colorFit: hueContrast 恒在 0.5~1.0，遍历 8 档肤色 × 全词表', (
 })
 
 test('colorFit: ΔE00 同色糊合闸门（10-19 第二阶段改切点 15~30）压住贴脸与近脸两撮，仍不新增第四轴', () => {
-  // 现量（10-19 第二阶段复量）：8 档肤色 × 58 色名 = 464 对里
-  // ΔE00<15 的 50 对（10.8%）吃满惩罚、15~30 的 259 对（55.8%）走线性、≥30 的 155 对（33.4%）不动。
+  // 现量（10-29 重锚定后复量，词表已扩）：8 档肤色 × 232 色名 = 1856 对里
+  // ΔE00<15 的 207 对（11.2%）吃满惩罚、15~30 的 971 对（52.3%）走线性、≥30 的 678 对（36.5%）不动。
   // 改前切点是 6/15 ⇒ 只有 50 对受影响、且真实推荐里 ΔE00<15 的 0 条（闸门空转），
   // 判据与出处见 colorMetrics.js 的 FUSION_GATE 注释。
-  const fused = colorFit('偏黄', '大地色') // ΔE00 1.4 ⇒ 吃满惩罚
-  const near = colorFit('白皙', '桃红') // ΔE00 20.8 ⇒ 落在线性区（改前这条完全不受影响）
-  const far = colorFit('偏黄', '藏蓝') // ΔE00 41.7 ⇒ 远离肤色，闸门 1.0
+  const fused = colorFit('偏黄', '大地色') // ΔE00 8.14（10-29 新锚点复量）⇒ 吃满惩罚
+  const near = colorFit('白皙', '桃红') // ΔE00 20.06 ⇒ 落在线性区（改前这条完全不受影响）
+  const far = colorFit('偏黄', '藏蓝') // ΔE00 44.59 ⇒ 远离肤色，闸门 1.0
   assert.strictEqual(fused.fusion_gate, FUSION_GATE.min, `最糊的一对闸门应 ${FUSION_GATE.min}`)
   assert.strictEqual(far.fusion_gate, 1, '远离肤色的上衣不该被闸门压分')
   assert.ok(
@@ -923,11 +923,11 @@ test('skinUndertoneFromHue: 华裔 P25/P75 两个切点各自钉住', () => {
   assert.strictEqual(SKIN_HUE.warm, 64.02)
   assert.strictEqual(SKIN_HUE.min, 36.36)
   assert.strictEqual(SKIN_HUE.max, 78.05)
-  assert.strictEqual(skinUndertoneFromHue(49.76), '冷皮') // 冷皮锚点自己的 h
+  assert.strictEqual(skinUndertoneFromHue(51.82), '冷皮') // 冷皮锚点自己的 h
   assert.strictEqual(skinUndertoneFromHue(52.86), '冷皮') // 恰在 P25 ⇒ 含边界
-  assert.strictEqual(skinUndertoneFromHue(60.26), '自然') // 白皙锚点 60.26
+  assert.strictEqual(skinUndertoneFromHue(58.61), '自然') // 白皙锚点 58.61
   assert.strictEqual(skinUndertoneFromHue(64.02), '暖皮') // 恰在 P75 ⇒ 含边界
-  assert.strictEqual(skinUndertoneFromHue(74.36), '暖皮') // 偏黄锚点 74.36（在 P95 之外、闸内）
+  assert.strictEqual(skinUndertoneFromHue(65.42), '暖皮') // 偏黄锚点 65.42（过 P75 切点、闸内）
 })
 
 test('skinUndertoneFromHue: 过不了 h 闸或非有限数一律回 null（缺测不出档）', () => {
@@ -944,7 +944,10 @@ test('skinUndertoneFromHue: 过不了 h 闸或非有限数一律回 null（缺�
   assert.ok(skinUndertoneFromHue(SKIN_HUE.max))
 })
 
-test('skinUndertoneFromHue: 8 个手拍锚点按自己的 h° 过线必须自洽（1 冷／3 自然／4 暖）', () => {
+test('skinUndertoneFromHue: 8 个锚点按自己的 h° 过线必须自洽（1 冷／5 自然／2 暖）', () => {
+  // 10-29 重锚定改口径：CIE 华裔实测最深人群 h 全落中性区（54.9~59.9），"越深越暖"被数据推翻。
+  // 故冷暖语义档（冷皮／暖皮／偏黄）仍钉冷暖归属；深浅轴档（白皙/自然白/自然/小麦色/古铜色）
+  // 只约束"过 min/max 闸"，不约束冷暖——它们的 h 落中性区是数据原样。
   const got = { 冷皮: [], 自然: [], 暖皮: [] }
   for (const [name, v] of Object.entries(SKIN_TONE_ANCHORS)) {
     const h = (Math.atan2(v.b, v.a) * 180) / Math.PI
@@ -953,8 +956,8 @@ test('skinUndertoneFromHue: 8 个手拍锚点按自己的 h° 过线必须自洽
     got[tone].push(name)
   }
   assert.deepStrictEqual(got['冷皮'], ['冷皮'])
-  assert.deepStrictEqual(got['自然'].sort(), ['自然', '自然白', '白皙'].sort())
-  assert.deepStrictEqual(got['暖皮'].sort(), ['偏黄', '小麦色', '暖皮', '古铜色'].sort())
+  assert.deepStrictEqual(got['自然'].sort(), ['白皙', '自然白', '自然', '小麦色', '古铜色'].sort())
+  assert.deepStrictEqual(got['暖皮'].sort(), ['暖皮', '偏黄'].sort())
 })
 
 // ============================================================
