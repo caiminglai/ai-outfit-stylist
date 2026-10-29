@@ -19,7 +19,12 @@ CREATE TABLE IF NOT EXISTS users (
   phone TEXT UNIQUE,
   nickname TEXT,
   gender TEXT,
-  created_at TEXT DEFAULT (datetime('now'))
+  created_at TEXT DEFAULT (datetime('now')),
+  -- 会话滚动活跃时间（middleware/auth.js 认证命中时刷新，每小时最多写一次）。
+  -- 本轮只记录、不执法：老库/新建行此列为 NULL＝从没观测过活跃，
+  -- 不能据此把在线用户踢下线；等积累出可靠的活跃分布后，下一轮再按
+  -- "长时间无活跃即失效"收紧（对比 customer_sessions.expires_at 的口径）。
+  last_active_at TEXT
 );
 CREATE INDEX IF NOT EXISTS ix_users_session_id ON users(session_id);
 
@@ -296,6 +301,21 @@ CREATE TABLE IF NOT EXISTS feedback_events (
   group_id INTEGER NOT NULL REFERENCES rule_groups(id),
   category TEXT,
   signal TEXT NOT NULL,
+  -- 10-19 第三阶段·模块三：两把星级（1~5），给"权重回归"当因变量用。
+  -- ⛔ 不设 DEFAULT、也不做 CHECK 约束：NULL＝没打星（老库补列后所有历史行都是 NULL，
+  --    这正是"架构先搭好、数据后流进来"的形态）；范围 1~5 由路由层校验并回一句人话。
+  -- aesthetic_score＝这套搭配整体好不好看；fit_score＝上衣穿在身上合不合身。
+  -- 两把星分开设是因为它们打的是**不同维度**：好看但显胖、合身但土气都是真实反馈，
+  -- 合成一把会把色彩那一维和廓形那一维搅成一团（回归出来的权重就没法解释）。
+  aesthetic_score INTEGER,
+  fit_score INTEGER,
+  -- 打分那一刻的三维分快照（JSON：{rule, color, body, total, coverage}，认不出形状就存 NULL）。
+  -- 为什么必须快照而不是回头去查：权重常量与规则库会继续改，**今天的公式配不上昨天的评价**，
+  -- 拿现在的分去回归历史星级等于把两组不同尺子的数混在一起（08 §9.3 的标定协议第一步就是这个）。
+  rank_snapshot TEXT,
+  -- 这条评价具体落在哪一件衣服上（user_wardrobe.id）。⛔ 不建 FOREIGN KEY：
+  -- 衣橱行会被删（用户清空衣柜），反馈要留着当回归样本，不能让删除把训练数据一起带走。
+  wardrobe_item_id INTEGER,
   updated_at TEXT DEFAULT (datetime('now')),
   UNIQUE(user_id, group_id)
 );
@@ -318,8 +338,27 @@ CREATE TABLE IF NOT EXISTS user_wardrobe (
   -- 上衣这两格只能由衣橱主人自己填（库里原来没有，缺测就不打分）：
   -- fit_style 版型档（合体/宽松，对应 Sakata 2020 实测的两种剪裁走向）；
   -- fabric_weight 面料厚薄（薄/中/厚，决定同一件上衣的体量感）。
+  -- ⚠️ 10-19 第三阶段起 fit_style **只当展示标签**，不再进任何算式：两档值域（合体/宽松）撑不起
+  --    "修身/合身/宽松/廓形"四档松量，同一件事留两个真相源迟早打架 ⇒ 评分列换成下面的 fit_type。
   fit_style TEXT,
   fabric_weight TEXT,
+  -- 10-19 第二阶段「最后一公里」：四格**成品实测尺寸**（软尺平铺量，单位 cm，量法见
+  -- services/fitSize.js 的 MEASURE_GUIDE 与 docs/依据/09）。上衣打分从这一轮起只吃这四格，
+  -- 不再从 name/style_tags 里猜"宽松""落肩"这类中文词（那是伪量化）。
+  -- ⛔ 一律不设 DEFAULT：NULL 就是"没量"，缺测不出分（docs/依据/README.md:64（硬规矩 2）的同一句）。
+  -- shoulder_cm 成品肩宽（两肩缝点直线距离）／bust_cm 成品胸围（腋下水平绕一周×2 平铺值换算）
+  -- ／length_cm 成品衣长（肩颈点到下摆）／waistband_cm 腰头高（收腰缝或下摆收口自身的高度）
+  shoulder_cm REAL,
+  bust_cm REAL,
+  length_cm REAL,
+  waistband_cm REAL,
+  -- 10-19 第三阶段「注水」：真实用户不会随身带软尺，量不了四格的人至少要能选一档版型。
+  -- fit_type ∈ 修身/合身/宽松/廓形 ⇒ 松量（成品胸围 − 净胸围）按 services/topFitBody.js 的
+  -- FIT_TYPE_EASE 区间**中值**估出来，让公式照样跑；估出来的那一维在覆盖率里只按**半格**计
+  -- （10-19 第三阶段·模块二那条惩罚因此不会被"选个版型"绕开）。
+  -- 优先级：bust_cm 有实测 ⇒ 只认实测，版型那一档不参与算分；两者都没有 ⇒ 这一维缺席。
+  -- ⛔ 同样不设 DEFAULT：NULL＝没选＝不估（docs/依据/README.md:64「缺测不出分」（硬规矩 2））。
+  fit_type TEXT,
   style_tags TEXT,
   season_tags TEXT,
   occasion_tags TEXT,
@@ -330,10 +369,17 @@ CREATE TABLE IF NOT EXISTS user_wardrobe (
   price REAL,
   is_favorite INTEGER DEFAULT 0,
   image_url TEXT,
+  -- 第五阶段·第一步「门店扫码快速录入」（2026-10-20）：吊牌条码／店内编号原样存这一格。
+  -- ⛔ 不设 DEFAULT：NULL＝这件不是扫来的（与四格实测尺寸同一口径）。
+  -- ⛔ 不建唯一索引：同一位顾客可以有两件同款衣服，游客还共用会话——唯一索引会把第二件直接顶掉。
+  --    "扫重复了"这件事由录入框查库时提醒（GET /api/wardrobe/sku），不在写入口拦。
+  sku TEXT,
   created_at TEXT DEFAULT (datetime('now')),
   updated_at TEXT DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS ix_user_wardrobe_session_id ON user_wardrobe(session_id);
+-- ⚠️ sku 的索引不写在这里：老库跑到这一行时那一列还没补上，CREATE INDEX 会直接报错。
+--    它由 init.js 的 initMissingColumns() 在补列之后建（与那里 ix_rule_groups_source_key 同一套路）。
 
 -- 搭配组合表
 CREATE TABLE IF NOT EXISTS wardrobe_outfits (
@@ -347,6 +393,18 @@ CREATE TABLE IF NOT EXISTS wardrobe_outfits (
   rating INTEGER,
   notes TEXT,
   is_favorite INTEGER DEFAULT 0,
+  -- 2026-10-21 第十一阶段·第一步（docs/依据/19 §二）：日记终于能记住"哪天穿的、那天多冷"。
+  -- 这三格是"按天气学偏好"这条链的**源头**——没有它们，偏好层拿到的只有提交时间。
+  -- ⛔ 一律不设 DEFAULT：NULL＝没记＝那一维整块缺席（docs/依据/README.md 硬规矩 2「缺测不出分」）。
+  -- wear_date 是**穿着那天**（YYYY-MM-DD，按东八区日历日），⛔ 不许拿 created_at 顶替：
+  --   补记昨天的穿搭会被 created_at 记成今天，那是假数据不是缺数据（19 §二 表下第 1 条）。
+  -- feels_like_c 是当天体感温度（℃）；weather_level 是五档之一，词表唯一真相源在
+  --   services/weatherService.js 的 WEATHER_LEVELS（寒冷/偏凉/舒适/偏热/炎热），⛔ 不在别处抄第二份。
+  -- 老库靠 db/init.js 的 MISSING_COLUMNS 补列（schema.sql 的 CREATE TABLE IF NOT EXISTS
+  --   改不动已建好的表）；wear_date 的索引也在那边补列之后建（19 §二 第 3 条说明了为什么）。
+  wear_date TEXT,
+  feels_like_c REAL,
+  weather_level TEXT,
   created_at TEXT DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS ix_wardrobe_outfits_session_id ON wardrobe_outfits(session_id);
@@ -491,6 +549,15 @@ CREATE INDEX IF NOT EXISTS ix_face_features_user_id ON face_features(user_id);
 CREATE INDEX IF NOT EXISTS ix_face_features_photo_id ON face_features(photo_id);
 CREATE INDEX IF NOT EXISTS ix_recommendations_user_id ON recommendations(user_id);
 CREATE INDEX IF NOT EXISTS ix_tryon_results_user_id ON tryon_results(user_id);
+-- 下面五张每用户表此前只有 session_id 索引，而「删除我的全部数据」
+-- (routes/analysis.js) 与后台按人取数都走 WHERE user_id = ? ⇒ 全表扫描。
+-- recommendation_logs(user_id) 不在这里建：那列是老库补列迁移加的，索引在 db/init.js 补列后建；
+-- profile_drafts 不用建：user_id 本身就是 INTEGER PRIMARY KEY（rowid 别名，天然唯一索引）。
+CREATE INDEX IF NOT EXISTS ix_user_wardrobe_user_id ON user_wardrobe(user_id);
+CREATE INDEX IF NOT EXISTS ix_wardrobe_outfits_user_id ON wardrobe_outfits(user_id);
+CREATE INDEX IF NOT EXISTS ix_shopping_wishlist_user_id ON shopping_wishlist(user_id);
+CREATE INDEX IF NOT EXISTS ix_user_cosmetics_user_id ON user_cosmetics(user_id);
+CREATE INDEX IF NOT EXISTS ix_user_accessories_user_id ON user_accessories(user_id);
 
 -- ============================================================
 -- 收款凭证（用户上传付款截图 -> 后台人工审核放行）
@@ -579,3 +646,42 @@ CREATE TABLE IF NOT EXISTS app_settings (
   value TEXT NOT NULL,
   updated_at TEXT DEFAULT (datetime('now'))
 );
+
+-- ============================================================
+-- 人 × 衣服 的评分表（第九阶段·第一步，规范＝docs/依据/17 §二）
+-- 为什么新建一张表而不改 feedback_events：那张表的 group_id 是
+-- `NOT NULL REFERENCES rule_groups(id)`（:301）＋`UNIQUE(user_id, group_id)`（:320），
+-- 而衣橱来源的候选结构上就没有规则号（recommendEngine.js 里那条 `group_id: null`），
+-- 让它收"人×衣服"要放宽 NOT NULL 并重建表——SQLite 没有 DROP NOT NULL，
+-- 风险全压在服务器那份被 skip-worktree 钉住的运行库上。加法建表回滚只要 DROP TABLE。
+-- 两张表语义不同、不许混用：feedback_events＝这条规则准不准，item_feedback＝这件衣服你穿得怎么样。
+-- ============================================================
+CREATE TABLE IF NOT EXISTS item_feedback (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  -- 唯一身份。有登录 user_id 就 'u'+id，游客退 's'+session_id，两者都没有＝写入口 400。
+  -- ⚠️ 为什么不直接用 user_id 建唯一键：user_wardrobe 现量 10 行里 user_id 只有 1 行非空，
+  --    而 SQLite 的 UNIQUE 不把 NULL 当相等 ⇒ 拿它当键会让所有游客的打分互相覆盖或全变重复行。
+  -- ⚠️ 代价如实写进 17 §八 第 2 条：同一人登录前的游客期打分不会并进来（两把键不同）。
+  actor_key TEXT NOT NULL,
+  user_id INTEGER REFERENCES users(id),
+  session_id TEXT,
+  wardrobe_item_id INTEGER NOT NULL REFERENCES user_wardrobe(id),
+  -- 场合只收 rule_conditions 里那五个受控词（上班通勤/约会聚会/婚礼宴会/运动健身/居家休闲），
+  -- 造了新词规则侧命不上＝采了也用不上（同 16 §〇 那句）。没给＝NULL，不猜。
+  occasion TEXT,
+  -- 三档与 ruleFeedback.js:25 的 SIGNALS 同一把尺子。这一张表里没有"这条规则好不好"的语义，
+  -- 所以 signal 允许 NULL（只打星、没表态是常态），⛔ 但绝不回写 rule_groups 的好评差评数。
+  signal TEXT,
+  -- 1~5 整数，越界由写入口 400 说破（复用 ruleFeedback 的 starValue/scoreError 那把尺子）
+  aesthetic_score INTEGER,
+  fit_score INTEGER,
+  -- 打分那一刻的 rankDims 出账（JSON）。⛔ 与 feedback_events 那条不同：这里只认 color/body 两维，
+  -- 两维全空才存 NULL（三维齐的候选在现在的代码里一条都造不出来，见 17 §一 那四条证据）。
+  rank_snapshot TEXT,
+  created_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT DEFAULT (datetime('now'))
+);
+-- 一人一衣只留最新一行：覆盖不叠加（与 feedback_events 同一哲学——好评率不能被重复点击灌大）
+CREATE UNIQUE INDEX IF NOT EXISTS ux_item_feedback_actor_item ON item_feedback(actor_key, wardrobe_item_id);
+CREATE INDEX IF NOT EXISTS ix_item_feedback_item ON item_feedback(wardrobe_item_id);
+CREATE INDEX IF NOT EXISTS ix_item_feedback_occasion ON item_feedback(occasion);

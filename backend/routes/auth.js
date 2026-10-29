@@ -6,7 +6,7 @@ const express = require('express')
 const bcrypt = require('bcryptjs')
 const db = require('../db/init')
 const { sendSuccess, sendError } = require('../utils/response')
-const { generateUUID } = require('../utils/common')
+const { generateUUID, asText } = require('../utils/common')
 const {
   generateAdminToken,
   verifyAdminToken,
@@ -18,7 +18,20 @@ const { rateLimit } = require('../middleware/rateLimit')
 const router = express.Router()
 
 // 登录类端点限流：每分钟最多 10 次
+// 三个入口各用各的实例：rateLimit 的桶按实例内部 Map 计,过去 /guest、/login、/admin/login
+// 共用同一个 loginLimiter ⇒ 同一个 IP 上"建游客会话"的次数会去吃"正式登录/管理员登录"的额度,
+// 正常用户连点几下就被误锁。拆开各自 10 次,既保住防爆破,又不再互相顶包。
+const guestLimiter = rateLimit({
+  windowMs: 60000,
+  max: 10,
+  message: '登录尝试过于频繁，请稍后再试',
+})
 const loginLimiter = rateLimit({
+  windowMs: 60000,
+  max: 10,
+  message: '登录尝试过于频繁，请稍后再试',
+})
+const adminLoginLimiter = rateLimit({
   windowMs: 60000,
   max: 10,
   message: '登录尝试过于频繁，请稍后再试',
@@ -46,6 +59,9 @@ const MERGE_BY_USER = [
   'recommendations',
   'tryon_results',
   'deposits',
+  // 微信支付订单也按 user_id 归人:漏了它,游客期付的款过户后仍挂在旧游客身份下,
+  // 账号侧查不到这笔单、对账断线,而且这行外键会挡在最下面的 DELETE FROM users 前
+  'payment_orders',
   'creator_works',
 ]
 
@@ -56,6 +72,9 @@ const MERGE_BY_USER_UNIQUE = [
   ['face_profiles', null],
   ['profile_tags', 'tag_key'],
   ['feedback_events', 'group_id'],
+  // 表单草稿每人一行(user_id 主键)。不并则:过户后账号读 GET /archive 看不到游客期攒的草稿,
+  // 且这条外键挡住游客行删除,库里留下一个谁也不并的僵尸身份
+  ['profile_drafts', null],
 ]
 
 /**
@@ -116,10 +135,12 @@ function mergeGuestIntoAccount(guestSessionId, accountUserId, accountSessionId) 
 }
 
 /** 游客登录 */
-router.post('/guest', loginLimiter, (req, res) => {
+router.post('/guest', guestLimiter, (req, res) => {
   try {
     const sessionId = generateUUID()
-    const nickname = req.body?.nickname || null
+    // nickname 是客户端随便写的：对象/数组/布尔原样绑进 SQLite 会当场抛 ⇒ 变 500。
+    // 与 /register 同一口径，只收文本并截到 40
+    const nickname = asText(req.body?.nickname).slice(0, 40) || null
 
     const result = db
       .prepare('INSERT INTO users (session_id, nickname) VALUES (?, ?)')
@@ -235,10 +256,12 @@ router.post('/login', loginLimiter, (req, res) => {
 })
 
 /** 管理员登录 */
-router.post('/admin/login', loginLimiter, (req, res) => {
+router.post('/admin/login', adminLoginLimiter, (req, res) => {
   try {
-    const username = (req.body?.username || 'admin').trim()
-    const password = req.body?.password || ''
+    // 与 register/login 同一把尺子:先 String() 兜住,否则 username 传成数字时
+    // (123 || 'admin') 是 123 ⇒ 123.trim ⇒ TypeError ⇒ 入参错被读成 500
+    const username = String(req.body?.username ?? 'admin').trim() || 'admin'
+    const password = String(req.body?.password ?? '')
 
     if (!password) {
       return sendError(res, '请输入密码', 400)
@@ -283,19 +306,26 @@ router.get('/admin/verify', (req, res) => {
   }
 })
 
-/** 会员账号列表：后台重置密码的入口，只出身份和手机号，密码哈希绝不出库 */
+/**
+ * 会员账号列表：后台重置密码的入口，只出身份和手机号，密码哈希绝不出库
+ * total 是真 COUNT(*)，accounts 是被 ACCOUNTS_LIST_LIMIT 截过的最近 500 条；
+ * 原来 total 直接取 rows.length，等于把「接口上限」冒充成「账号总数」。
+ */
+const ACCOUNTS_LIST_LIMIT = 500
 router.get('/admin/accounts', adminLoginRequired, (req, res) => {
   try {
+    const totalRow = db.prepare('SELECT COUNT(*) AS n FROM user_accounts').get()
     const rows = db
       .prepare(
         `SELECT a.user_id, a.phone, a.created_at, u.nickname
          FROM user_accounts a JOIN users u ON u.id = a.user_id
          ORDER BY a.id DESC
-         LIMIT 500`,
+         LIMIT ${ACCOUNTS_LIST_LIMIT}`,
       )
       .all()
     return sendSuccess(res, {
-      total: rows.length,
+      total: totalRow ? totalRow.n : 0,
+      limit: ACCOUNTS_LIST_LIMIT,
       accounts: rows.map((r) => ({
         user_id: r.user_id,
         phone: r.phone,

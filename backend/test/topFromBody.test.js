@@ -133,7 +133,10 @@ test('topSpec: 合身段证据串报出四件国标（分档值已逐字核对�
   assert.match(f.evidence, /GB\/T 31901-2024/)
   assert.ok(!/需购文本复核/.test(f.evidence), '原文已在本机逐字核对，这句过期限定不得再出现')
   assert.match(f.note, /好不好看/)
-  assert.ok(!JSON.stringify(f.checks).includes('不合格'), '没有成衣实测通道，就不许判"你这件不合格"')
+  assert.ok(
+    !JSON.stringify(f.checks).includes('不合格'),
+    '没有成衣实测通道，就不许判"你这件不合格"',
+  )
 })
 
 // ============================================================
@@ -165,7 +168,11 @@ test('topSpec: 体型/Kibbe/四季型这些标签换成别的值 ⇒ 处方逐�
     color_season: '冬型',
     color_season_12: '深冬型',
   })
-  assert.strictEqual(JSON.stringify(base), JSON.stringify(withLabels), '分类标签只许展示，不许进规格')
+  assert.strictEqual(
+    JSON.stringify(base),
+    JSON.stringify(withLabels),
+    '分类标签只许展示，不许进规格',
+  )
 })
 
 test('topSpec: 同一身材换肤色 ⇒ 只有颜色段变，身材六轴一字不动', () => {
@@ -187,7 +194,10 @@ test('topSpec: 两个人身材不同 ⇒ 至少一根轴方向相反', () => {
     const other = rowOf(b, r.key)
     return r.side !== 0 && other.side !== 0 && Math.sign(r.side) !== Math.sign(other.side)
   })
-  assert.ok(flipped.length >= 1, `没有任何一轴随人变方向：${shared.map((r) => r.key + '/' + r.side)}`)
+  assert.ok(
+    flipped.length >= 1,
+    `没有任何一轴随人变方向：${shared.map((r) => r.key + '/' + r.side)}`,
+  )
 })
 
 // ============================================================
@@ -197,7 +207,10 @@ test('topSpec: 两个人身材不同 ⇒ 至少一根轴方向相反', () => {
 test('topSpec: 每条轴与颜色段都带档位，顶层 note 承认没有标准', () => {
   const s = topSpec(JIA)
   s.axes.forEach((a) => assert.ok(a.tier && /B|C/.test(a.tier), `${a.key} 缺档位串`))
-  assert.ok(s.colour.tier.includes('A') && s.colour.tier.includes('C'), '颜色段要同时标出公式档与手拍权重')
+  assert.ok(
+    s.colour.tier.includes('A') && s.colour.tier.includes('C'),
+    '颜色段要同时标出公式档与手拍权重',
+  )
   assert.match(s.note, /没有任何标准/)
   assert.match(s.evidence, /手拍/)
   assert.ok(Object.keys(s.axis_tiers).length >= 1)
@@ -224,9 +237,15 @@ test('topSpec: 条纹轴只在偏瘦的人身上出现，并带"文献结论互�
 test('topSpec: 松量那一轴给区间，净胸围在场才换算成衣尺寸', () => {
   const withBust = rowOf(topSpec(JIA), 'ease')
   assert.match(withBust.label, /松量落在 \d+(\.\d+)?~\d+(\.\d+)? cm/)
-  assert.ok(withBust.prefer.some((t) => t.includes('成衣胸围≈') && t.includes('cm')), '给了净胸围就该换算')
+  assert.ok(
+    withBust.prefer.some((t) => t.includes('成衣胸围≈') && t.includes('cm')),
+    '给了净胸围就该换算',
+  )
   const noBust = rowOf(topSpec({ height: 158, weight: 65 }), 'ease')
-  assert.ok(noBust.prefer.some((t) => t.includes('不给成衣尺寸')), '没量胸围就只给区间，不编成衣尺寸')
+  assert.ok(
+    noBust.prefer.some((t) => t.includes('不给成衣尺寸')),
+    '没量胸围就只给区间，不编成衣尺寸',
+  )
 })
 
 test('topSpec: 中性阈值两侧都算"不推拉"，且不给出方向性文案', () => {
@@ -264,6 +283,18 @@ test('topSpec: 每一根出了说法的轴都带上"算它用的实测数"', () 
   }
 })
 
+test('topSpec: 肩那一行的实测数带上肩宽÷腰围，并写明它不是论文那个肩围÷臀围', () => {
+  const s = topSpec(JIA)
+  const row = rowOf(s, 'shoulder')
+  assert.ok(row, '甲量了肩宽与腰围 ⇒ 肩轴该出')
+  assert.match(row.based_on, /肩宽÷腰围 = 0\.42/, row.based_on)
+  assert.match(row.based_on, /不是论文那个肩围÷臀围/, row.based_on)
+  // 没量腰围 ⇒ 这条比值整个不出现（缺测不编）
+  const noWaist = topSpec({ ...JIA, waist: null })
+  const row2 = rowOf(noWaist, 'shoulder')
+  if (row2) assert.doesNotMatch(row2.based_on, /肩宽÷腰围/, row2.based_on)
+})
+
 test('topSpec: 肤色两个口径都在 ⇒ 颜色分取更低那个，并标出短板口径', () => {
   const both = topSpec({ ...JIA, skin_tone: '冷皮', skin_tone_detail: '白皙' })
   const deepOnly = topSpec({ ...JIA, skin_tone: null, skin_tone_detail: '白皙' })
@@ -296,4 +327,105 @@ test('topSpec: skin_tone 被回填成深浅值 ⇒ 只算一个口径，不冒�
   assert.match(s.colour.skin_label, /^深浅 白皙$/)
   const t = topSpec({ height: 158, weight: 65, skin_tone: '自然' })
   assert.match(t.colour.skin_label, /^冷暖 自然$/)
+})
+
+// ============================================================
+// 10-21 第十阶段·第一步补口：这里原来是**第五处**自己拼肤色字符串的取值点
+// （改前 `colorSpec` 只调 `skinToneToLab(value)`，完全不看 `skin_hue`），
+// 实测现象＝照片角度改了 Top-8 名次却没改顾客看到的那串建议色。
+// 下面这组断言钉的就是"建议色必须跟着角度走"这一件事本身。
+//
+// ⚠️ 中途走错过一次（同轮实测，盘外 `api-diff.cjs`）：第一版写成"照片顶掉 toneText 那一档"，
+// 在 自然白／自然 这个人身上六个建议色分逐字没动——取低分时瓶颈全在冷暖那颗，
+// 顶错格子等于照片又被瓶颈吃掉。判据：h° 本身就是冷暖轴，深浅轴是 L\*，而本站不吃照片明度。
+// ============================================================
+
+const TWO_CALIBER = { ...JIA, skin_tone: '冷皮', skin_tone_detail: '白皙' }
+const _C = (lab) => Math.hypot(lab.a, lab.b)
+const _H = (lab) => (Math.atan2(lab.b, lab.a) * 180) / Math.PI
+
+test('照片色相角在场 ⇒ 顶掉的是冷暖那一格，深浅锚点与它的 L 一字不动', () => {
+  const base = topSpec(TWO_CALIBER)
+  const photo = topSpec({ ...TWO_CALIBER, skin_hue: 70 })
+  assert.strictEqual(base.colour.photo_hue, null)
+  assert.strictEqual(base.colour.photo_lab, null)
+  assert.strictEqual(base.colour.photo_undertone, null)
+  assert.strictEqual(photo.colour.photo_hue, 70)
+  assert.strictEqual(photo.colour.photo_undertone, '暖皮')
+  // 冷暖词「冷皮」被实测角度顶掉（同一口径的更细读数），⛔ 不是再叠一个口径
+  assert.match(photo.colour.skin_label, /^深浅 白皙／冷暖 照片色相 70°（暖皮）$/)
+  assert.strictEqual(photo.colour.anchor_count, 2)
+  assert.ok(!photo.colour.skin_label.includes('冷皮'), '冷暖口径没被顶掉＝照片挂错了格子')
+  // anchors[0] 是深浅那颗：L/a/b 必须逐字等于没照片时（照片绝不许冒充明度）
+  assert.deepStrictEqual(photo.colour.skin_lab, base.colour.skin_lab)
+  // 合成那颗：L 与 C 一律取自深浅锚点，只有 h 是传进来的角
+  const pl = photo.colour.photo_lab
+  assert.strictEqual(pl.L, base.colour.skin_lab.L, '合成颗的明度不是锚点表那个数')
+  assert.ok(
+    Math.abs(_C(pl) - _C(base.colour.skin_lab)) < 1e-9,
+    `合成颗彩度被照片改掉了：${_C(base.colour.skin_lab)} → ${_C(pl)}`,
+  )
+  assert.ok(Math.abs(_H(pl) - 70) < 1e-9, `合成颗角度不是 70°：${_H(pl).toFixed(3)}`)
+  assert.match(photo.colour.tier, /照片色相角/)
+  assert.ok(!base.colour.tier.includes('照片色相角'), '没照片却声明吃了照片')
+})
+
+test('照片角度确实接管了建议色这一层（本轮要修的洞：改名次不改处方）', () => {
+  const base = topSpec(TWO_CALIBER)
+  const photo = topSpec({ ...TWO_CALIBER, skin_hue: 70 })
+  const score = (s) => JSON.stringify(s.colour.prefer.map((x) => x.score))
+  assert.notStrictEqual(score(photo), score(base), '建议色一个分都没变＝处方层没被照片接管')
+  // 名次允许不变（两个口径取低分本就保守），但短板口径必须还在白名单里
+  photo.colour.prefer.forEach((c) =>
+    assert.ok(['深浅', '冷暖'].includes(c.limit_field), `${c.name} 没标短板口径`),
+  )
+  // 冷皮→70°（暖皮）方向上的角度挪动，短板该开始落在冷暖这一格
+  assert.ok(
+    photo.colour.prefer.some((c) => c.limit_field === '冷暖'),
+    '照片接管冷暖后，六个建议色没有一个短板在冷暖＝角度还是没进分',
+  )
+})
+
+test('过不了闸的角度 ⇒ 处方层逐字回改前行为，⛔ 不编一个肤色', () => {
+  const base = topSpec(TWO_CALIBER)
+  for (const v of ['x', {}, null, undefined, NaN, 90, 20, '30', 0]) {
+    const s = topSpec({ ...TWO_CALIBER, skin_hue: v })
+    assert.strictEqual(s.colour.photo_hue, null, `角度 ${String(v)} 竟然接管了处方`)
+    assert.strictEqual(s.colour.photo_lab, null, `角度 ${String(v)} 竟然编出了一颗 Lab`)
+    assert.strictEqual(
+      s.colour.skin_label,
+      base.colour.skin_label,
+      `角度 ${String(v)} 改了口径标注`,
+    )
+    assert.deepStrictEqual(s.colour.skin_lab, base.colour.skin_lab, `角度 ${String(v)} 改了 Lab`)
+    assert.deepStrictEqual(
+      s.colour.prefer.map((x) => x.score),
+      base.colour.prefer.map((x) => x.score),
+      `角度 ${String(v)} 改了建议色`,
+    )
+  }
+})
+
+test('只有冷暖词 ⇒ 照片把它顶成连续读数，整段仍只算一个口径', () => {
+  const s = topSpec({ ...JIA, skin_tone: '自然', skin_tone_detail: null, skin_hue: 45 })
+  assert.strictEqual(s.colour.photo_hue, 45)
+  assert.strictEqual(s.colour.anchor_count, 1)
+  assert.strictEqual(s.colour.scoring, 'single')
+  assert.match(s.colour.skin_label, /^冷暖 照片色相 45°（冷皮）$/)
+  // L 与 C 仍取自「自然」那颗锚点（L57,a10,b19），只有角度换成 45
+  assert.strictEqual(s.colour.skin_lab.L, 57)
+  assert.ok(Math.abs(_C(s.colour.skin_lab) - Math.hypot(10, 19)) < 1e-9)
+  assert.ok(Math.abs(_H(s.colour.skin_lab) - 45) < 1e-9)
+  assert.ok(!s.colour.note.includes('两个口径'))
+})
+
+test('只有深浅词 ⇒ 照片补出来的就是缺的那个冷暖口径，不谎称深浅测过', () => {
+  const s = topSpec({ ...JIA, skin_tone: null, skin_tone_detail: '小麦色', skin_hue: 70 })
+  assert.strictEqual(s.colour.anchor_count, 2)
+  assert.strictEqual(s.colour.scoring, 'min')
+  assert.match(s.colour.skin_label, /^深浅 小麦色／冷暖 照片色相 70°（暖皮）$/)
+  assert.strictEqual(s.colour.photo_lab.L, 46, '深浅锚点的 L 没进合成颗')
+  assert.ok(Math.abs(_C(s.colour.photo_lab) - Math.hypot(8, 24)) < 1e-9)
+  const noPhoto = topSpec({ ...JIA, skin_tone: null, skin_tone_detail: '小麦色' })
+  assert.strictEqual(noPhoto.colour.anchor_count, 1, '没照片时竟然凭空多了个冷暖口径')
 })

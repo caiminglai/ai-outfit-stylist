@@ -5,7 +5,7 @@
  * 从 CabinetManager 中提取而来，降低单文件复杂度。
  */
 import { useState, useEffect, useCallback, useMemo } from 'react'
-import { toast } from 'sonner'
+import { toast } from '../utils/toastOnce'
 import type {
   CustomerProfile,
   CosmeticItem,
@@ -62,13 +62,24 @@ const COSMETIC_FORM_DEFAULT = {
    兼容后端新旧两种 gap 数据格式
    ================================================================ */
 
+/**
+ * 缺口类型中文兜底名:category_* 后端带 label,过期/肤色这类只给 type,
+ * 不映射就会把 'expiring_products'/'tone_mismatch' 这类英文码糊在 pill 上。
+ */
+const COSMETIC_GAP_TYPE_LABELS: Record<string, string> = {
+  expired_products: '已过保质期',
+  expiring_products: '即将过期',
+  tone_mismatch: '肤色不匹配',
+}
+
 /** 规范化缺口数据，兼容后端新旧格式 */
 function normalizeGapResult(raw: Record<string, unknown> | null): CosmeticGapResult | null {
   if (!raw || typeof raw !== 'object') return null
 
   const rawGaps = Array.isArray(raw.gaps) ? raw.gaps : []
   const gaps: CosmeticGap[] = rawGaps.map((g: Record<string, unknown>) => ({
-    type: (g.type as string) ?? (g.category as string) ?? (g.label as string) ?? '未知类型',
+    type: (g.type as string) ?? (g.category as string) ?? '未知类型',
+    label: (g.label as string) ?? undefined,
     priority: (g.priority as 'high' | 'medium' | 'low') ?? 'medium',
     message: (g.message as string) ?? (g.reason as string) ?? '',
     suggestions: Array.isArray(g.suggestions) ? (g.suggestions as string[]) : [],
@@ -134,6 +145,7 @@ export default function CosmeticTab({ profile, compact }: CosmeticTabProps) {
   const [suggestionsLoading, setSuggestionsLoading] = useState(false)
   const [expiry, setExpiry] = useState<ExpiryItem[] | null>(null)
   const [expiryLoading, setExpiryLoading] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
 
   const [form, setForm] = useState(COSMETIC_FORM_DEFAULT)
   /** 非空 = 表单正在改这一条;null = 新增 */
@@ -183,25 +195,30 @@ export default function CosmeticTab({ profile, compact }: CosmeticTabProps) {
     setShowAdd(true)
   }
 
+  // POST/PUT 共用这一份：可空列没填就发 null，不发 undefined（PUT 里"键不在＝这列不动"，
+  // 打包成 undefined 会让"删掉色号/开封日期再保存"变成点了没反应；opened_date 被留成旧值
+  // 更糟——checkExpiry 还按那个旧日期算过期）。POST 那边 null 与"没给"落库结果相同。
   const buildPayload = () => ({
     name: form.name.trim(),
-    brand: form.brand.trim() || undefined,
+    brand: form.brand.trim() || null,
     category: form.category,
-    color_name: form.color_name.trim() || undefined,
-    color_tone: (form.color_tone as '冷' | '暖' | '中性') || undefined,
-    color_family: form.color_family.trim() || undefined,
-    finish: form.finish.trim() || undefined,
-    price: form.price ? Number(form.price) : undefined,
-    opened_date: form.opened_date || undefined,
-    expiry_months: form.expiry_months ? Number(form.expiry_months) : undefined,
+    color_name: form.color_name.trim() || null,
+    color_tone: (form.color_tone || null) as CosmeticItem['color_tone'] | null,
+    color_family: form.color_family.trim() || null,
+    finish: form.finish.trim() || null,
+    price: form.price ? Number(form.price) : null,
+    opened_date: form.opened_date || null,
+    expiry_months: form.expiry_months ? Number(form.expiry_months) : null,
   })
 
   const handleSubmit = async () => {
+    if (submitting) return
     if (!form.name.trim()) {
       toast.error('请输入化妆品名称')
       return
     }
     const payload = buildPayload()
+    setSubmitting(true)
     try {
       if (editingId != null) {
         await updateCosmetic(editingId, payload)
@@ -214,6 +231,8 @@ export default function CosmeticTab({ profile, compact }: CosmeticTabProps) {
       await fetchItems()
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : editingId != null ? '保存失败' : '添加失败')
+    } finally {
+      setSubmitting(false)
     }
   }
 
@@ -439,6 +458,7 @@ export default function CosmeticTab({ profile, compact }: CosmeticTabProps) {
                 className="gradient-btn"
                 style={{ flex: 1, ...btnStyle(compact) }}
                 onClick={handleSubmit}
+                disabled={submitting}
               >
                 {editingId != null ? '保存修改' : '确认添加'}
               </button>
@@ -474,7 +494,7 @@ export default function CosmeticTab({ profile, compact }: CosmeticTabProps) {
           </div>
         )}
         {items.map((item) => {
-          const remaining = item.remaining ?? 100
+          const remaining = item.remaining
           return (
             <div
               key={item.id}
@@ -514,36 +534,39 @@ export default function CosmeticTab({ profile, compact }: CosmeticTabProps) {
                     </span>
                   )}
                 </div>
-                {/* 剩余量进度条 */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <div
-                    style={{
-                      flex: 1,
-                      height: '5px',
-                      background: 'var(--line)',
-                      borderRadius: '3px',
-                      overflow: 'hidden',
-                    }}
-                  >
+                {/* 剩余量进度条:表单从不采集剩余量,老代码 ?? 100 会把每一件都画成满格绿条 = 凭空造数据。
+                    没填就整条不显示。 */}
+                {remaining != null && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                     <div
                       style={{
-                        width: `${remaining}%`,
-                        height: '100%',
-                        background:
-                          remaining > 30
-                            ? 'var(--accent)'
-                            : remaining > 10
-                              ? 'var(--warning)'
-                              : 'var(--danger)',
+                        flex: 1,
+                        height: '5px',
+                        background: 'var(--line)',
                         borderRadius: '3px',
-                        transition: 'width 0.3s',
+                        overflow: 'hidden',
                       }}
-                    />
+                    >
+                      <div
+                        style={{
+                          width: `${remaining}%`,
+                          height: '100%',
+                          background:
+                            remaining > 30
+                              ? 'var(--accent)'
+                              : remaining > 10
+                                ? 'var(--warning)'
+                                : 'var(--danger)',
+                          borderRadius: '3px',
+                          transition: 'width 0.3s',
+                        }}
+                      />
+                    </div>
+                    <span style={{ fontSize: '11px', color: 'var(--muted)', flexShrink: 0 }}>
+                      {remaining}%
+                    </span>
                   </div>
-                  <span style={{ fontSize: '11px', color: 'var(--muted)', flexShrink: 0 }}>
-                    {remaining}%
-                  </span>
-                </div>
+                )}
               </div>
               <div
                 style={{
@@ -629,7 +652,9 @@ export default function CosmeticTab({ profile, compact }: CosmeticTabProps) {
                       marginBottom: '4px',
                     }}
                   >
-                    <span className={pillCls}>{gap.type}</span>
+                    <span className={pillCls}>
+                      {gap.label || COSMETIC_GAP_TYPE_LABELS[gap.type] || gap.type}
+                    </span>
                     <span
                       className={pillCls}
                       style={{

@@ -15,6 +15,7 @@ const express = require('express')
 const crypto = require('crypto')
 const db = require('../db/init')
 const { sendSuccess, sendError } = require('../utils/response')
+const { stripIdentityFields } = require('../utils/common')
 const { buildRecommendation } = require('../services/recommendEngine')
 const { writeRecommendationLog } = require('../services/profileArchive')
 
@@ -60,6 +61,29 @@ function parseProfileData(val) {
   } catch {
     return {}
   }
+}
+
+/**
+ * 剥掉身份字段（隐私声明第 39 行：给门店的记录只留形象字段，不含昵称与手机号）
+ * 实现在 utils/common.js：样本快照（profileArchive.writeRecommendationLog）与这里
+ * 必须共用同一份名单和同一个递归下钻，两边各写一遍迟早对不上。
+ */
+
+/**
+ * 过期会话就地清理：只删"还没同步进门店"的那一份，并连带删掉它的推荐样本。
+ * 两条口径都是既有的：db/init.js 的定期清理写的就是 `synced = 0`，本文件同步那一处
+ * 也明写着"synced=1 之后这一行不再被过期清理删掉"。原来这两个过期分支写的是无条件
+ * DELETE ⇒ 顾客端多刷一次页面就能把门店那份记录（收付款/对账要靠它）就地删掉。
+ * 会话行删了样本必须跟着删，否则 input_snapshot 变成无主数据长期留在库里。
+ */
+function dropExpiredSession(sessionId) {
+  const delSession = db.prepare('DELETE FROM customer_sessions WHERE session_id = ? AND synced = 0')
+  const delLogs = db.prepare('DELETE FROM recommendation_logs WHERE session_id = ?')
+  return db.transaction(() => {
+    const gone = delSession.run(sessionId)
+    if (gone.changes > 0) delLogs.run(sessionId)
+    return gone.changes
+  })()
 }
 
 /**
@@ -131,7 +155,7 @@ router.get('/session/:sessionId', (req, res) => {
 
     // 检查是否过期
     if (new Date(session.expires_at) < new Date()) {
-      db.prepare('DELETE FROM customer_sessions WHERE session_id = ?').run(sessionId)
+      dropExpiredSession(sessionId)
       return sendError(res, '会话已过期', 404)
     }
 
@@ -161,7 +185,18 @@ router.put('/session/:sessionId', (req, res) => {
       .prepare('SELECT * FROM customer_sessions WHERE session_id = ?')
       .get(sessionId)
     if (!session) {
-      return sendError(res, '会话不存在', 404)
+      return sendError(res, '会话不存在或已过期', 404)
+    }
+
+    // 过期闸门：与 GET(:133)/recommend(:268) 同口径。
+    // 原来这两条分支都漏了 ⇒ 拿一个过期会话的 id 反复 PUT，每轮都把 expires_at 重铸到未来，
+    // 隐私声明第 37 行"超时后未同步到门店的会话自动清除"就等于没有；sync 同样能把过期画像永久固化进门店。
+    if (new Date(session.expires_at) < new Date()) {
+      // 已同步的行不在这里删：身份字段同步当场已剥掉，行本身要留给顾客自己走
+      // DELETE /session/:id 才删得掉门店那条记录（db/init.js 的既有口径）。
+      // 走 dropExpiredSession 而不是裸 DELETE：没同步的这份要连带把样本一起清掉。
+      dropExpiredSession(sessionId)
+      return sendError(res, '会话已过期', 404)
     }
 
     const profileData = JSON.stringify(req.body?.profile_data || req.body || {})
@@ -200,15 +235,19 @@ router.post('/session/:sessionId/sync', (req, res) => {
       return sendError(res, '会话不存在', 404)
     }
 
+    // 过期就不许再同步进门店：synced=1 之后这一行不再被过期清理删掉，
+    // 少了这道闸门，过期会话的原文画像能永久留在门店
+    if (new Date(session.expires_at) < new Date()) {
+      return sendError(res, '会话已过期', 404)
+    }
+
     const syncedAt = new Date().toISOString()
     // 隐私声明说"门店留存的记录不含昵称等身份信息"。写进 recommendation_logs 的快照
     // 早就剥掉了这两项（services/profileArchive.js:374-375），但这条会话行是另一份原文，
     // 且 synced=1 之后不再被过期清理删掉，手机号就这样长期留在库里——同步当场一并剥掉。
-    const storedProfile = parseProfileData(session.profile_data)
-    delete storedProfile.nickname
-    delete storedProfile.phone
+    const storedProfile = stripIdentityFields(parseProfileData(session.profile_data))
     db.prepare(
-      'UPDATE customer_sessions SET synced = 1, synced_at = ?, profile_data = ? WHERE session_id = ?'
+      'UPDATE customer_sessions SET synced = 1, synced_at = ?, profile_data = ? WHERE session_id = ?',
     ).run(syncedAt, JSON.stringify(storedProfile), sessionId)
 
     return sendSuccess(
@@ -235,11 +274,14 @@ router.delete('/session/:sessionId', (req, res) => {
     const { sessionId } = req.params
     const delSession = db.prepare('DELETE FROM customer_sessions WHERE session_id = ?')
     const delLogs = db.prepare('DELETE FROM recommendation_logs WHERE session_id = ?')
-    // 删会话必须连带删日志,否则画像快照会留在库里
+    // 删会话必须连带删日志,否则画像快照会留在库里。
+    // ★ 日志要无条件删：过期时 GET 会先把会话行删掉（本文件 141 行），等顾客/门店再发
+    // DELETE 时 deleted.changes=0 ⇒ 原来这句 if 直接跳过，那份 input_snapshot 就永久留下了
+    // （10-13 现量：过期 GET 之后库里剩 1 条无主日志）。两边都删不到才算"会话不存在"。
     const result = db.transaction(() => {
       const deleted = delSession.run(sessionId)
-      if (deleted.changes > 0) delLogs.run(sessionId)
-      return deleted
+      const logs = delLogs.run(sessionId)
+      return { changes: deleted.changes + logs.changes }
     })()
     if (result.changes === 0) {
       return sendError(res, '会话不存在', 404)
@@ -266,12 +308,15 @@ router.post('/session/:sessionId/recommend', (req, res) => {
 
     // 检查是否过期
     if (new Date(session.expires_at) < new Date()) {
-      db.prepare('DELETE FROM customer_sessions WHERE session_id = ?').run(sessionId)
+      dropExpiredSession(sessionId)
       return sendError(res, '会话已过期', 404)
     }
 
     const profile = parseProfileData(session.profile_data)
-    const recommendation = buildRecommendation(profile, mode)
+    // 第三参数不动（默认写命中次数），第四参数带上这条会话 ⇒ 隐性偏好乘子生效（日记 0 条时恰好是 1）。
+    // 这里只有 session 一档身份（customer_sessions 表没有 user_id 列，现量 db/schema.sql:269-278），
+    // 而日记的归属口径是 session∪user 并集，按 session 查得到的那部分照样算。
+    const recommendation = buildRecommendation(profile, mode, true, { sessionId })
 
     // 保存推荐日志（与个人模式走同一条写入路径,归属沿用会话登记的那家店）
     const logId = writeRecommendationLog({

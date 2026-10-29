@@ -119,10 +119,7 @@ test('200 个日期扫描：喜用两行不重复、忌神不与喜用同行、�
     const mainFavRel = relationOf(a.day_master_element, a.favorable_element)
     const unRel = relationOf(a.day_master_element, a.unfavorable_element)
     if (a.strength === '身强') {
-      assert.ok(
-        ['食伤', '财', '官杀'].includes(mainFavRel),
-        `${iso} 身强主气喜用不在克泄耗内`,
-      )
+      assert.ok(['食伤', '财', '官杀'].includes(mainFavRel), `${iso} 身强主气喜用不在克泄耗内`)
       assert.ok(['比劫', '印'].includes(unRel), `${iso} 身强忌神不在帮扶内`)
     } else if (a.strength === '身弱') {
       assert.ok(['比劫', '印'].includes(mainFavRel), `${iso} 身弱主气喜用不在帮扶内`)
@@ -209,4 +206,37 @@ test('当日干支与喜用的关系：三档口径、无喜用时降级', () =>
   const plain = analyzeDay(null, new Date(2026, 8, 28))
   assert.strictEqual(plain.tone, '平')
   assert.ok(plain.note.includes('填了出生日期'))
+})
+
+// 判定用的比值和返回/文案用的比值必须是同一个数（2026-10-12 补）。
+// 原来判定加了"月支得令 +0.06"，而 strength_ratio 与 summary 里的百分比打的都是未加权的
+// support/total ⇒ 帮扶 49~50% 且得令时，结论写"身强"、括号里却写"帮扶占 49%"，
+// 顾客看到的是一句自相矛盾的话，排查的人还以为是四舍五入。
+test('身强弱档位与 strength_ratio、summary 文案同源', () => {
+  let checkedDeLing = 0
+  for (let i = 0; i < 200; i++) {
+    const d = new Date(Date.UTC(1940, 0, 1) + i * 31 * 86400000)
+    const iso = d.toISOString().slice(0, 10)
+    const a = analyzeBazi(iso, SHICHEN_LABELS[i % 13])
+    assert.ok(a, `${iso} 应当算得出`)
+    const r = a.strength_ratio
+    // strength_ratio 是判定那个数保留 3 位的结果 ⇒ 档位只能按 ±0.0005 的截断容差反推，
+    // 边界上（真值 0.4401 被截成 0.44）不允许判成"不同源"
+    const EPS = 0.0005
+    const bandOk =
+      (a.strength === '身强' && r >= 0.56 - EPS) ||
+      (a.strength === '身弱' && r <= 0.44 + EPS) ||
+      (a.strength === '中和' && r >= 0.44 - EPS && r <= 0.56 + EPS)
+    assert.ok(bandOk, `${iso} 档位 ${a.strength} 与 strength_ratio=${r} 不同源`)
+    // 文案里的百分比就是从同一个数打出来的：strength_ratio 留 3 位、文案取整到百分点，
+    // 所以只允许差半个百分点（0.005）＋三位截断（0.0005）
+    const m = a.summary.match(/帮扶占 (\d+)%/)
+    assert.ok(m, `${iso} summary 里找不到帮扶占比：${a.summary}`)
+    assert.ok(
+      Math.abs(Number(m[1]) / 100 - r) <= 0.006,
+      `${iso} 文案「帮扶占 ${m[1]}%」与 strength_ratio=${r} 不同源`,
+    )
+    if (a.summary.includes('含得令加权')) checkedDeLing++
+  }
+  assert.ok(checkedDeLing > 0, '200 个日期里一次都没出现得令加权，这条测试等于没跑')
 })

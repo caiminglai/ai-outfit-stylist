@@ -12,7 +12,7 @@ const fs = require('fs')
 const path = require('path')
 const db = require('../db/init')
 const { sendSuccess, sendError } = require('../utils/response')
-const { generateUUID, parsePagination, UPLOAD_DIR } = require('../utils/common')
+const { generateUUID, parsePagination, UPLOAD_DIR, asId } = require('../utils/common')
 const { loginRequired, adminLoginRequired } = require('../middleware/auth')
 const { upload, validateImage } = require('../middleware/upload')
 const { rateLimit } = require('../middleware/rateLimit')
@@ -27,6 +27,16 @@ const submitLimiter = rateLimit({
   windowMs: 60000,
   max: 5,
   message: '提交过于频繁，请稍后再试',
+})
+
+// 浏览量：按"同一 IP × 同一作品"每分钟最多 3 次。
+// 这条 POST 匿名可达、heat 又是广场排序的第一权重，原来只有全局 100/15min 兜着 ⇒ 脚本循环打就能把任意作品顶到榜首。
+// key 里带上作品 id：一个人连着看好几件作品时不吃同一条额度，正常浏览不会被误锁。
+const viewLimiter = rateLimit({
+  windowMs: 60000,
+  max: 3,
+  keyFn: (req) => `${req.ip || 'unknown'}|${req.params?.id || ''}`,
+  message: '该作品的浏览过于频繁，请稍后再试',
 })
 
 function newShareCode() {
@@ -74,34 +84,68 @@ router.get('/works', (req, res) => {
   }
 })
 
-/** 作品详情：浏览量 +1，ref 等于作者分享码时另记分享带量 */
+/** 作品详情（只读）：计数写入挪到 POST /works/:id/view，GET 不再有感侧效果 */
 router.get('/works/:id', (req, res) => {
   try {
-    const id = parseInt(req.params.id, 10)
-    if (isNaN(id)) return sendError(res, 'ID 格式错误', 400)
+    const id = asId(req.params.id)
+    if (id === null) return sendError(res, 'id 必须是正整数', 400)
 
-    const row = db.prepare('SELECT * FROM creator_works WHERE id = ?').get(id)
+    // 列必须点名列：这是匿名可达的公开详情，SELECT * 会把 admin_note（后台审核
+    // 备注，常写作者违规原因）发出去。广场列表 :63 早就只点公开列，详情这里是唯一
+    // 漏的那处。user_id 只用来查作者昵称，下发前剥掉。
+    const row = db
+      .prepare(
+        `SELECT id, share_code, type, title, summary, cover_url, payload, status,
+                featured, heat, share_views, created_at, reviewed_at, user_id
+         FROM creator_works WHERE id = ?`,
+      )
+      .get(id)
     if (!row || row.status !== 'approved') {
       return sendError(res, '作品不存在或未通过审核', 404)
     }
 
-    const ref = String(req.query.ref || '')
-    const byShare = ref && ref === row.share_code ? 1 : 0
-    db.prepare(
-      'UPDATE creator_works SET heat = heat + 1, share_views = share_views + ? WHERE id = ?',
-    ).run(byShare, id)
-
     const author = db.prepare('SELECT nickname FROM users WHERE id = ?').get(row.user_id)
+    delete row.user_id
     return sendSuccess(res, {
       ...row,
       payload: parsePayload(row.payload),
-      heat: row.heat + 1,
-      share_views: row.share_views + byShare,
       author_name: (author && author.nickname) || '匿名作者',
     })
   } catch (err) {
     console.error('[创作者] 读取作品详情失败:', err)
     return sendError(res, '读取作品详情失败', 500)
+  }
+})
+
+/**
+ * 记录一次作品浏览：热度 +1，ref 等于作者分享码时另记分享带量。
+ * 原来这段计数写在 GET /works/:id 里——GET 必须无副作用（预取/爬虫/重试都会
+ * 把 heat 灌大，且违反 HTTP 幂等约定），所以挪成显式 POST。
+ * 前端调用点已同步改口：app/public/creator.html 详情渲染成功后 POST 本路由，
+ * GET 响应形状不变（heat/share_views 字段仍在，只是不再虚 +1）。
+ */
+router.post('/works/:id/view', viewLimiter, (req, res) => {
+  try {
+    const id = asId(req.params.id)
+    if (id === null) return sendError(res, 'id 必须是正整数', 400)
+
+    const row = db.prepare('SELECT id, share_code, status FROM creator_works WHERE id = ?').get(id)
+    if (!row || row.status !== 'approved') {
+      return sendError(res, '作品不存在或未通过审核', 404)
+    }
+
+    // ref 兼容查询串与请求体两种带法：POST 体是 JSON 的前端与拼 URL 的老页面都能用
+    const ref = String(req.body?.ref ?? req.query.ref ?? '')
+    const byShare = ref && ref === row.share_code ? 1 : 0
+    db.prepare(
+      'UPDATE creator_works SET heat = heat + 1, share_views = share_views + ? WHERE id = ?',
+    ).run(byShare, id)
+
+    const fresh = db.prepare('SELECT heat, share_views FROM creator_works WHERE id = ?').get(id)
+    return sendSuccess(res, { id, heat: fresh.heat, share_views: fresh.share_views })
+  } catch (err) {
+    console.error('[创作者] 记录浏览失败:', err)
+    return sendError(res, '记录浏览失败', 500)
   }
 })
 
@@ -181,26 +225,39 @@ router.post('/cover', loginRequired, submitLimiter, upload.single('file'), (req,
   }
 })
 
-/** 我的提交（含未通过审核的）+ 流量汇总 */
+/**
+ * 我的提交（含未通过审核的）+ 流量汇总
+ * 返回: { items, total, limit, totals }
+ * totals 走一条独立的聚合，查的是这个人的全部作品，不再从被 LIMIT 截过的 items 现算：
+ * 原来 items 只取最近 100 条，而页面把 totals 显示成「总浏览／分享带量」，
+ * 提交超过 100 件的人看到的是一被截断的假总数；「N 提交」同样只能数到 100。
+ */
+const MY_LIST_LIMIT = 100
 router.get('/my', loginRequired, (req, res) => {
   try {
     const rows = db
       .prepare(
-        'SELECT id, share_code, type, title, summary, cover_url, status, admin_note, heat, share_views, featured, created_at, reviewed_at FROM creator_works WHERE user_id = ? ORDER BY id DESC LIMIT 100',
+        `SELECT id, share_code, type, title, summary, cover_url, status, admin_note, heat, share_views, featured, created_at, reviewed_at
+         FROM creator_works WHERE user_id = ? ORDER BY id DESC LIMIT ${MY_LIST_LIMIT}`,
       )
       .all(req.user.id)
-    const totals = rows.reduce(
-      (acc, r) => {
-        acc.approved += r.status === 'approved' ? 1 : 0
-        acc.pending += r.status === 'pending' ? 1 : 0
-        acc.rejected += r.status === 'rejected' ? 1 : 0
-        acc.heat += r.heat || 0
-        acc.share_views += r.share_views || 0
-        return acc
-      },
-      { approved: 0, pending: 0, rejected: 0, heat: 0, share_views: 0 },
-    )
-    return sendSuccess(res, { items: rows, totals })
+    const agg = db
+      .prepare(
+        `SELECT COUNT(*) AS submissions,
+                COALESCE(SUM(CASE WHEN status = 'approved' THEN 1 ELSE 0 END), 0) AS approved,
+                COALESCE(SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END), 0) AS pending,
+                COALESCE(SUM(CASE WHEN status = 'rejected' THEN 1 ELSE 0 END), 0) AS rejected,
+                COALESCE(SUM(heat), 0) AS heat,
+                COALESCE(SUM(share_views), 0) AS share_views
+         FROM creator_works WHERE user_id = ?`,
+      )
+      .get(req.user.id)
+    return sendSuccess(res, {
+      items: rows,
+      total: agg ? agg.submissions : 0,
+      limit: MY_LIST_LIMIT,
+      totals: agg,
+    })
   } catch (err) {
     console.error('[创作者] 读取我的作品失败:', err)
     return sendError(res, '读取我的作品失败', 500)
@@ -211,20 +268,37 @@ router.get('/my', loginRequired, (req, res) => {
 // 管理端
 // ============================================================
 
-/** 审核列表 */
+/**
+ * 审核列表
+ * 返回: { success: true, data: { list, total, limit } }
+ * total 是真 COUNT(*)，理由与 /api/payment/admin/list 同一条：后台把行数当「共 N 件」显示，
+ * list 被 LIMIT 截过的时候那个 N 就是假的。
+ */
+const ADMIN_LIST_LIMIT = 200
 router.get('/admin/list', adminLoginRequired, (req, res) => {
   try {
     const allowed = ['pending', 'approved', 'rejected']
-    let sql = `SELECT w.*, u.nickname, ua.phone FROM creator_works w
-      LEFT JOIN users u ON w.user_id = u.id
-      LEFT JOIN user_accounts ua ON ua.user_id = w.user_id`
-    const params = []
-    if (allowed.includes(req.query.status)) {
-      sql += ' WHERE w.status = ?'
-      params.push(req.query.status)
-    }
-    sql += ' ORDER BY w.id DESC LIMIT 200'
-    return sendSuccess(res, db.prepare(sql).all(...params))
+    const hasFilter = allowed.includes(req.query.status)
+    const where = hasFilter ? 'WHERE w.status = ?' : ''
+    const filterParams = hasFilter ? [req.query.status] : []
+    const totalRow = db
+      .prepare(`SELECT COUNT(*) AS n FROM creator_works w ${where}`)
+      .get(...filterParams)
+    const rows = db
+      .prepare(
+        `SELECT w.*, u.nickname, ua.phone FROM creator_works w
+         LEFT JOIN users u ON w.user_id = u.id
+         LEFT JOIN user_accounts ua ON ua.user_id = w.user_id
+         ${where}
+         ORDER BY w.id DESC
+         LIMIT ${ADMIN_LIST_LIMIT}`,
+      )
+      .all(...filterParams)
+    return sendSuccess(res, {
+      list: rows,
+      total: totalRow ? totalRow.n : 0,
+      limit: ADMIN_LIST_LIMIT,
+    })
   } catch (err) {
     console.error('[创作者] 读取审核列表失败:', err)
     return sendError(res, '读取审核列表失败', 500)
@@ -234,8 +308,8 @@ router.get('/admin/list', adminLoginRequired, (req, res) => {
 /** 审核：通过即上广场 */
 router.post('/admin/:id/review', adminLoginRequired, (req, res) => {
   try {
-    const id = parseInt(req.params.id, 10)
-    if (isNaN(id)) return sendError(res, 'ID 格式错误', 400)
+    const id = asId(req.params.id)
+    if (id === null) return sendError(res, 'id 必须是正整数', 400)
     const status = req.body?.status
     if (!REVIEW_STATUSES.has(status)) {
       return sendError(res, 'status 只能是 pending / approved / rejected', 400)
@@ -257,8 +331,8 @@ router.post('/admin/:id/review', adminLoginRequired, (req, res) => {
 /** 是否精选（广场排序的第一权重） */
 router.post('/admin/:id/feature', adminLoginRequired, (req, res) => {
   try {
-    const id = parseInt(req.params.id, 10)
-    if (isNaN(id)) return sendError(res, 'ID 格式错误', 400)
+    const id = asId(req.params.id)
+    if (id === null) return sendError(res, 'id 必须是正整数', 400)
     const featured = req.body?.featured ? 1 : 0
     const result = db
       .prepare('UPDATE creator_works SET featured = ? WHERE id = ?')

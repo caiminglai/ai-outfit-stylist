@@ -2867,14 +2867,14 @@
     },
     {
       "id": 199,
-      "name": "女-通勤-穿搭-苹果形",
+      "name": "女-通勤-穿搭-苹果型",
       "mode": "store",
       "gender": "女",
       "category": "穿搭",
       "scenario": "通勤",
       "region": null,
       "age_range": null,
-      "description": "苹果形体型通勤穿搭:V领高腰线拉长躯干",
+      "description": "苹果型体型通勤穿搭:V领高腰线拉长躯干",
       "priority": 5,
       "enabled": 1,
       "hit_count": 0,
@@ -2882,14 +2882,14 @@
     },
     {
       "id": 200,
-      "name": "女-约会-穿搭-苹果形",
+      "name": "女-约会-穿搭-苹果型",
       "mode": "store",
       "gender": "女",
       "category": "穿搭",
       "scenario": "约会",
       "region": null,
       "age_range": null,
-      "description": "苹果形体型约会穿搭:深色V领+高腰裙露腿",
+      "description": "苹果型体型约会穿搭:深色V领+高腰裙露腿",
       "priority": 5,
       "enabled": 1,
       "hit_count": 0,
@@ -2972,14 +2972,14 @@
     },
     {
       "id": 206,
-      "name": "女-面试-穿搭-苹果形",
+      "name": "女-面试-穿搭-苹果型",
       "mode": "store",
       "gender": "女",
       "category": "穿搭",
       "scenario": "面试",
       "region": null,
       "age_range": null,
-      "description": "苹果形体型面试穿搭:V领西装+高腰阔腿裤",
+      "description": "苹果型体型面试穿搭:V领西装+高腰阔腿裤",
       "priority": 5,
       "enabled": 1,
       "hit_count": 0,
@@ -2987,14 +2987,14 @@
     },
     {
       "id": 207,
-      "name": "女-休闲-穿搭-苹果形",
+      "name": "女-休闲-穿搭-苹果型",
       "mode": "store",
       "gender": "女",
       "category": "穿搭",
       "scenario": "休闲",
       "region": null,
       "age_range": null,
-      "description": "苹果形体型休闲穿搭:上松下紧露腿",
+      "description": "苹果型体型休闲穿搭:上松下紧露腿",
       "priority": 5,
       "enabled": 1,
       "hit_count": 0,
@@ -8375,7 +8375,7 @@
       "group_id": 199,
       "field": "body_type",
       "operator": "eq",
-      "value": "{\"body_type\":\"苹果形\"}",
+      "value": "{\"body_type\":\"苹果型\"}",
       "weight": 3
     },
     {
@@ -8407,7 +8407,7 @@
       "group_id": 200,
       "field": "body_type",
       "operator": "eq",
-      "value": "{\"body_type\":\"苹果形\"}",
+      "value": "{\"body_type\":\"苹果型\"}",
       "weight": 3
     },
     {
@@ -8437,9 +8437,9 @@
     {
       "id": 579,
       "group_id": 201,
-      "field": "body_type",
+      "field": "bmi_level",
       "operator": "eq",
-      "value": "{\"body_type\":\"偏胖\"}",
+      "value": "{\"bmi_level\":\"偏胖\"}",
       "weight": 3
     },
     {
@@ -8469,9 +8469,9 @@
     {
       "id": 583,
       "group_id": 202,
-      "field": "body_type",
+      "field": "bmi_level",
       "operator": "eq",
-      "value": "{\"body_type\":\"偏胖\"}",
+      "value": "{\"bmi_level\":\"偏胖\"}",
       "weight": 3
     },
     {
@@ -8501,9 +8501,9 @@
     {
       "id": 587,
       "group_id": 203,
-      "field": "body_type",
+      "field": "bmi_level",
       "operator": "eq",
-      "value": "{\"body_type\":\"偏瘦\"}",
+      "value": "{\"bmi_level\":\"偏瘦\"}",
       "weight": 3
     },
     {
@@ -8533,9 +8533,9 @@
     {
       "id": 591,
       "group_id": 204,
-      "field": "body_type",
+      "field": "bmi_level",
       "operator": "eq",
-      "value": "{\"body_type\":\"偏瘦\"}",
+      "value": "{\"bmi_level\":\"偏瘦\"}",
       "weight": 3
     },
     {
@@ -8599,7 +8599,7 @@
       "group_id": 206,
       "field": "body_type",
       "operator": "eq",
-      "value": "{\"body_type\":\"苹果形\"}",
+      "value": "{\"body_type\":\"苹果型\"}",
       "weight": 3
     },
     {
@@ -8631,7 +8631,7 @@
       "group_id": 207,
       "field": "body_type",
       "operator": "eq",
-      "value": "{\"body_type\":\"苹果形\"}",
+      "value": "{\"body_type\":\"苹果型\"}",
       "weight": 3
     },
     {
@@ -8661,9 +8661,9 @@
     {
       "id": 607,
       "group_id": 208,
-      "field": "body_type",
+      "field": "bmi_level",
       "operator": "eq",
-      "value": "{\"body_type\":\"偏胖\"}",
+      "value": "{\"bmi_level\":\"偏胖\"}",
       "weight": 3
     },
     {
@@ -8693,9 +8693,9 @@
     {
       "id": 611,
       "group_id": 209,
-      "field": "body_type",
+      "field": "bmi_level",
       "operator": "eq",
-      "value": "{\"body_type\":\"偏胖\"}",
+      "value": "{\"bmi_level\":\"偏胖\"}",
       "weight": 3
     },
     {
@@ -8725,9 +8725,9 @@
     {
       "id": 615,
       "group_id": 210,
-      "field": "body_type",
+      "field": "bmi_level",
       "operator": "eq",
-      "value": "{\"body_type\":\"偏瘦\"}",
+      "value": "{\"bmi_level\":\"偏瘦\"}",
       "weight": 3
     },
     {
@@ -8757,9 +8757,9 @@
     {
       "id": 619,
       "group_id": 211,
-      "field": "body_type",
+      "field": "bmi_level",
       "operator": "eq",
-      "value": "{\"body_type\":\"偏瘦\"}",
+      "value": "{\"bmi_level\":\"偏瘦\"}",
       "weight": 3
     },
     {
@@ -8789,9 +8789,9 @@
     {
       "id": 623,
       "group_id": 212,
-      "field": "body_type",
+      "field": "bmi_level",
       "operator": "eq",
-      "value": "{\"body_type\":\"偏胖\"}",
+      "value": "{\"bmi_level\":\"偏胖\"}",
       "weight": 3
     },
     {
@@ -8821,9 +8821,9 @@
     {
       "id": 627,
       "group_id": 213,
-      "field": "body_type",
+      "field": "bmi_level",
       "operator": "eq",
-      "value": "{\"body_type\":\"偏瘦\"}",
+      "value": "{\"bmi_level\":\"偏瘦\"}",
       "weight": 3
     },
     {
@@ -17407,7 +17407,7 @@
       "id": 1055,
       "group_id": 199,
       "action_type": "reason",
-      "content": "苹果形体型腰腹丰满,V领拉长颈部高腰线提高腰位避开腰腹,深色收缩视觉,露出纤细双腿",
+      "content": "苹果型体型腰腹丰满,V领拉长颈部高腰线提高腰位避开腰腹,深色收缩视觉,露出纤细双腿",
       "sort_order": 5
     },
     {

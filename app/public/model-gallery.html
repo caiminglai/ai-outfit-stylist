@@ -3,7 +3,7 @@
 
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"><meta name="description" content="3D 形象展厅：真人比例的穿衣量化演示，先看效果再下单。色彩、版型、体型四条轴各自算分，量不到的写没量到。"><meta property="og:type" content="website"><meta property="og:site_name" content="私人形象定制AI"><meta property="og:title" content="3D形象展示 · AI形象顾问"><meta property="og:description" content="3D 形象展厅：先看效果，再决定要不要做一份属于自己的细账。"><link rel="canonical" href="https://style.sparklove.cn/gallery">
   <title>3D形象展示 · AI形象顾问</title>
   <style>
     :root {
@@ -158,9 +158,11 @@
       gap: 8px;
     }
 
+    /* 44 而不是 40：本轮 X7 把"窄屏点按区至少 44 px"定成口径，这一列四颗圆钮是展厅里唯一
+       在窄屏上会被手指点的控件，⛔ 只把 React 那边改达标、展厅这一列留 40，那句话就只说了一半 */
     .ctrl-btn {
-      width: 40px;
-      height: 40px;
+      width: 44px;
+      height: 44px;
       border-radius: 50%;
       border: 1px solid var(--line);
       background: rgba(13, 17, 23, 0.8);
@@ -183,6 +185,38 @@
       color: #06231c;
       border-color: var(--accent);
       box-shadow: 0 0 12px rgba(245, 131, 76, 0.4);
+    }
+
+    /* 第十四阶段·追加（他 10-22 的原话：「要 http://127.0.0.1:5000/ 里面找到有个介绍的按钮」）。
+       待机态整屏只有 3D 轮播（右侧那一列在 `set-mode` 里被 `display:none` 掉了），
+       介绍页 /how-it-works.html 原本只藏在 React 侧「选择模式」那一层的卡片里，站在首页看不见。
+       ⇒ 这颗带文字的入口自己独立定位、两种模式都常驻，⛔ 不新建路由、⛔ 不动后端，
+       直接吃后端已在服务的静态页。点按区按本轮 X7 的 44 px 口径。 */
+    .intro-btn {
+      position: fixed;
+      /* 左上那颗 #model-hint 占 top:14px（高约 28px），这里从 52px 起，任何模式都不压它 */
+      top: 52px;
+      left: 14px;
+      z-index: 70;
+      height: 44px;
+      padding: 0 12px;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      background: rgba(13, 17, 23, 0.8);
+      backdrop-filter: blur(12px);
+      font-size: 13px;
+      color: var(--accent);
+      text-decoration: none;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+      flex-shrink: 0;
+      transition: all 0.2s ease;
+    }
+
+    .intro-btn:active {
+      transform: scale(0.94);
     }
 
     /* 底部模型选择栏 */
@@ -407,9 +441,10 @@
     }
 
     /* ═══ 切换模型按钮(两种模式通用,归入控制按钮组)═══ */
+    /* 44 而不是 40：与上面 .ctrl-btn 同口径（见那里的注释），同一列里只改几颗会留一颗小的 */
     #btn-skip {
-      width: 40px;
-      height: 40px;
+      width: 44px;
+      height: 44px;
       border-radius: 50%;
       border: 1px solid var(--line);
       background: rgba(13, 17, 23, 0.8);
@@ -561,6 +596,11 @@
     <button class="ctrl-btn" id="btn-skip" title="切换下一个模型">⏭</button>
     <button class="ctrl-btn" id="btn-shot" title="截图保存当前模型">📷</button>
   </div>
+
+  <!-- 第十四阶段·追加：介绍页入口。⛔ 不能放进上面那个 .controls——
+       待机态那段模式切换（`set-mode`）把整列 `display:none` 掉了，而首页 `/` 落地就是待机态，
+       放进去等于放了颗看不见的按钮。这里独立定一份，两种模式都常驻可见。 -->
+  <a class="intro-btn" href="/how-it-works.html" target="_blank" rel="noopener" title="这套系统是怎么造的：量化管线 · 依据分档 · 当前底数">🧭 介绍</a>
 
   <!-- 底部模型选择栏 -->
   <div class="model-bar">
@@ -1139,7 +1179,7 @@
         // ★ 进度更新也要检查版本锁,避免过期进度覆盖新进度
         if (myToken !== loadToken) return;
         if (xhr.total) {
-          const pct = Math.round((xhr.loaded / xhr.total) * 100);
+          const pct = Math.min(99, Math.max(0, Math.round((xhr.loaded / xhr.total) * 100))); // 🔴 10-22 组2b：原来是裸的 loaded/total*100，实测加载今汐时打出「227%」——MMDLoader 的 onProgress 在贴图阶段把多个文件的 loaded 累加、total 却仍是单个文件的长度，比值能超 1。钳到 99 是因为到 100 会让顾客以为下载完了而迟迟不出画面；真完成由 hideLoading() 负责。
           updateLoadingText(`正在加载 ${model.name}... ${pct}%`);
         }
       }, (err) => {
@@ -1529,6 +1569,14 @@
     // 点击模型区域进入服务流程
     const canvasEl = document.getElementById('canvas-container');
     canvasEl.addEventListener('click', () => {
+      // 🔴 第十四阶段·第一步 X1：这一页有两种打开方式。嵌在展厅里时（`ExhibitionHall.tsx` 的 iframe）
+      // postMessage 给父窗口是对的；但**直接打开 /gallery**（门店投屏、顾客手机扫这个址）时
+      // `window.parent === window`，这句是发给自己，而本文件的监听只认 'set-mode' ⇒ 点半天没反应，
+      // 顾客站在门口进不了服务流程。正解＝非嵌入时直接跳展厅页并带 `?start=1`，由 React 那侧开服务态。
+      if (window.parent === window) {
+        location.href = '/?start=1';
+        return;
+      }
       window.parent.postMessage({ type: 'start-service' }, window.location.origin);
     });
 

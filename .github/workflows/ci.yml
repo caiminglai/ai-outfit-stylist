@@ -70,8 +70,36 @@ jobs:
         run: npm test
 
       # 两个 job 都只跑本机已实测通过的门禁：
-      #   app  typecheck 0 错 / lint 0 error 8 warning / build 通过
-      #   backend  lint 0 error 105 warning / node --test 78 全过（已用 git archive 出一份
-      #          干净 checkout 复验过，测试只读仓库里被跟踪的 styleai.db）
-      # format:check 本轮已随两侧落格式一起清零（前端 45 文件 / 后端 37 文件，
-      # 两份 .prettierrc.json 的 endOfLine 从 lf 改成 auto），所以从"暂不挂"改成挂上。
+      #   app  typecheck 0 错 / lint 0 error 9 warning / build 通过
+      #   backend  lint 0 error 121 warning / node --test 505 全过（10-14 现量，本仓 `test/*.test.js` 36 份。
+      #          warning 逐条拆开：no-console 65／prefer-const 30／no-unused-vars 26（同一趟 eslint -f json 数的）。
+      #          用例来路：452（10-13）→485＝routeIdParam20261014 那批把 19 处 id 截断改成 asId 后
+      #          补的 33 条（28 个入口的"400＋整行快照没变"＋asId 单测＋正向对照＋0/负/空串＋两处闸扫）；
+      #          485→505＝logicConsistency20261014.test.js 的 20 条（两层口径自相矛盾的六处修法各配断言，
+      #          单独 `node --test` 跑这份也是 20/20）。新增这份文件后 warning 仍是 121，没涨。
+      #          ⚠️ app 那 9 条 warning 的构成的确与 10-12 记的"全 react-refresh"不同：现量
+      #          react-hooks/set-state-in-effect 5／react-refresh/only-export-components 3／exhaustive-deps 1，总数没变。
+      #          121 比 10-13 那行的 124 少 3 条：no-console 与 10-12 基线（65）持平，少的是 no-unused-vars 27→26；
+      #          那 3 条 console 具体是哪几行没的，我这轮没逐条追，不编原因。
+      #          121 是把 logicFixes20261013.test.js 里那条没人开的 `eslint-disable no-new-func`
+      #          撤掉后的数——它自己报 "Unused eslint-disable directive"，让全仓 warning 多算 1 条。
+      #          "干净 checkout 复验"这句 10-11 之后没再跑过，本轮改完代码后按新提交重跑一遍）
+      #   （2026-10-11 现量校正：这三处原先写的是 8 / 105 / 78，是第十八轮之前的旧数；
+      #    第七~二十七轮陆续加测试与 no-console 警告，warning 与用例只涨不减；10-12 第二十七轮再重跑一遍＝122 warning／308 用例／app 9 warning、tsc 0 错、build 通过、两侧 format:check rc=0）
+      #   （2026-10-22 第十四阶段·第一步收口现量，覆盖上面两行里过期的那四个数：backend lint **0 error／142 warning**
+      #    （no-console 87／prefer-const 30／no-unused-vars 25）、`node --test` **795 pass／0 fail**、`test/*.test.js` **54** 份；
+      #    app lint **0 error／13 warning**（set-state-in-effect 8／only-export-components 4／exhaustive-deps 1）。
+      #    ⓵ eslint 两侧都只卡 error，warning 不会把 CI 跑红；⓶ 上面 10-14 那几行是当时的真实读数，留档不改写。）
+      #   （2026-10-22 18:5x 追加·后台「编程水平与独立路线」页现量，覆盖上一行的用例数与份数：`node --test` **800 pass／0 fail**、
+      #    `test/*.test.js` **55** 份（新增的 5 条全在 `adminSkillPage.test.js`）；backend lint 仍 **0 error／142 warning**、app 仍 **0 error／13 warning**，两侧 `format:check` rc=0。
+      #    ⚠️ 这一页本身（`static/admin/admin-skill.js`＋`templates/admin.html`＋`admin.css`）**不在 CI 的射程内**——`.prettierignore` 与 `eslint.config.js` 都把 `static/` 和 `templates/` 整目录排除，
+      #    所以 CI 绿不等于这页没坏；上一条就栽在这儿（`.loading` 排版类没清、数据里的 Markdown 原样露出，单测当时全绿、只有真浏览器看得见）。）
+      #   （2026-10-22 21:3x 追加·独立教程页 /admin/learn 现量，覆盖上一行的用例数与份数：`node --test` **806 pass／0 fail**、
+      #    `test/*.test.js` **56** 份（新增的 6 条全在 `learnPage.test.js`）；backend lint 仍 **0 error／142 warning**、app 仍 **0 error／13 warning**，
+      #    两侧 `format:check` rc=0、app `tsc -b`＋`vite build` rc=0（本轮 `app/` 一行没动，仍跑一次作对照）。
+      #    ⚠️ 这一页（`templates/learn-to-code.html` 81,045 B）连同后台那颗按钮（`templates/admin.html`＋`static/admin/admin.css`）**同样不在 CI 射程内**——
+      #    `.prettierignore` 与 `eslint.config.js` 都把 `static/` 和 `templates/` 整目录排除；它的门只有 `test/learnPage.test.js` 一把尺：
+      #    54 条蓝底 `文件:行号` 逐条验「文件在场＋行号不越界」，另钉 `Dockerfile` 的 `COPY backend/ ./`（现量第 32 行）与 compose `volumes:`（现量第 29 行）两条内容级锚点。）
+      # format:check 每次动完代码都要两侧各跑一次 `npm run format` 再验 rc=0——
+      # 第二十五轮（3ba0647）就是漏了这一步，推上去 CI 直接红；10-11 已补跑（app 5 / backend 24 个文件纯排版，
+      # 另 routes/models.js 本轮另有功能改动，算在第 25 个里）。

@@ -62,31 +62,32 @@ function seedAll(db) {
   }
 
   // 使用事务批量插入
-  const insertGroup = db.prepare(`
-    INSERT INTO rule_groups
-      (id, name, mode, gender, category, scenario, region, age_range,
-       description, priority, enabled, hit_count, created_at)
-    VALUES (@id, @name, @mode, @gender, @category, @scenario, @region, @age_range,
-       @description, @priority, @enabled, @hit_count, @created_at)
-  `)
-
-  const insertCondition = db.prepare(`
-    INSERT INTO rule_conditions
-      (id, group_id, field, operator, value, weight)
-    VALUES (@id, @group_id, @field, @operator, @value, @weight)
-  `)
-
-  const insertAction = db.prepare(`
-    INSERT INTO rule_actions
-      (id, group_id, action_type, content, sort_order)
-    VALUES (@id, @group_id, @action_type, @content, @sort_order)
-  `)
-
-  const insertCategory = db.prepare(`
-    INSERT INTO inventory_categories
-      (id, name, code, sort_order)
-    VALUES (@id, @name, @code, @sort_order)
-  `)
+  // ★ 列表不再手写：按"表实际列 ∩ JSON 里有的键"生成 INSERT。
+  //   原来 rule_groups 的 INSERT 写死 13 列，而表有 18 列，export-rules.js 又用 SELECT * 导出 18 列
+  //   ⇒ 全删重建时 source_key / evidence_level / feedback_up / feedback_down / last_hit_at 五列被丢掉。
+  //   后果不是"少个字段"：db/applyRuleSeeds.js 判断"这条种子库里有没有"靠的就是 source_key，
+  //   列一空，97 条种子规则在下次启动时被当成缺失重新插一遍（实测 361 → 458 条），
+  //   依据分档和累计的反馈计数也一起归零。
+  const insertFromJson = (table, rows, coerce) => {
+    if (!Array.isArray(rows) || rows.length === 0) return 0
+    const realCols = db
+      .prepare(`PRAGMA table_info(${table})`)
+      .all()
+      .map((r) => r.name)
+    const jsonKeys = new Set(rows.flatMap((row) => Object.keys(row || {})))
+    const cols = realCols.filter((c) => jsonKeys.has(c))
+    if (cols.length === 0) return 0
+    const stmt = db.prepare(
+      `INSERT INTO ${table} (${cols.join(', ')}) VALUES (${cols.map((c) => '@' + c).join(', ')})`,
+    )
+    for (const row of rows) {
+      const bound = {}
+      for (const c of cols) bound[c] = row[c] === undefined ? null : row[c]
+      if (coerce) coerce(bound)
+      stmt.run(bound)
+    }
+    return rows.length
+  }
 
   // 使用事务批量插入(better-sqlite3 支持 db.transaction,但这里保持手动控制兼容)
   db.exec('BEGIN TRANSACTION')
@@ -97,28 +98,14 @@ function seedAll(db) {
     db.exec('DELETE FROM rule_groups')
     db.exec('DELETE FROM inventory_categories')
 
-    // 插入规则组
-    for (const g of rule_groups) {
-      insertGroup.run({
-        ...g,
-        enabled: g.enabled ? 1 : 0,
-      })
-    }
+    // 插入规则组（enabled 统一转 0/1，SQLite 里没有布尔列）
+    insertFromJson('rule_groups', rule_groups, (bound) => {
+      bound.enabled = bound.enabled ? 1 : 0
+    })
 
-    // 插入规则条件
-    for (const c of rule_conditions) {
-      insertCondition.run(c)
-    }
-
-    // 插入规则动作
-    for (const a of rule_actions) {
-      insertAction.run(a)
-    }
-
-    // 插入库存分类
-    for (const cat of inventory_categories) {
-      insertCategory.run(cat)
-    }
+    insertFromJson('rule_conditions', rule_conditions)
+    insertFromJson('rule_actions', rule_actions)
+    insertFromJson('inventory_categories', inventory_categories)
 
     db.exec('COMMIT')
   } catch (err) {

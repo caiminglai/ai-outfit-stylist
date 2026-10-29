@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex,nofollow"><meta name="description" content="付款与付款凭证提交入口：本页只在下单后使用，不需要被搜索收录。">
   <title>付款与凭证提交 — 私人形象定制AI</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -42,7 +42,7 @@
 <body>
 <div class="wrap">
   <h1>付款与凭证提交</h1>
-  <p class="sub">点「一键付款」在线支付，付完本页会自动确认到账并放行服务。备用收款码默认收起，需要扫码转账时点「显示备用收款码」，再上传付款截图由我们人工确认。</p>
+  <p class="sub">点「一键付款」在线支付，付完本页会自动确认到账。<b>到账后回展厅首页，「我的报告」里就能领取这份深度细账</b>（一笔一份，可以反复打开；价格以下面那个大字金额为准，本页文案不另写一份）。<br />备用收款码默认收起：需要扫码转账时点「显示备用收款码」，上传付款截图后由我们人工确认——<b>确认后同样在「我的报告」里自助领，不用等客服</b>。</p>
 
   <div class="card">
     <div class="price" id="price">—<small id="price-title"></small></div>
@@ -54,13 +54,13 @@
       <button class="act" id="wechat-pay" style="display:none">微信扫码付款</button>
       <div class="msg" id="wechat-msg"></div>
       <div id="wechat-qr"></div>
-      <div id="wechat-fallback"><img alt="微信收款码" src="/wechat-qr.png"><p>扫这个码付款，付完需在下面上传付款截图，我们人工核对后放行服务</p></div>
+      <div id="wechat-fallback"><img alt="微信收款码" src="/wechat-qr.png"><p>扫这个码付款，付完在本页上传付款截图，我们人工确认后你就能回展厅「我的报告」领取这份细账</p></div>
       <p class="alt" id="wechat-alt" style="display:none">显示备用收款码</p>
     </div>
     <div class="qr" id="qr-alipay">
       <button class="act" id="alipay-pay" style="display:none">支付宝一键付款</button>
       <div class="msg" id="alipay-msg"></div>
-      <div id="alipay-fallback"><img alt="支付宝收款码" src="/alipay-qr.png"><p>扫这个码付款，付完需在下面上传付款截图，我们人工核对后放行服务</p></div>
+      <div id="alipay-fallback"><img alt="支付宝收款码" src="/alipay-qr.png"><p>扫这个码付款，付完在本页上传付款截图，我们人工确认后你就能回展厅「我的报告」领取这份细账</p></div>
       <p class="alt" id="alipay-alt" style="display:none">显示备用收款码</p>
     </div>
   </div>
@@ -85,11 +85,20 @@
 
 <script src="/qrcode.js"></script>
 <script>
-/* 游客身份单独存一份，不和展厅 SPA 共用 key：
-   SPA 那边写进 localStorage 的 id 是浏览器自己拼的，服务端没有登记，
-   混用会让本页提交凭证时被 loginRequired 挡成 401。
-   服务端 users 表里的游客记录不会过期，所以这里也不按时间淘汰身份。 */
-var SID_KEY = 'style_ai_guest', TS_KEY = 'style_ai_guest_ts';
+/* 本页的支付身份：优先沿用展厅 SPA 那一个，读不到才自己注册游客号。
+   —— 10-21 第十二阶段·第一步改的口径。原来这里写死「不共用 key」，理由是
+   SPA 那个 id 服务端没登记、提交凭证会被 loginRequired 挡成 401；那条已经过期：
+   `backend/middleware/auth.js:79` 的 `optionalUser` 现在会按形状门
+   `/^[A-Za-z0-9_-]{8,64}$/` 现场补一条游客行（同文件 :56 `ensureGuestUser`），
+   继续沿用同一个 id 反而是「付了钱却看不到报告」唯一的修法——
+   两套 id 会把同一个人分成 `users` 里两行，订单落在本页这行，
+   展厅「我的报告」按另一行查，什么都查不到。
+   ⛔ 本页不往共享键里写任何东西，只读；自己的游客号照旧存自己的键当兜底。 */
+var SID_KEY = 'style_ai_guest',
+  TS_KEY = 'style_ai_guest_ts',
+  SPA_ACCOUNT_KEY = 'style_ai_account',
+  SPA_SID_KEY = 'style_ai_session',
+  SID_RE = /^[A-Za-z0-9_-]{8,64}$/;
 
 function esc(s) {
   return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
@@ -97,7 +106,24 @@ function esc(s) {
   });
 }
 
+/* 展厅那边的身份：登录了就是账号的 session_id，没登录是本地生成的游客 sess_ 号 */
+function readSpaSession() {
+  try {
+    var raw = localStorage.getItem(SPA_ACCOUNT_KEY);
+    if (raw) {
+      var acc = JSON.parse(raw);
+      if (acc && SID_RE.test(acc.sessionId || '')) return acc.sessionId;
+    }
+  } catch (e) {
+    /* 键被老版本写坏 ⇒ 当没登录 */
+  }
+  var sid = localStorage.getItem(SPA_SID_KEY);
+  return sid && SID_RE.test(sid) ? sid : '';
+}
+
 async function ensureSession(force) {
+  var shared = readSpaSession();
+  if (shared && !force) return shared;
   var sid = localStorage.getItem(SID_KEY);
   if (sid && !force) return sid;
   var res = await fetch('/api/auth/guest', {
@@ -132,7 +158,8 @@ function setMsg(text, cls) {
 }
 
 function showMine(row) {
-  if (!row) return;
+  // GET /api/payment/my 现在没有凭证也回对象（带 entitlement），所以判空要看 status 而不是判 row
+  if (!row || !row.status) return;
   var map = { pending: ['待确认', 'b-pending'], approved: ['已确认', 'b-approved'], rejected: ['未通过', 'b-rejected'] };
   var st = map[row.status] || [row.status, 'b-pending'];
   document.getElementById('my-status').innerHTML = '<span class="badge ' + st[1] + '">' + esc(st[0]) + '</span>';
@@ -183,10 +210,10 @@ function showPayPage(ch) {
 /* 查单接口内部会再向渠道兜底问一次，所以回调万一丢了也不影响这里确认到账 */
 function pollOrder(ch) {
   var o = orders[ch];
-  if (o.timer) return;
+  if (o.timer) return; o.tries = 0; // 🔴 10-22 组4 真钱测单抓到的：tries 从前一次轮询里带着 60 的余值过来、这里不清零 ⇒ 顾客点「重新打开支付宝付款页」时 pollOrder 一进门就命中 tries>60 自己停掉，付了钱页面也不会再自动确认。清零只在"真的新起一个计时器"之后做（上面那句 return 挡掉重复挂表的情况）。
   o.timer = setInterval(async function () {
     if (!o.no) return;
-    if (++o.tries > 60) {
+    if (++o.tries > 400) { // 400×3s＝20 分钟，刻意短于后端 ORDER_TTL_MINUTES=30 分（routes/payment.js:76），让下面那条 closed 分支先够得着；⚠️ 这个口本就豁免在总闸外（server.js 的 skip 里 /api/payment/order/），3 秒一次＝20 次/分，仍在它自己那道 orderQueryLimiter 40 次/分以内。
       stopPoll(ch);
       setOnlineMsg(ch, '还没查到到账。确实付成功的话，稍后刷新本页即可；也可以先用下面的「提交凭证」。');
       return;
@@ -195,8 +222,20 @@ function pollOrder(ch) {
       var d = await api('/api/payment/order/' + encodeURIComponent(o.no));
       if (d.success && d.data.status === 'paid') {
         stopPoll(ch);
-        setOnlineMsg(ch, '已到账 ¥' + esc(Number(d.data.amount).toFixed(2)) + '，服务已放行。', 'ok');
+        setOnlineMsg(ch, '已到账 ¥' + esc(Number(d.data.amount).toFixed(2)) + '，回展厅首页点「我的报告」即可领取这份细账。', 'ok');
         await loadMine();
+        return;
+      }
+      // 超过 30 分钟没付完的单会被后端关掉（routes/payment.js 的 closeStaleOrders）。
+      // 这里必须把本地这单清干净，否则「重新打开付款页」会把人送回一张已经作废的码。
+      if (d.success && d.data.status === 'closed') {
+        stopPoll(ch);
+        o.no = '';
+        o.url = '';
+        o.closed = true;
+        var payBtn = document.getElementById(ch + '-pay');
+        if (o.label) payBtn.textContent = o.label;
+        setOnlineMsg(ch, '这单已超时关闭，请重新下单。', 'err');
       }
     } catch (e) {
       /* 查单偶发失败就下一轮再试，别把按钮和提示打断 */
@@ -219,8 +258,9 @@ function bindPayButton(ch) {
   document.getElementById(ch + '-pay').addEventListener('click', async function () {
     var btn = this;
     var o = orders[ch];
-    if (o.url) {
-      showPayPage(ch);
+    // o.closed：这一单已被后端超时关闭 ⇒ 不能 reuse，必须重新下单（见 pollOrder 里那段）
+    if (o.url && !o.closed) {
+      showPayPage(ch); pollOrder(ch); // 🔴 10-22 组4：这一支原来只重开收银台、不重新起轮询（pollOrder 一次都没调）⇒ 上一轮询到点停了之后，这一单就算付了钱本页也永远不再确认到账。
       return;
     }
     btn.disabled = true;
@@ -230,6 +270,7 @@ function bindPayButton(ch) {
       if (!d.success) throw new Error((d.error && d.error.message) || '下单失败');
       o.no = d.data.out_trade_no;
       o.url = d.data[CHANNELS[ch].urlKey];
+      o.closed = false;
       btn.textContent = CHANNELS[ch].again;
       showPayPage(ch);
       pollOrder(ch);
@@ -244,6 +285,8 @@ function bindPayButton(ch) {
 function revealPay(ch, label, amount) {
   var btn = document.getElementById(ch + '-pay');
   btn.textContent = label + ' ¥' + Number(amount).toFixed(2);
+  // 存下原始按钮文案：超时关单后要把它换回来（pollOrder 里的 closed 分支）
+  orders[ch].label = btn.textContent;
   btn.style.display = 'block';
   // 在线路通电了就把个人收款码收起，免得同屏两张码让人不知道该扫哪个
   document.getElementById(ch + '-fallback').style.display = 'none';
@@ -279,6 +322,9 @@ document.getElementById('submit').addEventListener('click', async function () {
   var btn = this;
   var file = document.getElementById('proof').files[0];
   if (!file) return setMsg('请先选择付款截图', 'err');
+  // 与后端 middleware/upload.js 同一条上限（multer memoryStorage 10MB）：本机先挡住，
+  // 免得整张手机截图传上去才换一句 400。accept 已经限了 jpeg/png/webp，这里只补体积。
+  if (file.size > 10 * 1024 * 1024) return setMsg('截图超过 10 MB，请压缩后再传', 'err');
   btn.disabled = true;
   setMsg('上传中…');
   try {

@@ -56,7 +56,7 @@
 | 前端 | React 19 + TS + Tailwind + shadcn/ui | 组件即文档，`ui/` 目录可整体替换 |
 | 3D | Three.js + MMDLoader（PMX） | 二次元/卡渲资源现成，省去自建模 |
 | 后端 | Node.js + Express 4 + better-sqlite3 | 单进程同步 API，门店场景没有并发压力，不值得引入 PG |
-| 数据库 | SQLite（WAL） | 零配置；代价是库文件在容器运行期会被写，所以**不进 Git** |
+| 数据库 | SQLite（WAL） | 零配置；代价是库文件在容器运行期会被写，所以**表级定权威**——存档层进 Git（`.gitignore` 白名单），被应用写的那批表以服务器为准，判据见 `compose/CONVENTIONS.md` §4 |
 | 规则引擎 | 三表结构（组/条件/动作） | 规则是数据不是代码，改建议不用发版 |
 | 部署 | Docker Compose + Caddy | 本机与服务器共用一份 compose，服务名 `style-ai` |
 
@@ -78,7 +78,7 @@
 
 ### 别做
 
-- 别把 `models/` 或 `styleai.db` 加回 Git。展厅的 `/api/models/file/*` 是匿名直出的，已经实测过 56MB zip 能匿名下载——这道闸（`SKIP_DIRS`）是刻意留的，改动前先确认限流豁免和目录穿越校验都在。
+- 别把 `models/` 加回 Git（`styleai.db` 不在这条里——它按 `compose/CONVENTIONS.md` §4 定稿是跟踪的，只被应用写的表按表级权威走）。展厅的 `/api/models/file/*` 是匿名直出的，已经实测过 56MB zip 能匿名下载——这道闸（`SKIP_DIRS`）是刻意留的，改动前先确认限流豁免和目录穿越校验都在。
 - 别给展厅加登录墙。定案是"加账号身份、不加登录墙"，展厅必须匿名可看。
 
 ---

@@ -57,8 +57,7 @@ const newRules = [
       { action_type: 'outerwear', content: '轻薄防风外套（户外运动时搭配）' },
       {
         action_type: 'reason',
-        content:
-          '运动生理学建议：速干面料减少体表湿度，弹性面料提供运动自由度（运动服装指南）',
+        content: '运动生理学建议：速干面料减少体表湿度，弹性面料提供运动自由度（运动服装指南）',
       },
     ],
   },
@@ -247,8 +246,7 @@ const newRules = [
       { action_type: 'color_combo', content: '中性色+点缀色（黑白灰+1个亮色）' },
       {
         action_type: 'reason',
-        content:
-          '正常BMI（18.5-22.9）体型穿搭自由度最高，可灵活驾驭各种风格（亚洲体型标准）',
+        content: '正常BMI（18.5-22.9）体型穿搭自由度最高，可灵活驾驭各种风格（亚洲体型标准）',
       },
     ],
   },
@@ -386,8 +384,7 @@ const newRules = [
       { action_type: '妆容风格', content: '哑光 / 雾面妆效（减少油光反射）' },
       {
         action_type: 'reason',
-        content:
-          '皮肤科学：油皮皮脂分泌旺盛，需选择控油配方和哑光妆效产品，粉状质地优于液态',
+        content: '皮肤科学：油皮皮脂分泌旺盛，需选择控油配方和哑光妆效产品，粉状质地优于液态',
       },
     ],
   },
@@ -439,8 +436,7 @@ const newRules = [
       { action_type: '妆容风格', content: '半哑光妆效（T区雾面+U区微光）' },
       {
         action_type: 'reason',
-        content:
-          '皮肤科学：混合皮T区油U区干，需分区使用不同质地产品',
+        content: '皮肤科学：混合皮T区油U区干，需分区使用不同质地产品',
       },
     ],
   },
@@ -526,8 +522,7 @@ const newRules = [
       { action_type: 'color_combo', content: '上下同色系（拉长视觉线条）' },
       {
         action_type: 'reason',
-        content:
-          '视觉比例理论：男性身高160-170cm应选择合身剪裁和高腰线，同色系搭配拉长视觉',
+        content: '视觉比例理论：男性身高160-170cm应选择合身剪裁和高腰线，同色系搭配拉长视觉',
       },
       { action_type: 'avoid', content: '过长上衣 / 低腰裤 / 宽松大裤脚 / 平底靴' },
     ],
@@ -558,8 +553,7 @@ const newRules = [
       { action_type: 'color_combo', content: '基础中性色（黑白灰+1个亮色点缀）' },
       {
         action_type: 'reason',
-        content:
-          '消费心理学：平价预算应投资基础款（胶囊衣橱理论），60%基础款+30%流行款+10%个性款',
+        content: '消费心理学：平价预算应投资基础款（胶囊衣橱理论），60%基础款+30%流行款+10%个性款',
       },
     ],
   },
@@ -584,8 +578,7 @@ const newRules = [
       { action_type: 'color_combo', content: '高级灰 / 莫兰迪色系 / 大地色系' },
       {
         action_type: 'reason',
-        content:
-          '消费心理学：高端预算应注重面料质感和剪裁工艺，投资天然纤维和经典款式',
+        content: '消费心理学：高端预算应注重面料质感和剪裁工艺，投资天然纤维和经典款式',
       },
     ],
   },
@@ -610,8 +603,7 @@ const newRules = [
       { action_type: 'color_combo', content: '黑白灰+藏青（百搭基础色）' },
       {
         action_type: 'reason',
-        content:
-          '消费心理学：平价预算男性应投资合身的基础款，比花哨款式更耐穿且显品味',
+        content: '消费心理学：平价预算男性应投资合身的基础款，比花哨款式更耐穿且显品味',
       },
     ],
   },
@@ -641,8 +633,7 @@ const newRules = [
       { action_type: 'color_combo', content: '活力色系（粉/蓝/黄/绿）可大胆撞色' },
       {
         action_type: 'reason',
-        content:
-          '年龄心理学：18-25岁年轻人审美接受度高，可尝试前卫色彩和潮流款式',
+        content: '年龄心理学：18-25岁年轻人审美接受度高，可尝试前卫色彩和潮流款式',
       },
     ],
   },
@@ -667,8 +658,7 @@ const newRules = [
       { action_type: 'color_combo', content: '莫兰迪色系 / 大地色系 / 经典黑白灰+点缀色' },
       {
         action_type: 'reason',
-        content:
-          '年龄心理学：26-35岁轻熟女性注重质感和得体，从活力转向知性优雅',
+        content: '年龄心理学：26-35岁轻熟女性注重质感和得体，从活力转向知性优雅',
       },
     ],
   },
@@ -693,8 +683,7 @@ const newRules = [
       { action_type: 'color_combo', content: '潮流撞色 / 街头风格色系' },
       {
         action_type: 'reason',
-        content:
-          '年龄心理学：18-25岁男性偏好街头潮流和运动风格，注重品牌认同感',
+        content: '年龄心理学：18-25岁男性偏好街头潮流和运动风格，注重品牌认同感',
       },
     ],
   },
@@ -719,8 +708,7 @@ const newRules = [
       { action_type: 'color_combo', content: '低饱和色系（藏青/卡其/深灰/橄榄绿）' },
       {
         action_type: 'reason',
-        content:
-          '年龄心理学：26-35岁男性从潮流转向质感，注重面料和剪裁',
+        content: '年龄心理学：26-35岁男性从潮流转向质感，注重面料和剪裁',
       },
     ],
   },
@@ -751,8 +739,7 @@ const newRules = [
       { action_type: 'color_combo', content: '上身深色+下身浅色（转移视觉重心）' },
       {
         action_type: 'reason',
-        content:
-          '人体比例美学：短颈宽肩应使用V领拉长颈部，下半身膨胀平衡肩宽比例',
+        content: '人体比例美学：短颈宽肩应使用V领拉长颈部，下半身膨胀平衡肩宽比例',
       },
       { action_type: 'avoid', content: '高领 / 垫肩 / 泡泡袖 / 船领' },
     ],
@@ -779,8 +766,7 @@ const newRules = [
       { action_type: 'color_combo', content: '上身浅色+亮色（增加上半身体积感）' },
       {
         action_type: 'reason',
-        content:
-          '人体比例美学：长颈窄肩应使用高领和垫肩增加肩部体积，平衡长颈比例',
+        content: '人体比例美学：长颈窄肩应使用高领和垫肩增加肩部体积，平衡长颈比例',
       },
     ],
   },
@@ -917,8 +903,7 @@ const newRules = [
       { action_type: 'outerwear', content: '披肩 / 丝绒小外套' },
       {
         action_type: 'reason',
-        content:
-          '着装规范理论：婚礼宾客应避免白色系，选择正式感礼服，尊重场合文化',
+        content: '着装规范理论：婚礼宾客应避免白色系，选择正式感礼服，尊重场合文化',
       },
     ],
   },
@@ -944,8 +929,7 @@ const newRules = [
       { action_type: 'outerwear', content: '礼服外套 / 三件套西装' },
       {
         action_type: 'reason',
-        content:
-          '着装规范理论：男性参加婚礼需着正装或礼服，领结配色需根据婚礼主题调整',
+        content: '着装规范理论：男性参加婚礼需着正装或礼服，领结配色需根据婚礼主题调整',
       },
     ],
   },
@@ -976,8 +960,7 @@ const newRules = [
       { action_type: 'bag_style', content: '驼色 / 焦糖色 / 棕色系手袋' },
       {
         action_type: 'reason',
-        content:
-          '色彩学冷暖理论：暖皮（含黄色素多）搭配暖色调金色系配饰，视觉和谐度最高',
+        content: '色彩学冷暖理论：暖皮（含黄色素多）搭配暖色调金色系配饰，视觉和谐度最高',
       },
     ],
   },
@@ -1002,8 +985,7 @@ const newRules = [
       { action_type: 'bag_style', content: '黑/白/灰色系手袋 / 银色金属扣' },
       {
         action_type: 'reason',
-        content:
-          '色彩学冷暖理论：冷皮（含蓝色素多）搭配冷色调银色系配饰，提升皮肤通透感',
+        content: '色彩学冷暖理论：冷皮（含蓝色素多）搭配冷色调银色系配饰，提升皮肤通透感',
       },
     ],
   },
@@ -1027,8 +1009,7 @@ const newRules = [
       { action_type: 'belt', content: '棕色真皮腰带 / 铜扣腰带' },
       {
         action_type: 'reason',
-        content:
-          '色彩学冷暖理论：暖皮男性适合金色系和棕色调配饰，整体和谐有质感',
+        content: '色彩学冷暖理论：暖皮男性适合金色系和棕色调配饰，整体和谐有质感',
       },
     ],
   },
@@ -1052,8 +1033,7 @@ const newRules = [
       { action_type: 'belt', content: '黑色真皮腰带 / 银扣腰带' },
       {
         action_type: 'reason',
-        content:
-          '色彩学冷暖理论：冷皮男性适合银色系和黑色调配饰，干净利落显气质',
+        content: '色彩学冷暖理论：冷皮男性适合银色系和黑色调配饰，干净利落显气质',
       },
     ],
   },
@@ -1114,8 +1094,7 @@ const newRules = [
       { action_type: 'bang_type', content: '侧分刘海 / 中分无刘海（避免齐刘海）' },
       {
         action_type: 'reason',
-        content:
-          '面部比例美学：圆脸（宽=长）需纵向拉伸，选择有高度感的发型和侧分线条',
+        content: '面部比例美学：圆脸（宽=长）需纵向拉伸，选择有高度感的发型和侧分线条',
       },
       { action_type: 'avoid', content: '齐刘海 / 短波波头 / 蓬松卷发会显脸更圆' },
     ],
@@ -1140,8 +1119,7 @@ const newRules = [
       { action_type: 'bang_type', content: '空气刘海 / 法式碎刘海（柔和额角）' },
       {
         action_type: 'reason',
-        content:
-          '面部比例美学：方脸（下颌角突出）需柔和曲线发型弱化棱角',
+        content: '面部比例美学：方脸（下颌角突出）需柔和曲线发型弱化棱角',
       },
       { action_type: 'avoid', content: '直发一刀切 / 高扎发露出下颌 / 短发' },
     ],
@@ -1166,8 +1144,7 @@ const newRules = [
       { action_type: 'bang_type', content: '侧分刘海 / 轻薄刘海' },
       {
         action_type: 'reason',
-        content:
-          '面部比例美学：心形脸（宽额窄下巴）需在下半部分增加体积平衡',
+        content: '面部比例美学：心形脸（宽额窄下巴）需在下半部分增加体积平衡',
       },
     ],
   },
@@ -1191,8 +1168,7 @@ const newRules = [
       { action_type: 'bang_type', content: '齐刘海 / 厚刘海（缩短脸部长度）' },
       {
         action_type: 'reason',
-        content:
-          '面部比例美学：长脸（长>宽）需横向丰满和刘海缩短视觉长度',
+        content: '面部比例美学：长脸（长>宽）需横向丰满和刘海缩短视觉长度',
       },
       { action_type: 'avoid', content: '超长直发 / 中分无刘海 / 过于贴头皮' },
     ],
@@ -1224,8 +1200,7 @@ const newRules = [
       { action_type: 'outerwear', content: '轻薄风衣 / 小西装外套' },
       {
         action_type: 'reason',
-        content:
-          '职场着装心理学：上班通勤应保持干练形象，中性色系传达专业感',
+        content: '职场着装心理学：上班通勤应保持干练形象，中性色系传达专业感',
       },
     ],
   },
@@ -1251,8 +1226,7 @@ const newRules = [
       { action_type: 'outerwear', content: '休闲西装 / 哈灵顿夹克 / 风衣' },
       {
         action_type: 'reason',
-        content:
-          '职场着装心理学：男性商务休闲平衡专业与亲和力',
+        content: '职场着装心理学：男性商务休闲平衡专业与亲和力',
       },
     ],
   },
@@ -1282,8 +1256,7 @@ const newRules = [
       { action_type: 'color_combo', content: '柔和色系（米色/浅粉/浅灰/薄荷绿）' },
       {
         action_type: 'reason',
-        content:
-          '舒适心理学：居家应选择天然棉质宽松面料，柔和色调促进放松',
+        content: '舒适心理学：居家应选择天然棉质宽松面料，柔和色调促进放松',
       },
     ],
   },
@@ -1308,8 +1281,7 @@ const newRules = [
       { action_type: 'color_combo', content: '低饱和色系（灰/深蓝/墨绿/黑）' },
       {
         action_type: 'reason',
-        content:
-          '舒适心理学：男性居家同样需要舒适面料，低饱和色调有助于精神放松',
+        content: '舒适心理学：男性居家同样需要舒适面料，低饱和色调有助于精神放松',
       },
     ],
   },
@@ -1339,8 +1311,7 @@ const newRules = [
       { action_type: 'color_combo', content: '浪漫色系（粉/红/紫/酒红/裸色）' },
       {
         action_type: 'reason',
-        content:
-          '社交印象管理：约会聚会应展现女性魅力，浪漫色系和适度露肤提升吸引力',
+        content: '社交印象管理：约会聚会应展现女性魅力，浪漫色系和适度露肤提升吸引力',
       },
     ],
   },
@@ -1365,8 +1336,7 @@ const newRules = [
       { action_type: 'color_combo', content: '有质感的色系（深蓝+白 / 酒红+黑 / 橄榄+卡其）' },
       {
         action_type: 'reason',
-        content:
-          '社交印象管理：男性约会应展现品味而非炫耀，修身合体+有质感的搭配提升好感度',
+        content: '社交印象管理：男性约会应展现品味而非炫耀，修身合体+有质感的搭配提升好感度',
       },
     ],
   },
@@ -1377,44 +1347,53 @@ const newRules = [
 // ============================================================
 
 function addNewRules(db) {
-  // 获取当前最大ID
-  const maxGroup = db.prepare('SELECT MAX(id) as maxId FROM rule_groups').get()
-  const maxCondition = db.prepare('SELECT MAX(id) as maxId FROM rule_conditions').get()
-  const maxAction = db.prepare('SELECT MAX(id) as maxId FROM rule_actions').get()
-
-  let groupId = (maxGroup?.maxId || 0) + 1
-  let conditionId = (maxCondition?.maxId || 0) + 1
-  let actionId = (maxAction?.maxId || 0) + 1
+  // 原来这里手工 `SELECT MAX(id)+1` 三份，再把 id 当参数写进去。三张表都是
+  // `id INTEGER PRIMARY KEY AUTOINCREMENT`（schema.sql:177/206/217），主键本来就该交给 SQLite；
+  // 更要紧的是整个脚本从头到尾不判"这条规则库里有没有"，⇒ 跑第二次就整批重复插，
+  // 同一条规则在引擎里命中两遍、hit_count 也分家。幂等靠的是 rule_groups.source_key
+  // 那套（db/init.js:175 的唯一索引），这个历史脚本不走那条路，所以这里补一道按 name 的判存。
+  const existingNames = new Set(
+    db
+      .prepare('SELECT name FROM rule_groups')
+      .all()
+      .map((r) => r.name),
+  )
 
   const insertGroup = db.prepare(`
     INSERT INTO rule_groups
-      (id, name, mode, gender, category, scenario, region, age_range,
+      (name, mode, gender, category, scenario, region, age_range,
        description, priority, enabled, hit_count, created_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 0, datetime('now'))
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 0, datetime('now'))
   `)
 
   const insertCondition = db.prepare(`
     INSERT INTO rule_conditions
-      (id, group_id, field, operator, value, weight)
-    VALUES (?, ?, ?, ?, ?, 1)
+      (group_id, field, operator, value, weight)
+    VALUES (?, ?, ?, ?, 1)
   `)
 
   const insertAction = db.prepare(`
     INSERT INTO rule_actions
-      (id, group_id, action_type, content, sort_order)
-    VALUES (?, ?, ?, ?, ?)
+      (group_id, action_type, content, sort_order)
+    VALUES (?, ?, ?, ?)
   `)
 
   let groupCount = 0
   let conditionCount = 0
   let actionCount = 0
+  let skipped = 0
 
   db.exec('BEGIN TRANSACTION')
   try {
     for (const rule of newRules) {
       const g = rule.group
-      insertGroup.run(
-        groupId,
+      if (existingNames.has(g.name)) {
+        console.log(`[新增规则] 库里已有同名规则组，跳过: ${g.name}`)
+        skipped++
+        continue
+      }
+
+      const groupInfo = insertGroup.run(
         g.name,
         g.mode,
         g.gender,
@@ -1425,38 +1404,29 @@ function addNewRules(db) {
         g.description,
         g.priority ?? 0,
       )
+      const groupId = groupInfo.lastInsertRowid
+      existingNames.add(g.name)
       groupCount++
 
       // 插入条件
       for (const cond of rule.conditions) {
-        insertCondition.run(
-          conditionId,
-          groupId,
-          cond.field,
-          cond.operator,
-          JSON.stringify(cond.value),
-        )
-        conditionId++
+        insertCondition.run(groupId, cond.field, cond.operator, JSON.stringify(cond.value))
         conditionCount++
       }
 
       // 插入动作
       let sortOrder = 0
       for (const action of rule.actions) {
-        insertAction.run(actionId, groupId, action.action_type, action.content, sortOrder)
-        actionId++
+        insertAction.run(groupId, action.action_type, action.content, sortOrder)
         actionCount++
         sortOrder++
       }
-
-      groupId++
     }
 
     db.exec('COMMIT')
     console.log(
-      `[新增规则] 导入完成: ${groupCount} 规则组, ${conditionCount} 条件, ${actionCount} 动作`,
+      `[新增规则] 导入完成: 新增 ${groupCount} 规则组, ${conditionCount} 条件, ${actionCount} 动作, 跳过同名 ${skipped} 条`,
     )
-    console.log(`[新增规则] 规则组ID范围: ${maxGroup?.maxId + 1} - ${groupId - 1}`)
   } catch (err) {
     db.exec('ROLLBACK')
     throw err

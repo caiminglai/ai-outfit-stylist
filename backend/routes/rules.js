@@ -5,6 +5,7 @@
 const express = require('express')
 const db = require('../db/init')
 const { sendSuccess, sendError } = require('../utils/response')
+const { toEnabledBit, ownValue, asNumber, asFilters, asId } = require('../utils/common')
 const { adminLoginRequired } = require('../middleware/auth')
 const {
   explainGroup,
@@ -77,6 +78,12 @@ const TAG_LABELS = {
  * @returns {{ok: true, row: object} | {ok: false, error: string}}
  */
 function normalizeCondition(input, idx) {
+  // 数组里的每一项都得是对象：10-13 现量 `{"conditions":[null]}` 原来在这一行读
+  // input.field 当场 TypeError ⇒ POST /groups 回 500，而这是"请求体写错了"、该 400。
+  // null 尤其真得起来：前端删条件时按 null 占位、JSON 一序列化就是 [null]。
+  if (!input || typeof input !== 'object' || Array.isArray(input)) {
+    return { ok: false, error: `第 ${idx + 1} 条条件不是对象` }
+  }
   const field = String(input.field || '').trim()
   const operator = String(input.operator || 'eq').trim()
   const weight = Number(input.weight) > 0 ? Number(input.weight) : 1
@@ -152,6 +159,26 @@ function replaceChildren(groupId, conditions, actions) {
   for (const a of actions) insAct.run(groupId, a.action_type, a.content, a.sort_order)
 }
 
+/**
+ * 读回某个规则组现有的条件/动作行，形状和 replaceChildren 需要的行一致。
+ * value 列在库里就是 JSON 文本（normalizeCondition 里 JSON.stringify 出来的），
+ * 原样读出来再原样写回去即可，不需要再序列化一次。
+ */
+function loadChildren(groupId) {
+  return {
+    conditions: db
+      .prepare(
+        'SELECT field, operator, value, weight FROM rule_conditions WHERE group_id = ? ORDER BY id',
+      )
+      .all(groupId),
+    actions: db
+      .prepare(
+        'SELECT action_type, content, sort_order FROM rule_actions WHERE group_id = ? ORDER BY sort_order, id',
+      )
+      .all(groupId),
+  }
+}
+
 /** 校验条件+动作数组,全部合法才返回 {conditions, actions},否则返回 error */
 function validateChildren(body) {
   const conditions = []
@@ -160,11 +187,19 @@ function validateChildren(body) {
   const rawActs = Array.isArray(body.actions) ? body.actions : []
 
   for (const [i, raw] of rawConds.entries()) {
+    // conditions:[null] / ["abc"] 这类畸形项原来直接进 normalizeCondition 读 .field ⇒ 500。
+    // 非对象在这里就判掉，与"字段无效"同一口径回 400。
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+      return { error: `第 ${i + 1} 条条件不是对象` }
+    }
     const r = normalizeCondition(raw, i)
     if (!r.ok) return { error: r.error }
     conditions.push(r.row)
   }
   for (const [i, raw] of rawActs.entries()) {
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+      return { error: `第 ${i + 1} 条动作不是对象` }
+    }
     const r = normalizeAction(raw, i, i)
     if (!r.ok) return { error: r.error }
     actions.push(r.row)
@@ -200,11 +235,16 @@ router.get('/schema', adminLoginRequired, (req, res) => {
       .filter((t) => t.value !== '')
       .sort((a, b) => b.count - a.count)
       .concat(tagRows.filter((t) => t.value === ''))
-      .map((t) => ({
-        value: t.value === '' ? TAG_NONE : t.value,
-        label: TAG_LABELS[t.value === '' ? TAG_NONE : t.value] || t.value,
-        count: t.count,
-      }))
+      .map((t) => {
+        const key = t.value === '' ? TAG_NONE : t.value
+        return {
+          value: key,
+          // 标签名是从库里读出来的自由文本：ownValue 保证 label 只会是标签表里的中文，
+          // 不会在 key 恰好是 constructor/toString 时变成一个函数（JSON 里整个字段消失）
+          label: ownValue(TAG_LABELS, key) || key,
+          count: t.count,
+        }
+      })
 
     // 部位/结论类型：动作表里在用的 action_type，中文名直接取可解释性那张标签表
     const parts = db
@@ -212,7 +252,11 @@ router.get('/schema', adminLoginRequired, (req, res) => {
         'SELECT action_type AS value, COUNT(*) AS count FROM rule_actions GROUP BY value ORDER BY count DESC',
       )
       .all()
-      .map((p) => ({ value: p.value, label: ACTION_LABELS[p.value] || p.value, count: p.count }))
+      .map((p) => ({
+        value: p.value,
+        label: ownValue(ACTION_LABELS, p.value) || p.value,
+        count: p.count,
+      }))
 
     return sendSuccess(res, {
       fields: CONDITION_FIELDS.map((f) => ({ value: f, label: FIELD_LABELS[f] })),
@@ -235,9 +279,14 @@ router.get('/schema', adminLoginRequired, (req, res) => {
         {
           value: 'none',
           label: '未标注(按 C 档对待)',
-          note: '后台手工建的规则、或种子前缀认不出来的规则',
-          count: db.prepare('SELECT COUNT(*) AS c FROM rule_groups WHERE evidence_level IS NULL').get()
-            .c,
+          // 口径与 services/evidenceLevels.js 一致：只有"没带 source_key"才落 NULL；
+          // 前缀认不出来的 key（如 height-f-170-180）按 C 兜底，不进这一档。
+          // 原来这句写"或种子前缀认不出来的规则"，与实现相反，后台按它数出来的
+          // "未标注 264 条"里其实一条前缀认不出的都没有。
+          note: '后台手工建的规则（种子里没带 key 的那些）',
+          count: db
+            .prepare('SELECT COUNT(*) AS c FROM rule_groups WHERE evidence_level IS NULL')
+            .get().c,
         },
       ]),
     })
@@ -249,7 +298,19 @@ router.get('/schema', adminLoginRequired, (req, res) => {
 /** 获取规则组列表(管理员) */
 router.get('/groups', adminLoginRequired, (req, res) => {
   try {
-    const { mode, category, enabled, hit, gender, scenario, tag, part, evidence } = req.query
+    // 会绑进 SQL 的筛选项一律先过 asFilters：`?tag[]=x&tag[]=y` 之类的数组查询串
+    // 原样 push 进 params 会让 better-sqlite3 抛 RangeError ⇒ 规则列表整页 500。
+    // enabled / hit 只做字面量比较、不绑参，保持原样。
+    const { mode, category, gender, scenario, tag, part, evidence } = asFilters(req.query, [
+      'mode',
+      'category',
+      'gender',
+      'scenario',
+      'tag',
+      'part',
+      'evidence',
+    ])
+    const { enabled, hit } = req.query
     let sql = `SELECT *, ${TAG_EXPR} AS tag FROM rule_groups WHERE 1=1`
     const params = []
 
@@ -291,7 +352,7 @@ router.get('/groups', adminLoginRequired, (req, res) => {
         ' AND EXISTS (SELECT 1 FROM rule_actions ra WHERE ra.group_id = rule_groups.id AND ra.action_type = ?)'
       params.push(part)
     }
-    if (enabled !== undefined) {
+    if (enabled !== undefined && enabled !== '') {
       sql += ' AND enabled = ?'
       params.push(enabled === 'true' || enabled === '1' ? 1 : 0)
     }
@@ -331,7 +392,8 @@ router.get('/groups', adminLoginRequired, (req, res) => {
 /** 获取单个规则组详情(含条件和动作,管理员) */
 router.get('/groups/:id', adminLoginRequired, (req, res) => {
   try {
-    const id = parseInt(req.params.id, 10)
+    const id = asId(req.params.id)
+    if (id === null) return sendError(res, 'id 必须是正整数', 400)
     const group = db.prepare('SELECT * FROM rule_groups WHERE id = ?').get(id)
     if (!group) {
       return sendError(res, '规则组不存在', 404)
@@ -369,6 +431,37 @@ router.post('/groups', adminLoginRequired, (req, res) => {
       return sendError(res, '规则名称和分类不能为空', 400)
     }
 
+    // 与 PUT 同一套形状校验：这些列要么 NOT NULL 要么直接绑参，
+    // 传对象/数组会在 .run() 当场 RangeError，传 null/空串撞 NOT NULL ⇒ 都回成 500，
+    // 而它们本质是"这个字段写错了"，该 400。
+    for (const [label, v, required] of [
+      ['name', name, true],
+      // mode 可以不带（下面按 'store' 兜底），带了就必须是文本
+      ['mode', mode, false],
+      ['category', category, true],
+    ]) {
+      if (v === undefined || v === null) {
+        if (required) return sendError(res, `${label} 须为非空文本`, 400)
+        continue
+      }
+      if (typeof v !== 'string' || !v.trim()) {
+        return sendError(res, `${label} 须为非空文本`, 400)
+      }
+    }
+    for (const [label, v] of [
+      ['gender', gender],
+      ['scenario', scenario],
+      ['region', region],
+      ['age_range', age_range],
+      ['description', description],
+      ['priority', priority],
+      ['evidence_level', evidence_level],
+    ]) {
+      if (v !== undefined && v !== null && typeof v === 'object') {
+        return sendError(res, `${label} 类型不正确`, 400)
+      }
+    }
+
     const children = validateChildren(req.body || {})
     if (children.error) return sendError(res, children.error, 400)
     if (children.conditions.length === 0) {
@@ -377,6 +470,15 @@ router.post('/groups', adminLoginRequired, (req, res) => {
     if (children.actions.length === 0) {
       return sendError(res, '至少需要一条推荐动作', 400)
     }
+
+    // priority 落在 INTEGER 列，原来只挡对象/数组，字符串原样绑进去：
+    // SQLite 排序里 TEXT 恒大于 INTEGER ⇒ `ORDER BY priority DESC`(:313) 整体失真，
+    // 一条 "priority":"abc" 的脏数据就能把门店端的建议顺序永远顶到最前。
+    const priorityNum =
+      priority === undefined || priority === null || priority === ''
+        ? 0
+        : Math.trunc(asNumber(priority, NaN))
+    if (!Number.isFinite(priorityNum)) return sendError(res, 'priority 只能是整数', 400)
 
     const createGroup = db.transaction(() => {
       const info = db
@@ -394,8 +496,8 @@ router.post('/groups', adminLoginRequired, (req, res) => {
           region || null,
           age_range || null,
           description || null,
-          priority || 0,
-          enabled !== false ? 1 : 0,
+          priorityNum,
+          toEnabledBit(enabled, 1),
           normalizeEvidence(evidence_level),
         )
       replaceChildren(info.lastInsertRowid, children.conditions, children.actions)
@@ -412,14 +514,49 @@ router.post('/groups', adminLoginRequired, (req, res) => {
 /** 更新规则组(管理员) */
 router.put('/groups/:id', adminLoginRequired, (req, res) => {
   try {
-    const id = parseInt(req.params.id, 10)
+    const id = asId(req.params.id)
+    if (id === null) return sendError(res, 'id 必须是正整数', 400)
     const body = req.body || {}
     const existing = db.prepare('SELECT * FROM rule_groups WHERE id = ?').get(id)
     if (!existing) {
       return sendError(res, '规则组不存在', 404)
     }
 
+    // 契约与 POST 对齐:name/mode/category 是真必填(NOT NULL),这里要挡三种打回 500 的写法——
+    // ① 传 null(绑进 NOT NULL 列)、② 传对象/数组(better-sqlite3 抛 RangeError)、③ 传空串。
+    // 之前的 pick() 会把这些原样塞进 UPDATE ⇒ 后台/脚本一个坏请求就 500。
+    for (const f of ['name', 'mode', 'category']) {
+      if (body[f] !== undefined && (typeof body[f] !== 'string' || !body[f].trim())) {
+        return sendError(res, `${f} 须为非空文本`, 400)
+      }
+    }
+    // 可空标量列:允许 null(清空),但对象/数组同样会 RangeError ⇒ 拒掉。
+    for (const f of [
+      'gender',
+      'scenario',
+      'region',
+      'age_range',
+      'description',
+      'priority',
+      'evidence_level',
+    ]) {
+      const v = body[f]
+      if (v !== undefined && v !== null && typeof v === 'object') {
+        return sendError(res, `${f} 类型不正确`, 400)
+      }
+    }
+
     const pick = (key) => (body[key] !== undefined ? body[key] : existing[key])
+    // priority 与 POST 走同一个口径：绑进 INTEGER 列的值必须是整数，
+    // 否则 SQLite 排序里 TEXT 恒大于 INTEGER ⇒ 一条 "priority":"abc" 就能把门店端建议顺序永久顶乱。
+    const priorityRaw = pick('priority')
+    const priorityNum =
+      priorityRaw === undefined || priorityRaw === null || priorityRaw === ''
+        ? 0
+        : Math.trunc(asNumber(priorityRaw, NaN))
+    if (!Number.isFinite(priorityNum)) {
+      return sendError(res, 'priority 只能是整数', 400)
+    }
     const fields = {
       name: pick('name'),
       mode: pick('mode'),
@@ -429,16 +566,8 @@ router.put('/groups/:id', adminLoginRequired, (req, res) => {
       region: pick('region'),
       age_range: pick('age_range'),
       description: pick('description'),
-      priority: pick('priority') || 0,
-      enabled:
-        body.enabled === undefined
-          ? existing.enabled
-          : body.enabled === false ||
-              body.enabled === 0 ||
-              body.enabled === '0' ||
-              body.enabled === 'false'
-            ? 0
-            : 1,
+      priority: priorityNum,
+      enabled: toEnabledBit(body.enabled, existing.enabled),
       evidence_level:
         body.evidence_level === undefined
           ? existing.evidence_level
@@ -451,13 +580,21 @@ router.put('/groups/:id', adminLoginRequired, (req, res) => {
     if (hasChildren) {
       const validated = validateChildren(body)
       if (validated.error) return sendError(res, validated.error, 400)
-      if (validated.conditions.length === 0) {
+      // 条件和动作**分侧各判**：原来只带 conditions 不带 actions 时，validateChildren
+      // 把缺省的那侧当空数组 ⇒ 直接 400，PUT 的"部分更新"契约在子表上根本不成立
+      // （后台想只改一条条件，必须把整份动作列表一起回传）。
+      // 现在没带的那侧沿用库里现有的行，带了的侧仍然要求至少一条（空数组＝想清空，照拒）。
+      const kept = loadChildren(id)
+      children = {
+        conditions: Array.isArray(body.conditions) ? validated.conditions : kept.conditions,
+        actions: Array.isArray(body.actions) ? validated.actions : kept.actions,
+      }
+      if (children.conditions.length === 0) {
         return sendError(res, '至少需要一条命中条件', 400)
       }
-      if (validated.actions.length === 0) {
+      if (children.actions.length === 0) {
         return sendError(res, '至少需要一条推荐动作', 400)
       }
-      children = validated
     }
 
     const updateGroup = db.transaction(() => {
@@ -494,12 +631,37 @@ router.put('/groups/:id', adminLoginRequired, (req, res) => {
 /** 删除规则组(管理员) */
 router.delete('/groups/:id', adminLoginRequired, (req, res) => {
   try {
-    const id = parseInt(req.params.id, 10)
-    db.prepare('DELETE FROM rule_actions WHERE group_id = ?').run(id)
-    db.prepare('DELETE FROM rule_conditions WHERE group_id = ?').run(id)
-    db.prepare('DELETE FROM rule_groups WHERE id = ?').run(id)
+    const id = asId(req.params.id)
+    if (id === null) return sendError(res, 'id 必须是正整数', 400)
+    // 原来直接三连 DELETE 且不判存在:删不存在的 id 也回 200「成功」,三条 DELETE 又没包事务,
+    // 中间抛错会留下"子表删了、主表还在"的孤儿。⇒ 先查、再事务、删空算 404。
+    const existing = db.prepare('SELECT id FROM rule_groups WHERE id = ?').get(id)
+    if (!existing) {
+      return sendError(res, '规则组不存在', 404)
+    }
+    // feedback_events.group_id 是 NOT NULL 外键指向 rule_groups(id)（schema.sql:301），
+    // 而 db/init.js:39 开着 `PRAGMA foreign_keys = ON` ⇒ 有人点过"有用/不准"的规则
+    // 直接 DELETE 必抛约束失败，页面只回一句"删除失败"，而且永远删不掉。
+    // 这里不改成"连反馈一起删"：那是顾客的评价数据，删规则的正当出口是下面那条 toggle（enabled=0）。
+    const rated = db
+      .prepare('SELECT COUNT(*) AS n FROM feedback_events WHERE group_id = ?')
+      .get(id).n
+    if (rated > 0) {
+      return sendError(
+        res,
+        `这条规则已有 ${rated} 条用户反馈，删掉会把反馈一起断掉。要停用请点"禁用"（列表里的开关），规则会保留但不再命中。`,
+        409,
+      )
+    }
+    const removeGroup = db.transaction(() => {
+      db.prepare('DELETE FROM rule_actions WHERE group_id = ?').run(id)
+      db.prepare('DELETE FROM rule_conditions WHERE group_id = ?').run(id)
+      db.prepare('DELETE FROM rule_groups WHERE id = ?').run(id)
+    })
+    removeGroup()
     return sendSuccess(res, null)
   } catch (err) {
+    console.error('[规则] 删除失败:', err)
     return sendError(res, '删除失败', 500)
   }
 })
@@ -507,14 +669,21 @@ router.delete('/groups/:id', adminLoginRequired, (req, res) => {
 /** 切换规则组启用/禁用状态(管理员) */
 router.post('/groups/:id/toggle', adminLoginRequired, (req, res) => {
   try {
-    const id = parseInt(req.params.id, 10)
-    const group = db.prepare('SELECT enabled FROM rule_groups WHERE id = ?').get(id)
-    if (!group) {
+    const id = asId(req.params.id)
+    if (id === null) return sendError(res, 'id 必须是正整数', 400)
+    // 与 models.js 的 toggle 同一个竞态：先 SELECT 后按读到的值写回，
+    // 连点两下可能两个请求都读到同一个 enabled ⇒ 净效果是没翻转。
+    // 翻转交给 SQLite 在这笔写里自己算，非 1 的值（NULL／脏值）一律收回 1。
+    const info = db
+      .prepare(
+        `UPDATE rule_groups SET enabled = CASE WHEN enabled = 1 THEN 0 ELSE 1 END WHERE id = ?`,
+      )
+      .run(id)
+    if (info.changes === 0) {
       return sendError(res, '规则组不存在', 404)
     }
-    const newEnabled = group.enabled ? 0 : 1
-    db.prepare('UPDATE rule_groups SET enabled = ? WHERE id = ?').run(newEnabled, id)
-    return sendSuccess(res, { enabled: newEnabled === 1 })
+    const after = db.prepare('SELECT enabled FROM rule_groups WHERE id = ?').get(id)
+    return sendSuccess(res, { enabled: after && after.enabled === 1 })
   } catch (err) {
     console.error('[规则] 切换状态失败:', err)
     return sendError(res, '操作失败', 500)
@@ -531,6 +700,8 @@ router.post('/preview', adminLoginRequired, (req, res) => {
 
     // 直接调用推荐引擎(已修复 category 映射 bug + 带可解释性说明 explanation)
     // 修复原 /preview 的 bug:原逻辑用 operator '==' 但数据库存的是 'eq',且未解析 value JSON
+    // ⛔ 第四个参数（隐性偏好身份）这里**故意不传**：后台预览看的是"这条规则会推出什么"，
+    // 混进某个管理员/某个顾客自己的日记偏爱，预览出来的名次就不是规则的本来的样子。
     const recommendation = buildRecommendation(profile, mode || 'store', false)
 
     const total =
@@ -561,7 +732,13 @@ router.post('/preview', adminLoginRequired, (req, res) => {
  */
 router.get('/browse', (req, res) => {
   try {
-    const { mode, category, gender, scenario } = req.query
+    // 与 /groups 同一把闸门：顾客端这页同样会把筛选值绑进 SQL，数组查询串会 500
+    const { mode, category, gender, scenario } = asFilters(req.query, [
+      'mode',
+      'category',
+      'gender',
+      'scenario',
+    ])
     let sql = 'SELECT * FROM rule_groups WHERE enabled = 1'
     const params = []
 

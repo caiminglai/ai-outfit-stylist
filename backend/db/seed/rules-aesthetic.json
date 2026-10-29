@@ -684,6 +684,46 @@
         { "type": "avoid", "content": "全套硬挺正装、束缚感强不方便活动的版型" },
         { "type": "reason", "content": "近距离看的是面料质感和气色,不是轮廓的正式度" }
       ]
+    },
+    {
+      "key": "height-f-170-180",
+      "name": "身高-女-170到180-穿搭",
+      "mode": "personal",
+      "category": "穿搭",
+      "gender": "女",
+      "scenario": null,
+      "priority": 15,
+      "enabled": 1,
+      "description": "身高分档补档。库里原有三档只有 150-160/160-170/180+（都由 db/add-rules.js 写进去、没有 source_key），170-179cm 的女性命中不到任何按身高分档的规则组；而 180+ 那组的 reason 原文写的正是「高个子（>170cm）穿搭自由度高」，口径本来就含这一段。",
+      "conditions": [{ "field": "height_range", "operator": "eq", "value": "170-180" }],
+      "actions": [
+        { "type": "top_style", "content": "长款上衣、大衣、宽松廓形都撑得住，上下分色不会被身高吃掉" },
+        { "type": "bottom_style", "content": "阔腿长裤、长裙、直筒牛仔裤；这一档更该盯裤长袖长够不够，不是腰线高低" },
+        { "type": "shoe_style", "content": "平底、低跟、厚底都行，不需要靠鞋跟补比例" },
+        { "type": "color_combo", "content": "同色系和上下撞色都站得住，按场合的正式度选，不用为显高让步" },
+        { "type": "avoid", "content": "超高腰＋尖头＋厚底三件叠在一起的显高组合，在这个身高段会显得用力" },
+        { "type": "reason", "content": "170cm 以上已经不需要把视觉比例往上拉，穿搭的自由度来自廓形和面料合不合身" }
+      ]
+    },
+    {
+      "key": "height-m-170-180",
+      "name": "身高-男-170到180-穿搭",
+      "mode": "personal",
+      "category": "穿搭",
+      "gender": "男",
+      "scenario": null,
+      "priority": 15,
+      "enabled": 1,
+      "description": "身高分档补档。男性档里原本只有 160-170 且带「想显高」条件的一组，170-179cm 的男性没有任何按身高分档的规则组。",
+      "conditions": [{ "field": "height_range", "operator": "eq", "value": "170-180" }],
+      "actions": [
+        { "type": "top_style", "content": "肩线落在自己肩头的合身剪裁优先；西装、衬衫、针织都按肩宽选码，不按身高选码" },
+        { "type": "bottom_style", "content": "直筒或锥形，裤脚在鞋面留一道折就够，别堆出好几道" },
+        { "type": "shoe_style", "content": "常规厚底即可，不必用内增高把比例往上顶" },
+        { "type": "color_combo", "content": "上下同色系或深浅两级都行，这一档靠的是剪裁干净" },
+        { "type": "avoid", "content": "为了显高买大一码再系腰带、裤长留两截去改" },
+        { "type": "reason", "content": "男性 170-179cm 落在合身剪裁的甜区，衣长和肩线到位比任何拉长手法都显眼" }
+      ]
     }
   ]
 }

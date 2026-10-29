@@ -33,9 +33,13 @@ test('evidenceOf: 比例类按硬度分档（肩宽国标、腰臀比与腿身�
 })
 
 test('evidenceOf: 行业体系四类都是 C，查不到检验的不许升档', () => {
-  ;['color12-winter', 'color-autumn-outfit-f', 'kibbe-gamine-outfit', 'dresscode-commute', 'metal-warm'].forEach(
-    (k) => assert.strictEqual(evidenceOf(k), 'C', k),
-  )
+  ;[
+    'color12-winter',
+    'color-autumn-outfit-f',
+    'kibbe-gamine-outfit',
+    'dresscode-commute',
+    'metal-warm',
+  ].forEach((k) => assert.strictEqual(evidenceOf(k), 'C', k))
 })
 
 test('evidenceOf: 空 key 返回 null(未标注)，认不出的前缀按 C 兜底', () => {
@@ -54,8 +58,14 @@ test('VALUES 只有 A/B/C/D 四档，A/B 才允许"科学/量化"话术', () => 
 
 test('evidenceNote: 未标注按 C 对待而不是回空串', () => {
   assert.strictEqual(evidenceNote(null), evidenceNote('C'))
-  assert.ok(String(evidenceNote('D')).includes('八字'), `D 档说明要点明是八字五行: ${evidenceNote('D')}`)
-  assert.ok(String(evidenceNote('A')).includes('标准'), `A 档说明要点明国标/国际标准: ${evidenceNote('A')}`)
+  assert.ok(
+    String(evidenceNote('D')).includes('八字'),
+    `D 档说明要点明是八字五行: ${evidenceNote('D')}`,
+  )
+  assert.ok(
+    String(evidenceNote('A')).includes('标准'),
+    `A 档说明要点明国标/国际标准: ${evidenceNote('A')}`,
+  )
   assert.ok(String(LABELS.D).includes('命理'))
 })
 
@@ -73,7 +83,13 @@ const fakeGroup = {
   evidence_level: 'B',
 }
 const fakeConds = [
-  { field: 'leg_proportion', operator: 'eq', value: '{"leg_proportion":"偏短"}', weight: 3, matched: true },
+  {
+    field: 'leg_proportion',
+    operator: 'eq',
+    value: '{"leg_proportion":"偏短"}',
+    weight: 3,
+    matched: true,
+  },
 ]
 
 test('explainGroup: 输出含依据档位与依据说明', () => {

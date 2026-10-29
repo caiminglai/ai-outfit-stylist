@@ -1,0 +1,381 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" /><meta property="og:type" content="website" /><meta property="og:site_name" content="私人形象定制AI" /><meta property="og:title" content="这套系统是怎么造的 — 专属于中国人的穿衣量化系统" /><link rel="canonical" href="https://style.sparklove.cn/how-it-works.html" />
+    <title>这套系统是怎么造的 — 专属于中国人的穿衣量化系统</title>
+    <meta
+      name="description"
+      content="把「好看」拆成能测的量，再用有出处的规则解释它：色彩量化、版型映射、数据采集、协同过滤四条轴，依据分四档，量不到就写没量到。"
+    />
+    <style>
+      :root {
+        --bg: #0d1117;
+        --card: rgba(255, 255, 255, 0.04);
+        --line: rgba(255, 255, 255, 0.12);
+        --text: #e6edf3;
+        --muted: #a8b8c4;
+        --accent: #7dd3fc;
+        --a: #4ade80;
+        --b: #60a5fa;
+        --c: #fbbf24;
+        --d: #f472b6;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: radial-gradient(circle at 50% 0%, #182030 0%, var(--bg) 62%);
+        color: var(--text);
+        font-family: 'PingFang SC', 'Microsoft YaHei', 'Segoe UI', system-ui, -apple-system, sans-serif;
+        line-height: 1.75;
+        -webkit-font-smoothing: antialiased;
+      }
+      .wrap {
+        max-width: 860px;
+        margin: 0 auto;
+        padding: 28px 18px 64px;
+      }
+      header h1 {
+        font-size: 26px;
+        margin: 0 0 6px;
+        background: linear-gradient(90deg, #a5f3fc, #c4b5fd);
+        -webkit-background-clip: text;
+        background-clip: text;
+        color: transparent;
+        letter-spacing: 0.4px;
+      }
+      header .lead {
+        color: var(--muted);
+        font-size: 14px;
+        margin: 0;
+      }
+      nav {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin: 18px 0 6px;
+      }
+      nav a {
+        color: var(--accent);
+        text-decoration: none;
+        font-size: 13px;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        padding: 7px 13px;
+        min-height: 40px;
+        display: inline-flex;
+        align-items: center;
+      }
+      nav a:hover {
+        background: var(--card);
+      }
+      h2 {
+        font-size: 18px;
+        margin: 38px 0 4px;
+        padding-top: 10px;
+        border-top: 1px solid var(--line);
+      }
+      h2 .num {
+        color: var(--accent);
+        font-variant-numeric: tabular-nums;
+        margin-right: 6px;
+      }
+      .sub {
+        color: var(--muted);
+        font-size: 13px;
+        margin: 0 0 14px;
+      }
+      .card {
+        background: var(--card);
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        padding: 14px 16px;
+        margin: 10px 0;
+      }
+      .pipe {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(148px, 1fr));
+        gap: 8px;
+      }
+      .step {
+        background: var(--card);
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        padding: 11px 12px;
+      }
+      .step b {
+        display: block;
+        font-size: 14px;
+        margin-bottom: 3px;
+      }
+      .step span {
+        color: var(--muted);
+        font-size: 12px;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 13px;
+        margin: 8px 0 2px;
+      }
+      th,
+      td {
+        text-align: left;
+        padding: 9px 10px;
+        border-bottom: 1px solid var(--line);
+        vertical-align: top;
+      }
+      th {
+        color: var(--muted);
+        font-weight: 600;
+        font-size: 12px;
+      }
+      .tier {
+        display: inline-block;
+        font-weight: 700;
+        border-radius: 6px;
+        padding: 1px 8px;
+        font-size: 12px;
+        color: #0b0f14;
+        white-space: nowrap;
+      }
+      .tA {
+        background: var(--a);
+      }
+      .tB {
+        background: var(--b);
+      }
+      .tC {
+        background: var(--c);
+      }
+      .tD {
+        background: var(--d);
+      }
+      ul,
+      ol {
+        padding-left: 20px;
+        margin: 8px 0;
+      }
+      li {
+        margin: 6px 0;
+      }
+      code {
+        background: rgba(255, 255, 255, 0.07);
+        border-radius: 4px;
+        padding: 1px 5px;
+        font-size: 12.5px;
+      }
+      .kv {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+        gap: 8px;
+        margin: 10px 0;
+      }
+      .kv div {
+        background: var(--card);
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        padding: 10px 12px;
+      }
+      .kv b {
+        display: block;
+        font-size: 19px;
+        font-variant-numeric: tabular-nums;
+      }
+      .kv span {
+        color: var(--muted);
+        font-size: 12px;
+      }
+      .note {
+        color: var(--muted);
+        font-size: 12px;
+      }
+      .warn {
+        border-left: 3px solid var(--c);
+        padding-left: 12px;
+      }
+      footer {
+        margin-top: 44px;
+        padding-top: 14px;
+        border-top: 1px solid var(--line);
+        color: var(--muted);
+        font-size: 12px;
+      }
+      @media (max-width: 480px) {
+        header h1 {
+          font-size: 22px;
+        }
+        th,
+        td {
+          padding: 8px 7px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header>
+        <h1>专属于中国人的穿衣量化系统 — 它是怎么造出来的</h1>
+        <p class="lead">
+          一句话：把「好看」拆成能量出来的量，再用有出处的规则去解释它；量不到的那一维，就明写「没量到」，
+          不拿一个猜出来的数冒充分数。
+        </p>
+        <nav>
+          <a href="/">回展厅首页</a>
+          <a href="/gallery">3D 模型展厅</a>
+          <a href="/pay.html">付款通道</a>
+          <a href="/creator.html">创作者投稿</a>
+        </nav>
+      </header>
+
+      <h2><span class="num">01</span>为什么非要"量化"</h2>
+      <p class="sub">形象建议这件事，市面上有两种做法：一种是纯主观的审美表达，一种是查黄历式的"你命里缺火"。我们两种都不满足。</p>
+      <p>
+        主观表达没法复用，今天说的和明天说的可以完全相反；命理推出来的颜色，换个体系就是另一套答案。
+        所以这个项目从第一天起就只做一件事：<b>把每一项判断落到"从哪来、怎么算、能复算"三格里</b>。
+        能落到国标或论文的，就写清楚标准号；落不到的，就承认它是行业经验或另一套体系，
+        并且在同一条建议上打上依据标签——顾客不需要相信我们，他可以点开看这句话的出处硬不硬。
+      </p>
+
+      <h2><span class="num">02</span>整条管线：五段，一段都不许跳</h2>
+      <div class="pipe">
+        <div class="step"><b>① 采集</b><span>表单 + 衣橱 + 穿搭日记 + 拍照取色（图不出设备）</span></div>
+        <div class="step"><b>② 量化</b><span>色名→Lab、尺寸→松量、体感温度→厚薄档</span></div>
+        <div class="step"><b>③ 规则匹配</b><span>378 条规则组按条件命中，出"规则基础分"</span></div>
+        <div class="step"><b>④ 算法排序</b><span>三维分 × 权重，再叠偏好乘子与协同过滤</span></div>
+        <div class="step"><b>⑤ 出账交付</b><span>Top N 名单 + 每一维的读数 + 依据标签</span></div>
+      </div>
+      <p class="note">
+        第 ② 段是这套系统的命门：<b>口语颜色必须先落到一个可复算的坐标</b>。顾客写"雾霾蓝"，
+        系统不猜"大概是蓝色系"，而是查内部色名词表拿到一组 Lab 值，再用国标色差公式算它和他的肤色距离多远。
+      </p>
+
+      <h2><span class="num">03</span>四条算法轴，各管一段</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>轴</th>
+            <th>吃什么</th>
+            <th>吐什么</th>
+            <th>现在多硬</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><b>色彩量化</b></td>
+            <td>色名词表 232 条主名 + 42 组同义族；肤色取色（连续 Lab，不是"你是冷皮"）</td>
+            <td>色差 CIEDE2000 距离、色相-和谐角、色族归属、明度族</td>
+            <td><span class="tier tA">A</span> 公式与测量口径有国标/国际标准</td>
+          </tr>
+          <tr>
+            <td><b>版型映射</b></td>
+            <td>身高体重 + 实测四围（选填）+ 衣橱里这件衣服的版型档</td>
+            <td>松量区间、合身度分、覆盖率与打折因子</td>
+            <td><span class="tier tB">B</span> 量级对得上国标人体尺寸，判定线是产品参考</td>
+          </tr>
+          <tr>
+            <td><b>数据采集</b></td>
+            <td>两把星（好看/合身）、穿搭日记（日期/场合/城市/体感）、场合词表</td>
+            <td>三维分快照 + 可回流的样本行</td>
+            <td>不称科学，只是把经验变成<b>能算的数</b></td>
+          </tr>
+          <tr>
+            <td><b>协同过滤</b></td>
+            <td>和你体型/肤色相近的人群，他们打过的星</td>
+            <td>第三路信号：同类人偏好乘子</td>
+            <td><span class="tier tC">C</span> 行业通行做法，无公开检验</td>
+          </tr>
+        </tbody>
+      </table>
+      <p class="note">
+        最终分不是三个数平均成一个总分，而是<b>分层结论</b>：规则基础分、色彩贴合分、廓形贴合分各自出账，
+        页面上一句"综合排序分 15.9/100 · 规则基础分 31（没量全 ⇒ 按可信度打折，乘 0.64）"，
+        每个数都能倒推回它是哪一维给的。
+      </p>
+
+      <h2><span class="num">04</span>依据分四档，只有前两档能叫"科学"</h2>
+      <p class="sub">这套分档不是营销话术，是代码里的唯一实现处（<code>backend/services/evidenceLevels.js</code>），未标注的规则一律按 C 对待。</p>
+      <div class="card t-none">
+        <p><span class="tier tA">A 国标/国际标准</span> 现行标准里能对上的量化口径：色差公式 <b>GB/T 7921-2008</b>、人体测量方法 <b>GB/T 16160-2017</b>。
+            注意——这些标准只给<b>尺寸与测量方法</b>，本身不含"好不好看"的判据。</p>
+        <p><span class="tier tB">B 学术实证</span> 有同行评议论文与可复算公式：CIEDE2000、Schloss &amp; Palmer 的色相相似-和谐回归、WHO 腰臀比阈值。
+            有争议的我们照写（ Singh 1993 的美学侧结论存在 BMI 混淆）。</p>
+        <p><span class="tier tC">C 行业体系/经验</span> 四季·十二型色彩、Kibbe 风格型、场合着装、体型五分类。可以做风格偏好，
+            <b>不能称客观规律</b>；2011 年一项 n=200 的研究还发现各套季型系统判型互不一致。</p>
+        <p><span class="tier tD">D 命理体系</span> 八字五行喜用神推出来的颜色与材质。它与前三档不同源，
+            所以在页面上<b>单独一栏展示</b>，不混进"分析结果"里。</p>
+      </div>
+
+      <h2><span class="num">05</span>三条硬规矩，写在代码里而不是写在宣传里</h2>
+      <ol>
+        <li><b>缺测不出分。</b>量不到的那一维直接留空，⛔ 不拿默认值兜底。没量全就按比例打折并写明乘子，
+            而不是假装那一维也算过了。</li>
+        <li><b>推断不许冒充量化。</b>从文案和面料推出来的版型，话术只能写"按描述推断"，
+            ⛔ 不写"量化了你的体型"；从别人衣橱借来的颜色，⛔ 不写"系统识别出你的上衣是驼色"。</li>
+        <li><b>样本为零时一句都不吹。</b>协同过滤这条路的读数，在没有可比样本时恒等于 1（不加成也不减分），
+            前端那行"和你相似的人"整块不出现，⛔ 不写"暂未生效"冒充已有结论。</li>
+      </ol>
+
+      <h2><span class="num">06</span>自我学习怎么闭环</h2>
+      <div class="pipe">
+        <div class="step"><b>打星</b><span>好看 / 合身，各 1~5；只打星不点👍也算一条样本</span></div>
+        <div class="step"><b>存快照</b><span>把打分那一刻的三维分一起存下来，当回归的自变量</span></div>
+        <div class="step"><b>重算权重</b><span>离线最小二乘回归，样本不够就沿用现值并说明为什么</span></div>
+        <div class="step"><b>出乘子</b><span>你的偏好按可信度打折后乘进排序，⛔ 不改那三个权重本身</span></div>
+      </div>
+      <div class="card warn">
+        如实说一句：<b>这个闭环现在还没有真数据在转。</b>下面的库底数就是证据——反馈表目前是 0 行，
+        所以线上跑的权重仍是建档时手拍的初值，偏好乘子对所有人都等于 1。
+        系统把通路铺好了，等的是真实用户走进来。这不是缺陷，是它的真实进度。
+      </div>
+
+      <h2><span class="num">07</span>当前底数（2026-10-22 现量，读的是盘外只读副本）</h2>
+      <div class="kv">
+        <div><b>378</b><span>条规则组</span></div>
+        <div><b>929</b><span>条命中条件</span></div>
+        <div><b>1,879</b><span>条输出动作</span></div>
+        <div><b>32</b><span>张数据表</span></div>
+        <div><b>3,225</b><span>行数据总量</span></div>
+        <div><b>24</b><span>张表还是空的</span></div>
+        <div><b>232</b><span>色名→Lab 主名</span></div>
+        <div><b>28</b><span>个 3D 试穿模型</span></div>
+      </div>
+      <p class="note">
+        规则组按类别分布：穿搭 197 / 妆容 66 / 配饰 48 / 发型 43 / 姿势 24。
+        3 个用户行里 2 个是自测数据；<code>feedback_events</code>、<code>item_feedback</code>、
+        穿搭日记、衣橱、订单与凭证表<b>全部为 0 行</b>。这些数字会一直贴在这页上，每加一轮就重量一次。
+      </p>
+
+      <h2><span class="num">08</span>它是怎么交付给一个人的</h2>
+      <p>
+        展厅里有两条入口：<b>门店快速模式</b>（现场服务，少填快算，数据可同步可删除）与
+        <b>个人深度模式</b>（完整档案 + 衣橱/化妆品/配饰三柜 + 跨柜联动）。
+        报告页里每一条建议都带四样东西：排名分、依据标签、"为什么推荐这个"、以及"这条建议准吗"的反馈口——
+        反馈随时可以撤回，撤了就当没评过。
+      </p>
+      <p>
+        付费这一环走的是"付款即交付"：到账事实认两笔账（在线订单号，或人工确认过的付款凭证），
+        <b>一笔到账换一份细账</b>，按单号幂等，重复点进来读的是同一份，⛔ 不会重复计费；
+        两张账在同一条读法里各算各的，⛔ 不相加。
+      </p>
+
+      <h2><span class="num">09</span>接下来做什么</h2>
+      <ul>
+        <li>把已经铺好的采集通路喂上真样本，让权重回归第一次有自变量可算；</li>
+        <li>继续磨四条轴：关系色解析、版型推断层、天气与场合的量化、协同过滤的第二/三类信号；</li>
+        <li>把"专属"落到 Chinese-specific 的那一半：更多中文口语色名、中国人体尺寸分布的档位、本土场合（如婚礼宴席、通勤地铁）的规则。</li>
+      </ul>
+      <p class="note">
+        所有口径变更都按"先出输入输出规范、再动代码"的顺序记录在仓库的 <code>docs/依据/</code> 里，
+        每条依据要能在本机找到原文（标准号 + 年号 + 官方入口），查不到就写明搜过的关键词。
+      </p>
+
+      <footer>
+        这页讲的每一条都可以被追问：数字来自数据库现量，档位来自规则库的 <code>evidence_level</code>，
+        措辞受三条硬规矩约束。发现哪句说大了，是我们的 bug，直接回展厅首页提反馈。
+      </footer>
+    </div>
+  </body>
+</html>

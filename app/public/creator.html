@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex,nofollow"><meta name="description" content="创作者中心：作品提交与审核的工作台，需要登录态，不对外搜索开放。">
   <title>创作者中心 — 私人形象定制AI</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -250,16 +250,33 @@ async function loadPlaza() {
 
 async function openWork(id, ref) {
   try {
-    var w = await api('/api/creator/works/' + encodeURIComponent(id) + (ref ? '?ref=' + encodeURIComponent(ref) : ''));
+    var w = await api('/api/creator/works/' + encodeURIComponent(id));
     var link = location.origin + '/creator.html?work=' + w.id + '&ref=' + w.share_code;
     document.getElementById('sheet-body').innerHTML =
       '<h3 style="font-size:17px;margin-bottom:8px">' + esc(w.title) + '</h3>' +
       '<p style="font-size:13px;color:#8b93a7;line-height:1.7"><span class="tag">' + esc(TYPE_CN[w.type] || w.type) + '</span>' +
-      esc(w.author_name) + ' · 浏览 ' + w.heat + ' · 分享带量 ' + w.share_views + '</p>' +
+      esc(w.author_name) +
+      // 计数各给一个 id：POST /view 回来后按服务端真值刷新这两个 span，页面自己不 +1
+      ' · <span id="work-heat">浏览 ' + w.heat + '</span>' +
+      ' · <span id="work-share">分享带量 ' + w.share_views + '</span></p>' +
       (w.summary ? '<p style="font-size:13px;margin-top:10px;line-height:1.7">' + esc(w.summary) + '</p>' : '') +
       '<p style="font-size:12px;color:#8ab4f8;margin-top:12px;word-break:break-all">' + esc(link) + '</p>' +
       payloadView(w.payload);
     document.getElementById('mask').classList.add('on');
+    // 热度计数原来是写在 GET /works/:id 里的（预取、爬虫、重试都会把 heat 灌大，
+    // 也违反 HTTP 幂等约定），本轮挪进 POST /works/:id/view。
+    // 这条请求挂了只影响统计数字，不该打断已经渲染好的弹层 ⇒ .catch 静默。
+    api('/api/creator/works/' + encodeURIComponent(id) + '/view', {
+      method: 'POST',
+      json: ref ? { ref: ref } : {},
+    })
+      .then(function (r) {
+        var h = document.getElementById('work-heat');
+        var s = document.getElementById('work-share');
+        if (h && r.heat !== undefined) h.textContent = '浏览 ' + r.heat;
+        if (s && r.share_views !== undefined) s.textContent = '分享带量 ' + r.share_views;
+      })
+      .catch(function () {});
   } catch (e) {
     document.getElementById('plaza-msg').textContent = e.message;
     document.getElementById('plaza-msg').className = 'msg err';
@@ -287,13 +304,28 @@ document.getElementById('f-submit').addEventListener('click', async function () 
   var payload = { '内容': lines };
   var note = document.getElementById('f-note').value.trim();
   if (note) payload['备注'] = note;
+  // 封面先按后端 middleware/upload.js 的两条闸门在客户端量一遍：扩展名白名单 + 10 MB。
+  // 超限时 multer 抛 LIMIT_FILE_SIZE，路由的 catch 只回一句「上传封面失败」，
+  // 用户看不出是体积问题；在这里拦住，直接把原因说清楚。
+  var coverFile = document.getElementById('f-cover').files[0];
+  if (coverFile) {
+    if (!/\.(jpe?g|png|webp)$/i.test(coverFile.name)) {
+      msg.textContent = '封面只能是 jpg / png / webp';
+      msg.className = 'msg err';
+      return;
+    }
+    if (coverFile.size > 10 * 1024 * 1024) {
+      msg.textContent = '封面超过 10 MB，请压缩后再传';
+      msg.className = 'msg err';
+      return;
+    }
+  }
   btn.disabled = true; msg.textContent = '提交中…'; msg.className = 'msg';
   try {
     var coverUrl = '';
-    var file = document.getElementById('f-cover').files[0];
-    if (file) {
+    if (coverFile) {
       var fd = new FormData();
-      fd.append('file', file);
+      fd.append('file', coverFile);
       var up = await api('/api/creator/cover', { method: 'POST', body: fd });
       coverUrl = up.url;
     }
@@ -329,8 +361,14 @@ async function loadMine() {
   try {
     var data = await api('/api/creator/my');
     var t = data.totals;
+    // 「提交」数走后端 total（全部作品的 COUNT），不再数被 LIMIT 截过的 items 长度；
+    // items 只有最近 100 条，所以下面列表本身要有截断提示。
+    var submitted = typeof data.total === 'number' ? data.total : data.items.length;
+    var trunc = data.items.length < submitted
+      ? '<div class="empty">列表只展示最近 ' + data.items.length + ' 条，共 ' + submitted + ' 条提交。</div>'
+      : '';
     stats.innerHTML =
-      '<div><b>' + data.items.length + '</b>提交</div>' +
+      '<div><b>' + submitted + '</b>提交</div>' +
       '<div><b>' + t.approved + '</b>已上架</div>' +
       '<div><b>' + t.pending + '</b>待审核</div>' +
       '<div><b>' + t.rejected + '</b>未通过</div>' +
@@ -346,7 +384,7 @@ async function loadMine() {
         (w.admin_note ? '<div style="font-size:12px;color:#8b93a7;margin-top:4px">备注：' + esc(w.admin_note) + '</div>' : '') +
         '</div><div style="text-align:right;font-size:12px;color:#6f7789;white-space:nowrap">浏览 ' + w.heat +
         '<br>带量 ' + w.share_views + '</div></div>';
-    }).join('');
+    }).join('') + trunc;
   } catch (e) {
     box.innerHTML = '<div class="empty">' + esc(e.message) + '</div>';
   }

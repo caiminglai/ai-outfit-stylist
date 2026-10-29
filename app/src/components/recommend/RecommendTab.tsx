@@ -22,6 +22,12 @@ export const FIELD_LABELS: Record<string, string> = {
   color_combo: '配色',
   reason: '推荐理由',
   outerwear: '外套',
+  // 兜底硬编码那四条:规则引擎没命中时引擎直接给 outfit_ 前缀的键(见 recommendEngine.js 兜底分支),
+  // 库里 47 种 action_type 这边全覆盖,漏了这四个就会把英文原键糊在卡片上
+  outfit_top: '上装',
+  outfit_bottom: '下装',
+  outfit_color: '配色',
+  outfit_reason: '推荐理由',
   // 妆容类
   妆容风格: '妆容风格',
   lip_color: '唇妆',
@@ -92,6 +98,31 @@ export const HIDDEN_FIELDS = [
   'color_fit',
   // 身材贴合分同上:派生元数据,单独渲染,不平铺成"body_fit: [object Object]"
   'body_fit',
+  // 综合排序分与来源标记(10-19 第二阶段)同上:对象/内部 id,平铺出来只会是 [object Object]
+  'rank',
+  'source',
+  'wardrobe_item_id',
+  // 10-20 色彩接线的三笔账目字段:已经在"上衣贴合度"那一行按 basis 说清楚了,
+  // 平铺出来只会是 "color_basis: in-text" 这种英文键
+  'color_basis',
+  'color_parts',
+  'color_text',
+  // 呼应分同族(10-20 第六阶段):这两个是拆账用的数,报告行里已经说清"几件互相呼应"
+  'color_harmony',
+  'color_harmony_pairs',
+  // 🔴 10-21 第十三阶段 §二·3／§二·4 的借色账目:五个都是"这个色是哪儿来的"的元数据,
+  // 由"上衣贴合度"那一行按 color_basis_source 说破(措辞红线:⛔ 不许说成"识别出你的上衣是驼色"),
+  // 平铺出来只会是 "color_borrowed_from: 白+蓝" 这种顾客看不懂的东西
+  'color_basis_source',
+  'color_borrowed',
+  'color_borrowed_from',
+  'color_borrowed_position',
+  'color_top_band',
+  'color_relational_from',
+  'color_relational',
+  // 🔴 §三·4 认出来的版型档／面料档:同上,由"上衣身材适配度"那一行说破"不是量出来的"
+  'fit_type_inferred',
+  'fabric_weight_inferred',
 ]
 
 /** 根据 Tab key 获取中文标签 */

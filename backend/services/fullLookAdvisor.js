@@ -8,10 +8,40 @@
  */
 
 /** 衣橱品类词表：判定"能不能当上衣/下装/外套/一件成套"用 */
-const TOP_WORDS = ['上衣', '衬衫', 'T恤', '针织', '毛衣', '卫衣', 'polo', 'POLO']
+// 词表是 includes 匹配，加词前先想清楚会不会串到别的槽位（categoryBuckets.js 里
+// 桶的判定顺序是 鞋→外套→连衣裙→下装→上衣→包，同一个词在两张表里都命中时靠前的那张赢）。
+// 10-13 现量：'羽绒服'/'马甲'/'吊带' 这三类常见写法原先一张表都不认 ⇒
+// 柜子里有 3 件羽绒服，缺口照样报"外套 0 件、优先级 high"，拼一套时也永远轮不到它当外搭。
+const TOP_WORDS = [
+  '上衣',
+  '衬衫',
+  'T恤',
+  '针织',
+  '毛衣',
+  '卫衣',
+  'polo',
+  'POLO',
+  '吊带',
+  '抹胸',
+  '打底衫',
+]
 const BOTTOM_WORDS = ['裤子', '裤', '裙', '半身裙']
-const DRESS_WORDS = ['连衣裙', '旗袍', '套装', '连体']
-const OUTER_WORDS = ['外套', '大衣', '西装', '风衣', '夹克', '开衫']
+const DRESS_WORDS = ['连衣裙', '旗袍', '套装', '连体', '吊带裙']
+const OUTER_WORDS = [
+  '外套',
+  '大衣',
+  '西装',
+  '风衣',
+  '夹克',
+  '开衫',
+  '羽绒',
+  '棉服',
+  '冲锋衣',
+  '皮衣',
+  '棒球服',
+  '马甲',
+]
+const SHOE_WORDS = ['鞋', '靴', '凉鞋', '拖鞋']
 
 /** 化妆品里"底妆 + 唇"是一套妆容的最小可见面 */
 const BASE_WORDS = ['粉底', '气垫', '遮瑕', '素颜霜', '妆前']
@@ -74,8 +104,17 @@ function buildFullLook({ outfit = [], makeup = [], accessory = [] }, occasion = 
     pieces.push(toPiece(dress, '一件成套'))
   } else {
     const top = pickBy(outfit, TOP_WORDS)
-    const bottom = pickBy(outfit, BOTTOM_WORDS)
     if (top) pieces.push(toPiece(top, '上装'))
+    // 下装必须排掉已经站上来的那件：词表是按 includes 命中的，一张 category
+    // 可以同时落进两张表（10-13 现量：'针织裙' 既含 TOP_WORDS 的 '针织'、又含
+    // BOTTOM_WORDS 的 '裙'，而 DRESS_WORDS 里没有它 ⇒ 走的是上下装这条路），
+    // 原来 bottom 不带 excludeNames ⇒ 同一件衣服被列成"上装+下装"两格，
+    // pieces.length 白 +1，凑没凑齐一套的判定也跟着错。
+    const bottom = pickBy(
+      outfit,
+      BOTTOM_WORDS,
+      pieces.map((p) => p.name),
+    )
     if (bottom) pieces.push(toPiece(bottom, '下装'))
     if (!top) missing.push('上衣')
     if (!bottom) missing.push('下装')
@@ -103,7 +142,10 @@ function buildFullLook({ outfit = [], makeup = [], accessory = [] }, occasion = 
   return {
     pieces,
     occasion: occasion || '',
-    complete: pieces.length >= 3,
+    // complete 必须与 note 用同一件事：原来这里数格数（>=3），note 那条"已凑齐一套"却按
+    // missing 是否为空来选 ⇒ 底妆+唇色+颈饰三件、衣服一件没有时，flag 说"齐"、
+    // missing_parts 写着缺上衣下装、note 说"还缺"，同一份输出自己跟自己对不上。
+    complete: missing.length === 0 && pieces.length > 0,
     missing_parts: missing,
     note:
       pieces.length === 0
@@ -132,6 +174,7 @@ module.exports = {
   OUTER_WORDS,
   BASE_WORDS,
   LIP_WORDS,
+  SHOE_WORDS,
   hitsWord,
   pickMetal,
   buildFullLook,

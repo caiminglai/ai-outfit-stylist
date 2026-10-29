@@ -31,9 +31,8 @@ var State = {
 var CATEGORY_LABELS = {
   '穿搭': '穿搭', '妆容': '美妆', '发型': '发型', '配饰': '配饰', '姿势': '姿势'
 };
-var SCENARIO_LABELS = {
-  '通勤': '通勤', '约会': '约会', '面试': '面试', '休闲': '休闲', '聚会': '聚会'
-};
+// SCENARIO_LABELS 已删（2026-10-11）：全仓 grep 只命中它自己的定义，没有任何调用方，
+// 场景标签现在由 /api/rules/schema 的 scenarios 下发（admin-rules.js fillOptions），留这份空壳只会误导后来人。
 
 /* ── 数据值翻译映射（显示用，不改数据库原始值）── */
 var VALUE_LABELS = {
@@ -81,7 +80,8 @@ var VALUE_LABELS = {
     'color_season': '色彩四季型（算出）', 'color_season_12': '色彩十二型（算出）', 'kibbe_type': '风格型（算出）',
   },
   // feedback_events.signal —— 与后端 services/ruleFeedback.js 的 SIGNALS 一字一样,改那边要改这里
-  'feedback_events.signal': { 'useful': '有用', 'inaccurate': '不准' },
+  // 10-20 第八阶段·一b：`rated`＝只打了两把星、没点👍/👎（它不进好评/差评计数）
+  'feedback_events.signal': { 'useful': '有用', 'inaccurate': '不准', 'rated': '只打星·未表态' },
   // photos.type
   'photos.type': { 'face': '面部', 'body': '全身', 'cloth': '衣物', 'tryon': '试穿' },
   // admin_users.role
@@ -130,14 +130,25 @@ var VALUE_LABELS = {
 };
 
 /**
+ * 只认映射表自己的键。
+ * 库里存的值是自由文本，列值恰好是 constructor / toString 时，`map[value]` 顺着原型链
+ * 会拿到一个函数，后台那一格就显示成 "function Object() { [native code] }"。
+ */
+function ownLabel(map, key) {
+  if (!map) return undefined;
+  if (typeof key !== 'string' && typeof key !== 'number') return undefined;
+  return Object.prototype.hasOwnProperty.call(map, key) ? map[key] : undefined;
+}
+
+/**
  * 翻译数据值：根据表名+列名查找翻译映射，返回中文显示值
  * 如果没有翻译映射，返回原始值
  */
 function translateValue(tableName, columnName, value) {
   if (value === null || value === undefined) return value;
   var key = tableName + '.' + columnName;
-  var map = VALUE_LABELS[key];
-  if (map && map[value] !== undefined) return map[value];
+  var hit = ownLabel(VALUE_LABELS[key], value);
+  if (hit !== undefined) return hit;
   return value;
 }
 
@@ -645,6 +656,34 @@ function formatUtcAsBeijing(s) {
     ' ' + p(t.getUTCHours()) + ':' + p(t.getUTCMinutes()) + ':' + p(t.getUTCSeconds());
 }
 
+/**
+ * 库里时间串 → 尽量显示成北京时间；认不出来（不是 * 时间格式）就原样返回。
+ * 后台各处 *_at 都该走这个，别各自 slice：数据浏览器（admin-data.js 的时间列分支）
+ * 早就转北京时间了，而审核页/规则徽章那几格还在打原始 UTC —— 北京时间早上 8 点前
+ * 看到的"昨天"其实是今天凌晨发生的事。
+ */
+function beijingOrRaw(s) {
+  if (s === null || s === undefined || s === '') return '';
+  var str = String(s);
+  return formatUtcAsBeijing(str) || str;
+}
+
+/**
+ * 「只认最新一次」加载闸（列表页通用）
+ *
+ * 用法：模块顶层 `var _gate = seqGate();`，每次发请求前 `var tok = _gate.begin();`，
+ * 回调最前面 `if (!_gate.isCurrent(tok)) return;`。
+ * 为什么要：筛选下拉每改一次就发一次请求，而响应回来的先后顺序不保证 —— 带着旧筛选
+ * 条件的那条后到，就会把新结果整页覆盖掉，页面显示的和最后一次的筛选条件不是同一批。
+ */
+function seqGate() {
+  var n = 0;
+  return {
+    begin: function () { n += 1; return n; },
+    isCurrent: function (tok) { return tok === n; },
+  };
+}
+
 /* ── 工具函数 ── */
 
 /** HTML 转义,防 XSS */
@@ -659,7 +698,7 @@ function escapeHtml(s) {
 /** 顶部 Toast 提示(3秒自动消失) */
 function showToast(msg, type) {
   var div = document.createElement('div');
-  div.className = type === 'error' ? 'error-msg' : (type === 'success' ? 'success-msg' : 'success-msg');
+  div.className = type === 'error' ? 'error-msg' : (type === 'info' ? 'info-msg' : 'success-msg');
   div.style.cssText = 'position:fixed;top:20px;right:20px;z-index:2000;max-width:400px;animation:fadeIn .2s;';
   div.textContent = msg;
   document.body.appendChild(div);

@@ -6,6 +6,20 @@ const Database = require('better-sqlite3')
 // 库路径只从 ./paths 取,避免各脚本各拼一份(拼错＝静默打开空库)
 const { DB_PATH } = require('./paths')
 const db = new Database(DB_PATH)
+// 四段改动必须一起成立：中途抛错就停在「category 已汉化、action_type 还是英文」的半套状态，
+// 而这个脚本没有预览档，重跑只会再改一遍已改的、补不上没改的 ⇒ 整体进事务，跑到底才 COMMIT
+db.exec('BEGIN IMMEDIATE')
+let cnMigratedCommitted = false
+process.on('exit', () => {
+  if (!cnMigratedCommitted) {
+    try {
+      db.exec('ROLLBACK')
+      console.log('（没跑到底，本轮改动已回滚）')
+    } catch {
+      /* 连接已关，未提交的事务本来就不落盘 */
+    }
+  }
+})
 
 console.log('=== 规则系统全面汉化 ===\n')
 
@@ -102,6 +116,8 @@ console.log('\n=== 最终统计 ===')
 console.log('规则组: ' + db.prepare('SELECT COUNT(*) as c FROM rule_groups').get().c)
 console.log('规则条件: ' + db.prepare('SELECT COUNT(*) as c FROM rule_conditions').get().c)
 console.log('规则动作: ' + db.prepare('SELECT COUNT(*) as c FROM rule_actions').get().c)
-console.log('\n✅ 数据库汉化完成！')
+db.exec('COMMIT')
+cnMigratedCommitted = true
+console.log('\n✅ 数据库汉化完成（已提交）！')
 
 db.close()

@@ -11,6 +11,11 @@
  */
 
 const { analyzeBazi, analyzeDay, parseBirthDate } = require('./baziWuxing')
+const { ownValue } = require('../utils/common')
+const { beijingDateStr, beijingParts } = require('../utils/beijingTime')
+const { bmiValue, healthBand } = require('./bmi')
+const { BODY_TYPE_BY_KEY, normalizeBodyType } = require('./bodyTypes')
+const { estimateBodyDims } = require('./bodyDimEstimator')
 
 // 简易内存缓存（避免重复计算相同 profile）
 const _enrichCache = new Map()
@@ -18,11 +23,14 @@ const _CACHE_MAX = 200
 
 /**
  * 将 profile 转为可哈希的缓存键
+ * 键里必须带"北京的今天"：缓存值含 `bazi_today`（:724 那次 analyzeDay），
+ * 原来只按 profile 取键又没有 TTL ⇒ 同一份档案第二天命中昨天的日柱，
+ * 要等进程重启或挤出 200 条上限才自愈（2026-10-12 修）
  * @param {object} profile
  * @returns {string}
  */
 function _cacheKey(profile) {
-  return JSON.stringify(profile)
+  return `${beijingDateStr()}|${JSON.stringify(profile)}`
 }
 
 /**
@@ -42,28 +50,18 @@ function _safeFloat(val, defaultVal = 0.0) {
 // ============================================================
 
 /**
- * 计算 BMI 及等级
+ * 计算 BMI 及等级（算式与档位表都在 services/bmi.js，这里只做接口）
  * @param {number} heightCm
  * @param {number} weightKg
- * @returns {{bmi: number, bmi_level: string, bmi_status: string}}
+ * @returns {{bmi?: number, bmi_level?: string, bmi_status?: string}}
+ *   身高或体重缺测 → {}（不给档位，下游按"没算出"处理）
  */
 function computeBmi(heightCm, weightKg) {
-  const h = _safeFloat(heightCm) / 100
-  const w = _safeFloat(weightKg)
-  if (h <= 0 || w <= 0) {
-    return { bmi: 22.0, bmi_level: '正常', bmi_status: 'good' }
-  }
-  const bmi = w / (h * h)
-  if (bmi < 18.5) {
-    return { bmi: Math.round(bmi * 10) / 10, bmi_level: '偏瘦', bmi_status: 'warning' }
-  }
-  if (bmi < 24) {
-    return { bmi: Math.round(bmi * 10) / 10, bmi_level: '正常', bmi_status: 'good' }
-  }
-  if (bmi < 28) {
-    return { bmi: Math.round(bmi * 10) / 10, bmi_level: '偏胖', bmi_status: 'warning' }
-  }
-  return { bmi: Math.round(bmi * 10) / 10, bmi_level: '肥胖', bmi_status: 'danger' }
+  // 缺测不出分:原来这里量不到就返回一个 22.0/'正常'，
+  // 等于给每个没填身高体重的人贴了一个"身材正常"的标签，
+  // 而 22.0 是 18.5~24 这一档的中位假想值，不是任何人的实测值。
+  const band = healthBand(bmiValue(heightCm, weightKg))
+  return band || {}
 }
 
 // ============================================================
@@ -90,10 +88,18 @@ function computeBodyShape(bust, waist, hip, shoulder) {
   const whDiff = h - w
 
   if (Math.abs(bwDiff - whDiff) < 5 && bwDiff > 10) {
-    return { body_shape: '沙漏型', body_shape_key: 'hourglass', body_shape_status: 'good' }
+    return {
+      body_shape: BODY_TYPE_BY_KEY.hourglass,
+      body_shape_key: 'hourglass',
+      body_shape_status: 'good',
+    }
   }
   if (whDiff > bwDiff + 5) {
-    return { body_shape: '梨形', body_shape_key: 'pear', body_shape_status: 'normal' }
+    return {
+      body_shape: BODY_TYPE_BY_KEY.pear,
+      body_shape_key: 'pear',
+      body_shape_status: 'normal',
+    }
   }
   if (bwDiff > whDiff + 5) {
     const s = _safeFloat(shoulder)
@@ -102,14 +108,22 @@ function computeBodyShape(bust, waist, hip, shoulder) {
     if (s <= 0) return { body_shape_status: 'unmeasured' }
     if (s > h * 0.45) {
       return {
-        body_shape: '倒三角型',
+        body_shape: BODY_TYPE_BY_KEY.inverted_triangle,
         body_shape_key: 'inverted_triangle',
         body_shape_status: 'normal',
       }
     }
-    return { body_shape: '苹果型', body_shape_key: 'apple', body_shape_status: 'warning' }
+    return {
+      body_shape: BODY_TYPE_BY_KEY.apple,
+      body_shape_key: 'apple',
+      body_shape_status: 'warning',
+    }
   }
-  return { body_shape: '直筒型', body_shape_key: 'rectangle', body_shape_status: 'normal' }
+  return {
+    body_shape: BODY_TYPE_BY_KEY.rectangle,
+    body_shape_key: 'rectangle',
+    body_shape_status: 'normal',
+  }
 }
 
 // ============================================================
@@ -137,7 +151,9 @@ const WHR_BANDS = {
 
 /** 性别归一：规则与档案用中文，门店/外部数据可能给英文 */
 function _normGender(gender) {
-  const g = String(gender || '').trim().toLowerCase()
+  const g = String(gender || '')
+    .trim()
+    .toLowerCase()
   if (['男', 'male', 'm', '1'].includes(g)) return '男'
   if (['女', 'female', 'f', '2', '0'].includes(g)) return '女'
   return null
@@ -211,14 +227,18 @@ function computeShoulderRatio(shoulder, height) {
   // 缺测不出分：原来这里用 38/162 两个假人量算出 23.5，再让"肩宽标准"这条结论凭空出现。
   // 现在没量肩宽或没量身高就整段不返回，前端与规则引擎都拿不到 shoulder_ratio / shoulder_status。
   if (s <= 0 || h <= 0) return {}
-  const ratio = (s / h) * 100
+  // 先按对外的精度取整，再比切点：原来用原始值比 21/24、只在输出时取整，
+  // 于是肩宽比 24.03 这条会同时给出两个说法——这里报"偏宽"（shoulder_status:'wide'）、
+  // 而 topFitBody 的参考带 [21,24] 拿到的是取整后的 24.0，判"带内不推拉"。
+  // 全站这条口径已由 services/bmi.js（先取整再分档）与条纹闸门（读 measure.bmi）立过。
+  const ratio = Math.round((s / h) * 1000) / 10
   if (ratio > 24) {
-    return { shoulder_ratio: Math.round(ratio * 10) / 10, shoulder_status: 'wide' }
+    return { shoulder_ratio: ratio, shoulder_status: 'wide' }
   }
   if (ratio < 21) {
-    return { shoulder_ratio: Math.round(ratio * 10) / 10, shoulder_status: 'narrow' }
+    return { shoulder_ratio: ratio, shoulder_status: 'narrow' }
   }
-  return { shoulder_ratio: Math.round(ratio * 10) / 10, shoulder_status: 'normal' }
+  return { shoulder_ratio: ratio, shoulder_status: 'normal' }
 }
 
 // ============================================================
@@ -274,7 +294,9 @@ const SKIN_TONE_COLOR_MAP = {
  * @returns {{color_match: string, color_avoid: string, color_reason: string}}
  */
 function computeColorMatch(skinTone) {
-  const guide = SKIN_TONE_COLOR_MAP[skinTone] || SKIN_TONE_COLOR_MAP['自然白']
+  // 肤色词来自表单/档案，只认表里自己的键：SKIN_TONE_COLOR_MAP['constructor'] 会返回
+  // Object 构造器，guide.colors 变 undefined，"适合色/避免色"整段从响应里消失
+  const guide = ownValue(SKIN_TONE_COLOR_MAP, skinTone) || SKIN_TONE_COLOR_MAP['自然白']
   return {
     color_match: guide.colors,
     color_avoid: guide.avoid,
@@ -322,13 +344,16 @@ const COLOR_SEASON_TABLE = {
  * @returns {{color_season?: string}} 两个轴都拿不到时不猜,返回空对象
  */
 function computeColorSeason(skinTone, skinToneDetail) {
+  // 三张表都按表单里的自由文本查：'constructor' 这类原型键在普通查法下是 truthy 的函数，
+  // 会把 !depth / !undertone 两道闸门全部放过去，最后 KIBBE_TABLE[函数][函数] 当场抛 ⇒ 500
   const words = [skinTone, skinToneDetail].filter((w) => typeof w === 'string' && w)
-  const depthWord = words.find((w) => DEPTH_LEVEL[w])
+  const depthWord = words.find((w) => ownValue(DEPTH_LEVEL, w))
   const depth = depthWord ? DEPTH_LEVEL[depthWord] : null
   const undertone =
-    words.find((w) => COLOR_SEASON_TABLE[w]) || (depthWord ? UNDERTONE_FROM_DEPTH[depthWord] : null)
+    words.find((w) => ownValue(COLOR_SEASON_TABLE, w)) ||
+    (depthWord ? ownValue(UNDERTONE_FROM_DEPTH, depthWord) : null)
   if (!undertone || !depth) return {}
-  const season = COLOR_SEASON_TABLE[undertone][depth]
+  const season = ownValue(COLOR_SEASON_TABLE, undertone)?.[depth]
   return season ? { color_season: season } : {}
 }
 
@@ -361,8 +386,8 @@ const COLOR_SEASON_12_TABLE = {
  * @returns {{color_season_12?: string}}
  */
 function computeColorSeason12(colorSeason, colorChroma) {
-  const row = COLOR_SEASON_12_TABLE[colorSeason]
-  const chroma = CHROMA_LEVEL[colorChroma]
+  const row = ownValue(COLOR_SEASON_12_TABLE, colorSeason)
+  const chroma = ownValue(CHROMA_LEVEL, colorChroma)
   if (!row || !chroma) return {}
   return { color_season_12: row[chroma] }
 }
@@ -396,10 +421,13 @@ const KIBBE_TABLE = {
  * @returns {{kibbe_type?: string}} 两个轴缺一不猜
  */
 function computeKibbeType(frameSize, lineQuality) {
-  const frame = FRAME_LEVEL[frameSize]
-  const line = LINE_LEVEL[lineQuality]
+  // 这两维是表单里的中文选项，也是"能一路走到双重索引"的输入：
+  // 不做自有键检查时骨架填成 constructor 会让 KIBBE_TABLE[函数] 变 undefined，
+  // 紧接着的 [线] 就是 Cannot read properties of undefined ⇒ 整条分析 500
+  const frame = ownValue(FRAME_LEVEL, frameSize)
+  const line = ownValue(LINE_LEVEL, lineQuality)
   if (!frame || !line) return {}
-  return { kibbe_type: KIBBE_TABLE[frame][line] }
+  return { kibbe_type: ownValue(KIBBE_TABLE, frame)?.[line] }
 }
 
 // ============================================================
@@ -422,18 +450,21 @@ const SHOULDER_TYPE_LABELS = { 窄肩: '偏窄', 标准肩: '标准', 宽肩: '�
  * @returns {{leg_proportion?: string, shoulder_frame?: string, waist_definition?: string}}
  */
 function computeProportionLevels({ leg_status, shoulder_status, shoulder_type, wh_status }) {
+  // 三个档位表都必须走 ownValue：computeProportionLevels 的入参是**整份用户档案**
+  // （enrichProfile 里是 computeProportionLevels(p)），leg_status 这类字段
+  // 客户端可以直接塞。原来用方括号取值，`leg_status:'constructor'` 会取到
+  // Object 构造函数（真值 ⇒ 判据成立），把函数塞进 leg_proportion：
+  // 规则按 '偏短/标准/偏长' 比对永远对不上，而 JSON.stringify 会把函数字段整个丢掉，
+  // 存档里这条派生字段凭空消失。'__proto__' 同理取到 Object.prototype。
   const out = {}
-  if (leg_status && PROPORTION_LEVEL_LABELS.leg_status[leg_status]) {
-    out.leg_proportion = PROPORTION_LEVEL_LABELS.leg_status[leg_status]
-  }
-  if (shoulder_status && PROPORTION_LEVEL_LABELS.shoulder_status[shoulder_status]) {
-    out.shoulder_frame = PROPORTION_LEVEL_LABELS.shoulder_status[shoulder_status]
-  } else if (shoulder_type && SHOULDER_TYPE_LABELS[shoulder_type]) {
-    out.shoulder_frame = SHOULDER_TYPE_LABELS[shoulder_type]
-  }
-  if (wh_status && PROPORTION_LEVEL_LABELS.wh_status[wh_status]) {
-    out.waist_definition = PROPORTION_LEVEL_LABELS.wh_status[wh_status]
-  }
+  const legLabel = ownValue(PROPORTION_LEVEL_LABELS.leg_status, leg_status)
+  if (legLabel) out.leg_proportion = legLabel
+  const shoulderLabel = ownValue(PROPORTION_LEVEL_LABELS.shoulder_status, shoulder_status)
+  const shoulderTypeLabel = ownValue(SHOULDER_TYPE_LABELS, shoulder_type)
+  if (shoulderLabel) out.shoulder_frame = shoulderLabel
+  else if (shoulderTypeLabel) out.shoulder_frame = shoulderTypeLabel
+  const whLabel = ownValue(PROPORTION_LEVEL_LABELS.wh_status, wh_status)
+  if (whLabel) out.waist_definition = whLabel
   return out
 }
 
@@ -454,7 +485,8 @@ const BODY_SHAPE_OUTFIT = {
  * @returns {string}
  */
 function getBodyShapeOutfitAdvice(bodyShapeKey) {
-  return BODY_SHAPE_OUTFIT[bodyShapeKey] || BODY_SHAPE_OUTFIT['hourglass']
+  // 只认自有键：key 万一是 constructor 这类原型名，普通查法会把一个函数当"穿搭建议"发出去
+  return ownValue(BODY_SHAPE_OUTFIT, bodyShapeKey) || BODY_SHAPE_OUTFIT['hourglass']
 }
 
 // ============================================================
@@ -534,8 +566,10 @@ const FACE_SHAPE_ALIASES = {
  * @returns {{face_analysis: string, hair_advice: string, makeup_advice: string, contour_advice: string, accessory_advice: string}}
  */
 function getFaceShapeGuide(faceShape) {
-  const key = FACE_SHAPE_ALIASES[faceShape] || faceShape
-  const guide = FACE_SHAPE_GUIDE[key] || FACE_SHAPE_GUIDE['鹅蛋脸']
+  // 脸型是表单里的文本：两张表都要只认自有键，否则 'constructor' 会把别名表本身
+  // 当成一个函数返回，后面 guide.analysis 全变 undefined、整个建议块空掉
+  const key = ownValue(FACE_SHAPE_ALIASES, faceShape) || faceShape
+  const guide = ownValue(FACE_SHAPE_GUIDE, key) || FACE_SHAPE_GUIDE['鹅蛋脸']
   return {
     face_analysis: guide.analysis,
     hair_advice: guide.hair,
@@ -615,8 +649,10 @@ const EYE_SPACING_GUIDE = {
  * @returns {{analysis: string, hair: string, makeup: string, contour: string, accessory: string}|null}
  */
 function getFaceProportionGuide(faceRatio, eyeSpacing) {
-  const upper = FACE_PROPORTION_GUIDE[faceRatio]
-  const spacing = EYE_SPACING_GUIDE[eyeSpacing]
+  // 两根轴都是文本键：原型名（constructor/toString）在普通查法下会拿到函数，
+  // `!upper && !spacing` 这道闸门挡不住，最后 join 出来四个空字符串
+  const upper = ownValue(FACE_PROPORTION_GUIDE, faceRatio)
+  const spacing = ownValue(EYE_SPACING_GUIDE, eyeSpacing)
   if (!upper && !spacing) return null
 
   const join = (key) => [upper && upper[key], spacing && spacing[key]].filter(Boolean).join('；')
@@ -646,7 +682,7 @@ const POSTURE_ADVICE = {
  */
 function getPostureAdvice(posture) {
   if (!posture || posture === '无') return null
-  return POSTURE_ADVICE[posture] || null
+  return ownValue(POSTURE_ADVICE, posture) || null
 }
 
 // ============================================================
@@ -685,9 +721,16 @@ const AGE_BANDS = [
 function deriveAgeFields(birthDate) {
   const b = parseBirthDate(birthDate)
   if (!b) return {}
-  const now = new Date()
-  let age = now.getFullYear() - b.y
-  const reached = now.getMonth() + 1 > b.m || (now.getMonth() + 1 === b.m && now.getDate() >= b.d)
+  // 生日"到没到"必须按北京时间判：容器实测 TZ 是 UTC，用 new Date() 的本地月/日
+  // 在北京时间 00:00–07:59 这一档读到的还是"昨天"⇒ 当天过生日的人整档算小一岁
+  // （25 岁当天被归进 18-25 带，26 岁档的规则一条不命中）。这里只取年月日三个
+  // 数字，不碰时分，与 utils/beijingTime.js 同一口径。
+  const now = beijingParts()
+  const nowYear = Number(now.year)
+  const nowMonth = Number(now.month)
+  const nowDay = Number(now.day)
+  let age = nowYear - b.y
+  const reached = nowMonth > b.m || (nowMonth === b.m && nowDay >= b.d)
   if (!reached) age -= 1
   const out = { age }
   const band = AGE_BANDS.find(([lo, hi]) => age >= lo && age <= hi)
@@ -740,19 +783,46 @@ function enrichProfile(profile) {
   if (!p.body_type && p.body_type_detail) {
     p.body_type = p.body_type_detail
   }
+  // 0.1 体型词形归一（10-19 第一阶段·止血第 1 条）。老档案与老表单存的是「苹果形」，
+  // 引擎判定与规则库存值认的是「苹果型」——严格 AND 下这一字之差＝那 4 组 store 穿搭规则
+  // 对这个顾客根本不存在（现量 10-19：rule_conditions 里 {"body_type":"苹果形"} 4 条，
+  // 一次没命中过；判据见 bodyTypes.js 文件头）。
+  // 认不出的取值原样留着：「标准」这类老自填值翻成五档之一＝编造体型，宁可让它继续不命中。
+  // 引擎侧归一 + 规则侧归一（recommendEngine.COND_VALUE_ALIASES）两道一起上，
+  // 是为了让"迁移脚本跑没跑"不再决定规则生不生效——服务器那份运行库被 skip-worktree 钉住，
+  // 发布窗口里漏跑一次迁移只该留下后台的老名字，不该再静默吃掉一整组规则。
+  const normalizedBodyType = normalizeBodyType(p.body_type)
+  if (normalizedBodyType && normalizedBodyType !== p.body_type) p.body_type = normalizedBodyType
   if (!p.skin_tone && p.skin_tone_detail) {
     p.skin_tone = p.skin_tone_detail
   }
   if (!p.scenario && p.occasion) {
-    p.scenario = OCCASION_TO_SCENARIO[p.occasion] || p.occasion
+    p.scenario = ownValue(OCCASION_TO_SCENARIO, p.occasion) || p.occasion
   }
   if (!p.nose_bridge && p.nose_height) {
     p.nose_bridge = p.nose_height
   }
-  // 只填了具体身高没选区间时换算一次,否则按区间分档的规则(3 组)对这类人永远轮不到
+  // 0.5 性别归一：规则条件与尺码表用的都是「男/女」，而 users.gender 里确实躺着
+  // 英文和数字（db/migrate_en_to_cn.js:215-222 就是为这批数据写的）。原来 _normGender
+  // 只在腰臀比那一处调用、结果从不写回 p.gender ⇒ 'male'／'M'／'1' 这类档案在
+  // 每一条带 gender 的规则和 fitSize 的 SIZE_STEPS.scope 上整类静默失配
+  // （引擎是严格 AND，条件对不上就等于这条规则对他不存在）。
+  // 认不出来的取值保持原样：宁可少归一，也不把顾客真填过的内容覆盖成 null。
+  const normalizedGender = _normGender(p.gender)
+  if (normalizedGender && normalizedGender !== p.gender) p.gender = normalizedGender
+  // 只填了具体身高没选区间时换算一次,否则按区间分档的规则对这类人永远轮不到
   if (!p.height_range && p.height) {
     const h = _safeFloat(p.height)
     if (h > 0) {
+      // 145cm 会被归进 '150-160'，这是**故意的**：档位词表由规则条件决定，
+      // 派生字段的取值不许在规则里另抄一份（docs/形象设计模型-现状与路线.md:85）。
+      // 下面那三档之外没有更低档可归 ⇒ 与其新造一个谁也命中不到的 '<150'
+      // 让人直接掉出所有身高规则，不如并进最近的 150-160 至少还能命中。
+      // 四档 150-160／160-170／170-180／180+ 现在都有规则接得住：前三档是
+      // db/add-rules.js 那批老规则（163/164/165 组，无 source_key），
+      // 170-180 这一档 10-13 才补进 db/seed/rules-aesthetic.json
+      //（height-f-170-180／height-m-170-180，由 applyRuleSeeds 按 key 增量插）。
+      // 谁再漏一档，test/aestheticRules.test.js 的反向断言会红：算得出的取值必须有规则命中。
       p.height_range = h < 160 ? '150-160' : h < 170 ? '160-170' : h < 180 ? '170-180' : '180+'
     }
   }
@@ -806,6 +876,20 @@ function enrichProfile(profile) {
   Object.assign(p, deriveAgeFields(p.birth_date))
   // 6.8 八字五行(第二条判定依据;没填出生日期就整块缺席,不影响第一批那 20 条四季型规则)
   Object.assign(p, computeBaziFields(p.birth_date, p.birth_hour))
+  // 6.9 智能估算净胸围/净肩宽(第五阶段·第一步「只填身高体重」)。
+  //     🔴 只挂**独立的 body_est 通道**，⛔ 绝不改写 p.bust / p.shoulder
+  //     （docs/依据/13-体型估算输入输出规范-20261020.md §五 第 7 条：档案里那两格
+  //     "用户没填就是没填"这件事必须一直成立，否则他下次填了实测值没人知道哪个是真的）。
+  //     ⛔ 也不喂 computeBodyShape（:838 那段用的是量到的 bust/waist/hip）、不喂规则条件字段
+  //     （引擎是严格 AND，估算值一进 profile.bust 就会命中一堆本该"没量⇒不命中"的规则）。
+  //     这份数唯一的出口是 topFitBody 的 person_cm.bust/shoulder（合身层拿成衣实测做减法的那两个原值）。
+  //     输入不合格 ⇒ estimateBodyDims 返回 null ⇒ 这一格就是 null，不给默认值。
+  p.body_est = estimateBodyDims({
+    gender: p.gender,
+    height: p.height,
+    weight: p.weight,
+    age: p.age,
+  })
 
   // 7. 脸型-全维度建议
   if (face_shape) {

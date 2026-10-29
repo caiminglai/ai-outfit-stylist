@@ -10,9 +10,14 @@ import { getWeatherProfile } from '../../api'
 interface WeatherCardProps {
   /** 天气数据回调，供父组件（如 AI 文案增强）使用 */
   onWeather: (w: WeatherData | null) => void
+  /** 🔴 10-21 第十三阶段·第一步 §四·1：查成功的**城市名**也要上去一份——
+   *  父组件把它当 `/engine` 的可选第三参送进去（"推荐时现取天气一起带上"那块板）。
+   *  ⛔ 名单不在前端抄第二份：能不能算、取不到怎么解释，全由后端 `weatherService` 那一份定，
+   *  前端只负责把用户打出来的那几个字原样送上去。查询失败时上抛 null（＝这一屏不带天气档）。 */
+  onCity?: (city: string | null) => void
 }
 
-export default function WeatherCard({ onWeather }: WeatherCardProps) {
+export default function WeatherCard({ onWeather, onCity }: WeatherCardProps) {
   const [location, setLocation] = useState('')
   const [profile, setProfile] = useState<WeatherProfile | null>(null)
   const [loading, setLoading] = useState(false)
@@ -26,10 +31,12 @@ export default function WeatherCard({ onWeather }: WeatherCardProps) {
       const p = await getWeatherProfile(location.trim())
       setProfile(p)
       onWeather(p.weather)
+      onCity?.(p.weather.location || location.trim())
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : '查询失败')
       setProfile(null)
       onWeather(null)
+      onCity?.(null)
     } finally {
       setLoading(false)
     }
@@ -49,7 +56,9 @@ export default function WeatherCard({ onWeather }: WeatherCardProps) {
           value={location}
           onChange={(e) => setLocation(e.target.value)}
           onKeyDown={(e) => {
-            if (e.key === 'Enter') handleQuery()
+            // 与按钮的 disabled 同一条判断:按钮在 loading/空城市时点不动,但回车之前没挡,
+            // 长按 Enter 会连发 N 个 Open-Meteo 请求撞限流
+            if (e.key === 'Enter' && !loading && location.trim()) handleQuery()
           }}
           placeholder="输入城市名，如 北京 / 上海"
           className="form-input flex-1 text-xs"

@@ -60,8 +60,22 @@ export interface CustomerProfile {
 
   // 门店模式字段
   skin_tone?: '暖皮' | '冷皮' | '自然'
+  /**
+   * 肤色取色的色相角（度）。第十阶段·第一步，口径见 docs/依据/18 §2.4：
+   * 🔴 只随单次请求走、⛔ 不落库；后端用它 + 深浅档锚点合成连续 Lab 送 colorFit。
+   * ⛔ 这里刻意没有 skin_lab 这一格——客户端递不进连续明度，否则等于让曝光冒充肤色（18 §2.2 反例）。
+   */
+  skin_hue?: number
+  /** 取样那块皮肤色的 '#rrggbb'，只为拆账与复现，⛔ 参与不了计算 */
+  skin_hex?: string
   face_shape?: '圆脸' | '方脸' | '心形脸' | '椭圆脸' | '长脸'
-  body_type?: '标准' | '偏瘦' | '偏胖' | '梨形' | '苹果形'
+  /**
+   * 体型:五档，与后端引擎出的字一字一样。词表唯一出处 = backend/services/bodyTypes.js
+   *（10-19 第一阶段统一:原来这里是「标准/偏瘦/偏胖/梨形/苹果形」，前三颗是 BMI 档、
+   * 最后一颗与引擎的「苹果型」差一个字⇒门店 4 组穿搭规则永不命中;
+   * 胖瘦那一维改由 bmi_level 承接，值与 backend/services/bmi.js 的 HEALTH_BANDS 同字）。
+   */
+  body_type?: '沙漏型' | '梨形' | '苹果型' | '直筒型' | '倒三角型'
   scenario?: '通勤' | '约会' | '面试' | '休闲' | '聚会'
   /** 拍照场景(选填):只影响"姿势"类推荐,不选则沿用主要场合 */
   photo_scene?: '日常街拍' | '职业照' | '旅行打卡' | '探店' | '户外写真' | '闺蜜合照' | '自拍'
@@ -136,22 +150,41 @@ export interface RecommendationExplanation {
 export interface ColorFitScore {
   /** 0~100 合成分 */
   score: number
-  /** 上衣代表色,已归一成大写 */
-  top_hex: string
-  /** 从结论文本里认出的色名,如 '雾霾蓝' */
+  /** 上衣代表色,已归一成大写；⚠️ L5「只有深浅档」与 {L,a,b} 直传时为 null（没有 hex 可给） */
+  top_hex: string | null
+  /** 从结论文本里认出的色名,如 '雾霾蓝'；只有明度档时是 '深色'／'浅色' */
   top_label: string
-  /** 与肤色的 CIEDE2000 色差 */
-  deltaE00: number
-  /** 色相对比角 0~180,越小越同族 */
-  dHue: number
+  /** 与肤色的 CIEDE2000 色差；null ⇒ 这一条没有两个 Lab 可差（见 basis） */
+  deltaE00: number | null
+  /** 色相对比角 0~180,越小越同族；null 同上 */
+  dHue: number | null
   /** 色相对比分量 0.5~1.0 = 0.5 + dHue/360;上衣衬脸按"对比越大越被偏好"给分(10-08 改) */
   hueContrast?: number
-  /** 上衣明度 - 肤色明度(负=上衣更深,越显白) */
-  dL: number
+  /** false ⇒ 上衣属无彩色或只有明度档，色相这一轴按"没有信息"记 0.5，不参与总分 */
+  hue_applies?: boolean
+  /** 上衣明度 - 肤色明度(负=上衣更深,越显白)；null 同上 */
+  dL: number | null
   /** 显白项 0~100 */
   brighten: number
-  /** 上衣彩度 C* */
-  chroma: number
+  /** 上衣彩度 C*；null 同上 */
+  chroma: number | null
+  /** ΔE00 同色糊合闸门乘数(15~30 线性,见 colorMetrics.js FUSION_GATE)；L5 那档恒 1 */
+  fusion_gate?: number
+  /** 对比侧分(闸门后)与呼应侧分,总分是这两笔的 70/30；harmony_score null＝这一维缺数据 */
+  contrast_score?: number
+  harmony_score?: number | null
+  /**
+   * 这一分的来路(10-20 第六阶段·第一步)：hex／table-key／strip-color／add-color／synonym／
+   * in-text／lab-object／lightness-band。'lightness-band'＝文案只说了"深色/浅色"，
+   * 分数只有明度方向这一维，没有色差可言，展示层必须分开写。
+   */
+  basis?: string
+  /** basis='synonym' 时是同义词库里的哪一个别名 */
+  synonym_via?: string | null
+  /** 色系软标签(红/橙/黄/绿/青/蓝/紫/粉/棕/无彩色)，只用于展示与"同色系"判，不进分 */
+  family?: string | null
+  /** 明度档：'深'／'中'／'浅'(L≤35／L≥65 语义切点) */
+  band?: '深' | '中' | '浅' | null
   /** 依据档位说明 */
   evidence: string
 }
@@ -170,42 +203,98 @@ export interface BodyFitAxis {
   weight: number
   /** 这个人这一维的实测数或想往哪修(+加/−收) */
   person: number | string | null
-  /** 这件上衣这一维的修形量;松量轴给的是松量代理值 cm */
+  /** 这件上衣这一维的修形量;松量轴给的是实测松量 cm */
   garment: number | null
   /** 这一维的依据口径(B 方向 + C 刻度) */
   tier: string
+  /** 这个数从哪一格算出来的(10-19 第二阶段：每一维都要能追到一格实测值) */
+  based_on?: string
   /** 被闸门关掉时的说明(如条纹轴在 BMI≥25 时) */
   gated?: string
+  /** 这一维是**估**出来的（10-19 第三阶段：没量 bust_cm、由版型档映射的区间中值） */
+  estimated?: boolean
 }
 
-/** 上衣那一侧被认出来的"修形标签"(describeTop 的输出；null＝这一维没认出来，不算分) */
+/** 上衣那一侧的"修形向量"（describeTop 的输出；null＝那一格没量到，不算这一维） */
 export interface TopDescriptor {
   label: string
-  source: 'wardrobe' | 'text'
+  /** 'wardrobe'＝这一件是衣柜里的一行，四格实测尺寸取得到；'no_row'＝只有规则结论那句文本 ⇒ 不打分 */
+  source: 'wardrobe' | 'no_row'
   text?: string
   hex: string | null
   fit_style: string | null
+  /** 版型档（10-19 第三阶段）：null＝没选或填的不是值域里的词 */
+  fit_type?: string | null
   fabric_weight: string | null
-  /** 松量代理值 cm：衣柜的版型档优先，其次才是名称里的线索 */
+  /** 这件衣服自己量到的四个数（cm）；null＝那格没填 */
+  garment_cm?: {
+    shoulder_cm: number | null
+    bust_cm: number | null
+    length_cm: number | null
+    waistband_cm: number | null
+  }
+  /** 松量 cm：成品胸围 − 人体净胸围（实测口径）。没量 bust_cm 时改由版型档估（见 estimated） */
   ease: number | null
   shoulder: number | null
   waist: number | null
   length: number | null
   volume: number | null
   pattern: number | null
+  /** 哪几维是估出来的（10-19 第三阶段：目前只有 ease 走版型映射） */
+  estimated?: string[]
+  /** 六格里量到几格（估的那格按半格计）；打分侧按它打折 */
+  coverage?: number
   /** 认到了哪些线索(给用户看清分数不是凭空来的) */
   signals: string[]
 }
 
 /** 上衣 × 身体 的按人适配分(不看脸;脸侧那半在 ColorFitScore) */
 export interface BodyFitScore {
-  /** 0~100 合成分,只由在场的几根轴加权得出 */
+  /** 0~100 合成分：在场轴加权归一后的分**再乘覆盖率惩罚因子**（10-19 第三阶段·模块二） */
   score: number
+  /** 惩罚前的分（只在对内解释时用；对外一律报 score） */
+  raw_score?: number
+  /** 惩罚因子 = 0.5 + 0.5 × coverage */
+  coverage_penalty?: number
+  /** 这件上衣六格里量到几格（估的那格算半格） */
+  coverage?: number
   axes: BodyFitAxis[]
   axes_present: string[]
   axes_missing: string[]
   top: TopDescriptor
   evidence: string
+  /** 🔴 第十三阶段·第一步 §三·4：'rule_text'＝这一档不是量出来的，是**从这句建议文案自己
+   *  的款式词/面料词认出来的离散档位**（修身/合身/宽松/廓形、薄/中/厚）。
+   *  措辞红线（依据/21 §一·2）：⛔ 不许对顾客说成"量化了你的体型"，只能说"按这句话的款式词认的档"。 */
+  inferred_from?: 'rule_text' | null
+  /** 认档时命中了哪几个词，报告与前台要能指着它说"凭这两个词归的档" */
+  inferred_words?: { fit: string[]; fabric: string[] }
+}
+
+/** 综合排序分的单个分量(2026-10-19 第二阶段「算法重排」) */
+export interface RankDimension {
+  /** rule 规则基础分 / color 色彩贴合分 / body 廓形贴合分 */
+  key: 'rule' | 'color' | 'body'
+  name_cn: string
+  /** 0~100;null = 这一维没算出来(缺测) */
+  score: number | null
+  /** 实际生效权重:缺测为 0,body 那一维还要再乘这件衣服的实测覆盖率 */
+  weight: number
+  /** 仅 body 维带上:这件衣服的六格实测里量到几格 */
+  coverage?: number
+}
+
+/** 决定这条推荐名次的综合分 = w1·规则 + w2·色彩 + w3·廓形(缺测退权后整体打折) */
+export interface RankScore {
+  score: number
+  dims: RankDimension[]
+  present: string[]
+  missing: string[]
+  /** 在场权重占满三分之几(0~1)。⚠️ 10-19 第三阶段起这一层只管"整维缺席"，
+   *  廓形那一维"量到几格"的惩罚已经在身体层乘过了（BodyFitScore.coverage_penalty），这里不再折第二遍 */
+  coverage: number
+  /** 折扣系数 = FLOOR + (1−FLOOR)·coverage */
+  factor: number
 }
 
 /** 规则引擎推荐结果(单条) */
@@ -214,6 +303,11 @@ export interface RuleRecommendationItem {
   group_name: string
   priority: number
   score: number
+  /** 综合排序分:穿搭这一类由它定名次(妆容/发型/配饰/姿势暂未接入) */
+  rank?: RankScore
+  /** wardrobe = 这条来自顾客自己衣柜里量过成品尺寸的一件上衣(不是规则命中的) */
+  source?: 'wardrobe'
+  wardrobe_item_id?: number | null
   /** 反馈对这条规则得分的加减量(好评为正、不准为负,最多 ±3) */
   feedback?: number
   /** 依据档位:A 国标/国际标准 B 学术实证 C 行业体系 D 命理;null=未标注 */
@@ -224,6 +318,25 @@ export interface RuleRecommendationItem {
   color_fit?: ColorFitScore
   /** 身材贴合分:仅上衣认得出修形信号且档案量到相关尺寸时才有 */
   body_fit?: BodyFitScore
+  /** 🔴 第十三阶段·第一步 §二·3/§二·4：上衣那一格的色是"怎么来的"。
+   *  top_text＝这句话自己写的色；combo_first＝它没写色、借本组配色串的第一色；
+   *  relational＝它只写了"跟谁同色"（如"与鞋同色系"），色是从那一格取来的。 */
+  color_basis_source?: 'top_text' | 'combo_first' | 'relational' | null
+  /** 借来/取来的色 ⇒ true，色彩那一维的权重在这一层乘 0.5（rankDims 里唯一一处折扣） */
+  color_borrowed?: boolean
+  /** 借色出处：串里的原句（combo_first）或那一格的原句（relational） */
+  color_borrowed_from?: string | null
+  /** 借的是串里第几个色（relational 这条路不数位置，恒 null） */
+  color_borrowed_position?: number | null
+  /** 上衣那句话自己只写了深浅时留的档（'深色'/'浅色'…），写了具体色则 null */
+  color_top_band?: string | null
+  /** relational 那条：色是从哪一格的结论取来的（'鞋'/'下装'…） */
+  color_relational_from?: string | null
+  /** §二·4 的收口账，形如「下装←上衣(藏青)」：哪一格只写了"跟谁同色" */
+  color_relational?: string | null
+  /** §三·4：从文案认出的版型档／面料档（null＝这一句认不出，那一维继续缺席） */
+  fit_type_inferred?: string | null
+  fabric_weight_inferred?: string | null
   [key: string]: unknown
 }
 
@@ -305,6 +418,12 @@ export interface TopSpecColour {
   reason?: string
   skin_label?: string
   skin_lab?: { L: number; a: number; b: number }
+  /** 照片色相角（度）：非 null ⇒ 冷暖那一格被实测角度顶掉；过不了闸恒 null */
+  photo_hue?: number | null
+  /** 顶掉冷暖锚点后实际进 colorFit 的那颗 Lab（L/C 仍出自 C 档锚点表，只有 h 是照片的） */
+  photo_lab?: { L: number; a: number; b: number; h: number; C: number } | null
+  /** 照片角度翻译出来的冷暖词（冷皮/自然/暖皮）；⛔ 不是"检测出的肤色" */
+  photo_undertone?: string | null
   /** 认出来的肤色口径数（1=只有深浅或只有冷暖；2=两个都算取低分） */
   anchor_count?: number
   scoring?: 'min' | 'single'
@@ -330,7 +449,13 @@ export interface TopSpecFit {
   present: boolean
   layer_cn?: string
   size_label?: string
-  size?: { 号: number; 型: number; 体型: string | null; 体型中文: string | null; 体型档: number[] | null }
+  size?: {
+    号: number
+    型: number
+    体型: string | null
+    体型中文: string | null
+    体型档: number[] | null
+  }
   size_scope?: 'standard' | 'near'
   size_scope_note?: string | null
   /** 常用档系表列的出处（按性别分表，1335.1／1335.2-2008） */
@@ -365,6 +490,49 @@ export interface TopSpec {
   axis_tiers?: Record<string, string>
 }
 
+/**
+ * 付费那份「深度细账」的回执（第十二阶段·第一步，`docs/依据/20` §三 E 节）。
+ * 只有付费重放那一路会有这一块；免费路径的响应里这个键根本不出现。
+ * 🔴 第十四阶段·第一步 C2：这里原来把价格写死成"99 元那份"——真价在 `app_settings.payment_amount_fen`
+ * （`routes/payment.js:43-47` 现算），文案里那个数改一次价就变假话。⛔ 注释也不再写数。
+ * ⛔ 前端不许据此"推算"任何没给的数——回执说什么就显示什么。
+ */
+export interface PaidReportReceipt {
+  /** 🔴 C1：在线＝平台商户单号；人工凭证＝内部幂等键 `DEPOSIT-<id>`（⛔ 当单号展示） */
+  out_trade_no: string
+  amount_fen: number
+  channel: 'wechat' | 'alipay' | 'manual'
+  /** 到账事实来自哪张表：`online_order`＝`payment_orders`，`manual_deposit`＝已核凭证 */
+  source?: 'online_order' | 'manual_deposit'
+  deposit_id?: number | null
+  /** 只有在线那一路 `out_trade_no` 真是平台单号；老数据没这个键时按在线单处理 */
+  is_platform_order_no?: boolean
+  /** 库里存的是 UTC 串，展示请用后端另给的 *_beijing 字段（权益接口里那一份） */
+  paid_at: string | null
+  granted_at: string
+  report_no: number
+  basis_log_id: number
+  basis_input_at: string | null
+  mode: 'store' | 'personal'
+  /** 这份报告分几节交付：B 深度分析 / D 参数与口径 / E 回执 等，见规范 §三 */
+  sections: string[]
+}
+
+/** 排在 Top 8 之外的那一尾（`_computed.ranking.beyond_top_n`，规范 §三 A 节） */
+export interface BeyondTopN {
+  count: number
+  capped: boolean
+  max: number
+  rows: Array<{
+    name: string
+    source: string
+    score: number | null
+    present: string[]
+    missing: string[]
+    coverage: number | null
+  }>
+}
+
 export interface EngineRecommendation {
   穿搭: RuleRecommendationItem[]
   妆容: RuleRecommendationItem[]
@@ -386,12 +554,27 @@ export interface EngineRecommendation {
     bazi_today?: BaziDay
     favorable_element?: string
     unfavorable_element?: string
+    /**
+     * 这一轮色彩维吃的肤色从哪来（18 §2.4）：`photo_sample`＝这次角度真接管了色彩维／
+     * `manual`＝只有档名／`null`＝肤色整格空着（色彩维必然缺席）。
+     * ⛔ 只拆账，不是置信度、不进任何公式。
+     * 🔴 落地实录订正：规范原写还有一种 `'archive'`，但路由在进引擎前已把档案并进 profile
+     *（routes/recommend.js:151 mergeWithArchive），引擎内部分不出这一格是本次填的还是档案来的
+     * ⇒ 这一档不实现，档案来的也记 `'manual'`。
+     */
+    skin_source?: 'photo_sample' | 'manual' | null
+    /** 后端认下的那个色相角；没认 ⇒ null */
+    skin_hue?: number | null
+    /** 后端按同一把尺对那个角度现算的档名；角度越界 ⇒ null */
+    skin_undertone?: '冷皮' | '自然' | '暖皮' | null
     [key: string]: unknown
   }
   wardrobe_gaps?: WardrobeGapResult
   wishlist?: ShoppingWishlistItem[]
   /** 上衣处方（身材+肤色）；六轴一个都算不出且肤色也认不出时整块缺席 */
   top_spec?: TopSpec
+  /** 🔴 第十二阶段·第一步：只有付费领取那一路出现（`GET /api/payment/my?report=…`） */
+  paid_report?: PaidReportReceipt
 }
 
 /** 八字五行分析(排盘来自 vendor/lunar,喜用神由本仓库算法推算) */
@@ -404,6 +587,7 @@ export interface BaziAnalysis {
   day_master: string
   day_master_element: string
   strength: '身强' | '身弱' | '中和'
+  /** 判定用的帮扶比值(含月支得令 +0.06),与 strength、后端 summary 同一口径、保留 3 位 */
   strength_ratio: number
   /** 冬月取火、夏月取水;为 null 表示本月不调候 */
   seasonal: string | null
@@ -481,16 +665,42 @@ export interface WardrobeItem {
   size?: string
   price?: number
   image_url?: string
+  /**
+   * 吊牌条码／店内编号（2026-10-20 第五阶段·第一步「门店扫码快速录入」）。
+   * ⛔ 不建唯一约束：同一件衣服可以有两件、游客还共用会话 ⇒ "扫重了"由录入框查重时提醒，
+   *    写入口不拦。NULL／不填＝这件不是扫来的。
+   */
+  sku?: string | null
   style_tags?: string[]
   color_tags?: string[]
   season_tags?: string[]
   occasion_tags?: string[]
-  /** 花纹：条纹方向那一维靠它＋名称文本认定，认不出就不算这一维 */
+  /** 花纹（选填）：条纹那一维只认这一格里的 竖条/竖条纹/横条/横条纹，认不出就不算这一维 */
   pattern?: string
-  /** 版型（选填）：上衣体量轴的输入之一，值域与后端 FIT_STYLE_VALUES 一致。不填＝没量，不参与打分 */
+  /**
+   * 版型（旧列，10-19 第三阶段起**退役为只读展示标签**：两档值域撑不起四档松量，
+   * 评分不再认它）。表单不再产生这一列，历史行的值原样留着显示。
+   */
   fit_style?: '合体' | '宽松'
+  /**
+   * 版型四档（10-19 第三阶段·模块一）：上衣/外套/连衣裙**必选**。
+   * 没量 bust_cm 时后端按这一档的放松量区间中值估松量（services/topFitBody.js 的 FIT_TYPE_EASE），
+   * 且估出来的那一维在覆盖率里只按半格计 ⇒ 分数照样被惩罚折过，选版型买不到整格分数。
+   * 量了 bust_cm ⇒ 只认实测，这一档一个分都不影响。
+   */
+  fit_type?: '修身' | '合身' | '宽松' | '廓形'
   /** 面料厚薄（选填）：决定同一件上衣的体量感，值域与后端 FABRIC_WEIGHT_VALUES 一致 */
   fabric_weight?: '薄' | '中' | '厚'
+  /**
+   * 成衣实测尺寸（cm，选填）——上衣打分的那四格（10-19 第二阶段「最后一公里」）。
+   * 平铺在身上量：肩宽＝两肩缝点直线距离，胸围＝袖窿下方一周最宽处，
+   * 衣长＝肩颈点到下摆，腰头高＝腰缝/收口带自身的高度（没有腰头就填 0）。
+   * ⛔ 没填＝null＝这一维不参与打分，系统不会再从商品名里猜。
+   */
+  shoulder_cm?: number | null
+  bust_cm?: number | null
+  length_cm?: number | null
+  waistband_cm?: number | null
   body_type_fit?: string[]
   condition?: string
   is_favorite?: boolean
@@ -507,6 +717,8 @@ export interface WardrobeItem {
 export interface BodyDeviation {
   bmi?: number
   shoulder_ratio?: number
+  /** 肩宽÷净腰围（站内自建比值；Pazhoohi 2023 的 SHR 是肩围÷臀围，量不到肩围） */
+  shoulder_waist_ratio?: number
   leg_ratio?: number
   bust_waist_diff?: number
   hip_waist_diff?: number
@@ -543,16 +755,35 @@ export interface TopFitResult {
   note: string
 }
 
-/** 衣橱搭配组合 */
+/**
+ * 穿搭日记（`wardrobe_outfits` 一行）。
+ * 2026-10-20 第八阶段·一d 接通写口后补上 `is_favorite`（后端 PUT 认这一格），
+ * `user_id`/`session_id` 只读：身份归后端按请求头定，前端不许发（见 api.ts 的 OutfitDraft）。
+ * `rating` 是"这套整体满意"的一把星 1~5；审美/合身两把星在推荐卡的反馈链上（`feedback_events`），
+ * 日记这一格只有一列（本轮零迁移，没给它加列）。
+ */
 export interface WardrobeOutfit {
   id?: number
+  session_id?: string | null
+  user_id?: number | null
   name: string
   item_ids: number[]
   occasion?: string
   season?: string
   rating?: number
   notes?: string
+  is_favorite?: boolean
   created_at?: string
+  /**
+   * 🔴 2026-10-21 第十一阶段·第一步（docs/依据/19 §二）：这套是**哪天穿的**。
+   * `null`＝没记（⛔ 不是"今天"，也不拿 `created_at` 顶替——补记昨天的穿搭会被 created_at 记成今天，
+   * 那是假数据不是缺数据）。格式 `YYYY-MM-DD`，按东八区日历日校验。
+   */
+  wear_date?: string | null
+  /** 那天手选的天气档，词表唯一真相源在后端 `services/weatherService.js`（随 GET 一起带回来） */
+  weather_level?: string | null
+  /** 那天的体感温度（℃）；没填＝null，⛔ 不许用 0 冒充"没填" */
+  feels_like_c?: number | null
 }
 
 /** 购物心愿单 */
@@ -576,6 +807,8 @@ export interface WardrobeGapResult {
 
 export interface WardrobeGap {
   type: string
+  /** 后端为 category_* 缺口附带中文名(上衣/下装…);季节、色彩这类没有,前端用 type→中文兜底表 */
+  label?: string
   priority: 'high' | 'medium' | 'low'
   message: string
   suggestions: string[]
@@ -644,6 +877,8 @@ export interface CosmeticGapResult {
 
 export interface CosmeticGap {
   type: string
+  /** 同 WardrobeGap:category_* 带中文名,过期/肤色这类靠前端兜底表 */
+  label?: string
   priority: 'high' | 'medium' | 'low'
   message: string
   suggestions: string[]
@@ -702,6 +937,8 @@ export interface AccessoryGapResult {
 
 export interface AccessoryGap {
   type: string
+  /** 后端为 category_* 缺口附带中文名(项链/耳饰…);脸型、金属色这类没有,前端用 type→中文兜底表 */
+  label?: string
   priority: 'high' | 'medium' | 'low'
   message: string
   suggestions: string[]
@@ -939,4 +1176,6 @@ export interface TryonResult {
   garment_image: string
   /** true = 未接入试穿模型，result_url 就是原图 */
   degraded?: boolean
+  /** false = 图已生成但这次没进历史记录（后端落库失败，见 routes/tryon.js） */
+  saved?: boolean
 }

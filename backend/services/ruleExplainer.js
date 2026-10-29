@@ -16,9 +16,10 @@
 // ============================================================
 
 const { LABELS: EVIDENCE_LABELS, evidenceNote } = require('./evidenceLevels')
+const { ownValue } = require('../utils/common')
 
 /** 未标注（后台手工建的、或前缀认不出来的）统一显示成一句话，不留空白给前端猜 */
-const evidenceLabel = (level) => EVIDENCE_LABELS[level] || '未标注（按行业体系/经验对待）'
+const evidenceLabel = (level) => ownValue(EVIDENCE_LABELS, level) || '未标注（按行业体系/经验对待）'
 
 /**
  * 规则条件 field → 中文标签
@@ -208,10 +209,15 @@ function parseConditionValue(rawValue) {
 function extractMatchValue(parsed, field) {
   // 对象格式: {"field": value}
   if (parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed)) {
-    if (field in parsed) {
-      return parsed[field]
+    // 判定层 recommendEngine.js:290-292 用的是 ownValue（`field in parsed` 会顺原型链捞），
+    // 解释层原来用的是 `field in parsed` ⇒ 同一条条件两边结论相反：
+    // field='__proto__'/'constructor' 时引擎当"没这个键"（永不命中），这里却把
+    // Object.prototype / 那个构造函数本身当成"这条条件要求的值"打印给运营看。
+    const own = ownValue(parsed, field)
+    if (own !== undefined) {
+      return own
     }
-    // 兜底:取第一个值
+    // 兜底:取第一个自有可枚举值
     const vals = Object.values(parsed)
     return vals.length > 0 ? vals[0] : parsed
   }
@@ -228,7 +234,7 @@ function translateValue(val) {
   if (val === 'all' || val === null || val === undefined) return '不限'
   if (typeof val === 'string') {
     // category 英文值翻译
-    if (CATEGORY_VALUE_LABELS[val]) return CATEGORY_VALUE_LABELS[val]
+    if (ownValue(CATEGORY_VALUE_LABELS, val)) return ownValue(CATEGORY_VALUE_LABELS, val)
     return val
   }
   return String(val)
@@ -256,10 +262,10 @@ function translateValue(val) {
  */
 function explainCondition(condition) {
   const { field, operator, value } = condition
-  const fieldLabel = FIELD_LABELS[field] || field
+  const fieldLabel = ownValue(FIELD_LABELS, field) || field
   const parsed = parseConditionValue(value)
   const matchVal = extractMatchValue(parsed, field)
-  const opLabel = OPERATOR_LABELS[operator] || operator
+  const opLabel = ownValue(OPERATOR_LABELS, operator) || operator
 
   // "all" 表示不限,特殊处理
   if (matchVal === 'all') {
@@ -283,6 +289,14 @@ function explainCondition(condition) {
       }
     }
     if (!Array.isArray(valList)) valList = [valList]
+    // 与 recommendEngine.js 的 checkSingleCondition 同一把尺子：数组里的每个元素还要再按
+    // 、,，切一次。原来这里直接把元素原样 join，一条写成 ["小麦色,古铜色"] 的规则
+    // 引擎两个值都能命中，界面上却显示成一个叫"小麦色,古铜色"的肤色，
+    // 运营看到的就是"古铜色明明命中了却说不在列表里"。
+    valList = valList
+      .flatMap((v) => (typeof v === 'string' ? v.split(/[、,，]/) : [v]))
+      .map((v) => String(v).trim())
+      .filter(Boolean)
     const translated = valList.map((v) => translateValue(v)).join('、')
     return `${fieldLabel} ${opLabel} ${translated}`
   }
@@ -332,7 +346,7 @@ function explainGroup(group, conditions) {
 
   return {
     规则名称: group.name || '',
-    推荐类别: CATEGORY_VALUE_LABELS[group.category] || group.category || '',
+    推荐类别: ownValue(CATEGORY_VALUE_LABELS, group.category) || group.category || '',
     适用场景: group.scenario || null,
     适用性别: group.gender || null,
     匹配条件: userConditions.map((c) => explainCondition(c)),
@@ -364,7 +378,13 @@ function explainMatchedRecommendation(matched, allConditions) {
 
   return {
     命中条件: hitUserConditions.map((c) => explainCondition(c)),
-    匹配分: matched.score || 0,
+    // 匹配分里掺了顾客反馈：引擎那边 score = 命中条件的权重和 + clamp(好评-差评, ±3)。
+    // 只给一个合起来的数时，一条 weight=1 的规则被点 4 次"不准"，报告里就同时出现
+    // `命中条件: ["腿身比:偏短"]` 和 `匹配分: -2`——分是负的却列着命中项，
+    // 读的人只能以为是算错。总数保持不变（它就是排序用的那个数），另给两个分量。
+    匹配分: matched.score ?? 0,
+    其中权重和: (matched.score ?? 0) - (matched.feedback ?? 0),
+    其中反馈修正: matched.feedback ?? 0,
     优先级: matched.priority || 0,
     规则说明: matched.group_name || '',
     依据档位: evidenceLabel(matched.evidence_level),

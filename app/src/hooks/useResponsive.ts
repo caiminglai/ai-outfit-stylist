@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react'
 
 const DESKTOP_MIN_WIDTH = 768
-const LANDSCAPE_MIN_RATIO = 1.2
 
 /**
  * 响应式布局 Hook
@@ -11,10 +10,12 @@ const LANDSCAPE_MIN_RATIO = 1.2
  * - mobile-portrait: 手机竖屏（上下 Tab）
  * - mobile-landscape: 手机横屏（左右分屏，窄）
  *
- * 规则：
- *   宽高比 >= 1.2 且宽度 >= 768  => 门店横屏（左右分屏）
- *   宽高比 < 1                   => 手机竖屏（上下 Tab）
- *   其它                         => 手机横屏（左右分屏）
+ * 规则（2026-10-12 改）：先按宽度定"是不是桌面/门店屏"，再看方向。
+ *   宽度 >= 768 且 宽>=高  => 门店横屏（左右分屏）
+ *   宽度 >= 768 且 宽<高   => 上下 Tab（竖着的电脑窗口/平板竖放）
+ *   宽度 <  768            => 按方向走手机横屏/竖屏
+ * 原来这里多加了一条 `宽高比 >= 1.2` 才认桌面，结果 1000×900（比例 1.11）、1280×1100
+ * 这类正常电脑窗口全掉进"手机横屏（窄）"那档 ⇒ 电脑上看到的是手机版排版。
  */
 export type LayoutMode = 'desktop-landscape' | 'mobile-portrait' | 'mobile-landscape'
 
@@ -62,12 +63,11 @@ function computeMode(): ResponsiveState {
   const ratio = width / height
 
   let mode: LayoutMode
-  if (ratio >= LANDSCAPE_MIN_RATIO && width >= DESKTOP_MIN_WIDTH) {
-    mode = 'desktop-landscape' // 门店横屏
-  } else if (ratio < 1) {
-    mode = 'mobile-portrait' // 手机竖屏
+  if (width >= DESKTOP_MIN_WIDTH) {
+    // 宽度够 ⇒ 桌面/门店屏：横着就左右分屏，竖着（如平板竖放、浏览器拉窄）走上下 Tab
+    mode = ratio >= 1 ? 'desktop-landscape' : 'mobile-portrait'
   } else {
-    mode = 'mobile-landscape' // 手机横屏
+    mode = ratio < 1 ? 'mobile-portrait' : 'mobile-landscape'
   }
 
   return {

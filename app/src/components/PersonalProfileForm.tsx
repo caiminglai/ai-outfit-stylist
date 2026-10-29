@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import type { CustomerProfile } from '../types'
+import SkinSampler from './SkinSampler'
 
 /**
  * 个人形象分析表单 - 深色科技风（50+ 维度）
@@ -248,14 +249,9 @@ interface PersonalProfileFormProps {
 
 /* ── 组件 ── */
 
-export default function PersonalProfileForm({
-  initial,
-  onSubmit,
-  onChange,
-  submitting,
-  compact,
-}: PersonalProfileFormProps) {
-  const [profile, setProfile] = useState<CustomerProfile>({
+/** 档案 → 表单初始值(挂载时铺一次,晚到的档案再按同一口径铺一次) */
+function fromInitial(initial?: Partial<CustomerProfile>): CustomerProfile {
+  return {
     nickname: initial?.nickname || '',
     gender: initial?.gender,
     age_range: initial?.age_range,
@@ -296,11 +292,41 @@ export default function PersonalProfileForm({
     allergy_metal: initial?.allergy_metal,
     birth_date: initial?.birth_date,
     birth_hour: initial?.birth_hour,
-  })
+  }
+}
+
+export default function PersonalProfileForm({
+  initial,
+  onSubmit,
+  onChange,
+  submitting,
+  compact,
+}: PersonalProfileFormProps) {
+  // 没动过表单 ⇒ 界面直接跟着档案(含草稿)走。档案是在"选择模式"那一屏异步读的,他点得快时
+  // 表单已经挂载、档案还没回;老代码只在挂载那一刻读一次 initial,晚到的那份就静默丢了。
+  // 派生而不是 useEffect:不用 effect 就没级联渲染,也不会覆盖他正在打的字,也不会顺手多存一份草稿
+  const [override, setOverride] = useState<CustomerProfile | null>(null)
+  const profile = override ?? fromInitial(initial)
 
   const update = (key: keyof CustomerProfile, value: unknown) => {
-    setProfile((prev) => ({ ...prev, [key]: value }))
-    onChange?.({ ...profile, [key]: value })
+    // setOverride 与 onChange 必须发同一个对象:老代码 setProfile 走 prev(functional)、
+    // onChange 走 render 闭包里的 profile,两者在"父组件这拍又渲染了一次"或"同一拍连着改两个字段"时
+    // 会分叉 ⇒ onChange 交出去的那份缺了刚改的字段,1.5s 防抖后写进草稿的就是丢字段的版本。
+    // 这里一次算好 next,两边都用它,保证界面状态、上抛 payload、落库草稿三者一致。
+    const next = { ...profile, [key]: value }
+    setOverride(next)
+    onChange?.(next)
+  }
+
+  /**
+   * 一次改多个字段。⚠️ 需要它是因为上面那个 `update` 读的是 render 闭包里的 `profile`：
+   * 同一拍连着调三次 `update`，每次都从同一份旧 `profile` 起步 ⇒ 只有最后一次活下来，
+   * 而且 `onChange` 交出去的两份 payload 也各缺一个字段（草稿会存成缺字段的版本）。
+   */
+  const updateMany = (patch: Partial<CustomerProfile>) => {
+    const next = { ...profile, ...patch }
+    setOverride(next)
+    onChange?.(next)
   }
 
   const handleSubmit = () => {
@@ -319,6 +345,13 @@ export default function PersonalProfileForm({
     ? { padding: '6px 8px', fontSize: '11px' }
     : { padding: '8px 10px', fontSize: '12px' }
 
+  /**
+   * 红星只准给**真必填**。10-22 第十四阶段·第一步 X5（`docs/依据/22` §六）：
+   * 改前这个变量挂在 7 个分区标题上（基本信息／肤色与脸型／体型分析／五官细节／风格偏好／
+   * 改善目标／其他偏好），而 `handleSubmit` 只卡 `profile.gender` 一项 ⇒ 顾客看到 7 处红星、
+   * 觉得要填一大篇，实际只填性别就能出满一屏建议。假红星比没红星更劝退，全部摘掉，
+   * 只留「性别」这一格。⛔ 不许反过来把必填项加多（改必填数量是产品决策，见 §六 闸门）。
+   */
   const requiredStar = <span style={{ color: 'var(--danger)', marginLeft: '2px' }}>*</span>
 
   /* ── 渲染辅助 ── */
@@ -347,7 +380,28 @@ export default function PersonalProfileForm({
 
   type NumberField = 'height' | 'weight' | 'bust' | 'waist' | 'hip' | 'leg_length' | 'shoulder'
 
+  /**
+   * 与后端 `backend/services/profileArchive.js:57-63` 的 BODY_FIELDS 同区间。
+   * 那边 `cleanNum` 越界一律 return null ⇒ 填了 300cm 的人，身高这条字段进不了档案也不报错，
+   * 按身高分档的规则组就永远命不中。这里把区间摆到输入框上。
+   * 注意：上面 HEIGHT_RANGE_OPTIONS 给了四档，但规则库里实际只有 150-160／160-170／180+
+   * 三档条件（`backend/db/seed/rules.json` 实测 3 条，L7672/L7696/L7712），
+   * 选 170-180 的人命中不到任何身高规则 —— 这一条挂给用户拍板，见 §三十五。
+   */
+  const NUMBER_RANGE: Record<NumberField, [number, number]> = {
+    height: [50, 250],
+    weight: [20, 300],
+    bust: [40, 200],
+    waist: [30, 200],
+    hip: [40, 220],
+    leg_length: [30, 160],
+    shoulder: [20, 80],
+  }
+
   function renderNumberInput(key: NumberField, label: string, placeholder: string) {
+    const [lo, hi] = NUMBER_RANGE[key]
+    const v = profile[key]
+    const outOfRange = typeof v === 'number' && Number.isFinite(v) && (v < lo || v > hi)
     return (
       <div className="flex-1 min-w-0">
         <div className="text-xs mb-2" style={{ color: 'var(--muted)' }}>
@@ -357,9 +411,17 @@ export default function PersonalProfileForm({
           type="number"
           placeholder={placeholder}
           className="form-input"
+          min={lo}
+          max={hi}
           value={profile[key] ?? ''}
           onChange={(e) => update(key, e.target.value ? Number(e.target.value) : undefined)}
         />
+        {/* 后端会把越界值静默丢掉，这里当场说清楚，别让人以为已经存进去了 */}
+        {outOfRange && (
+          <div className="text-xs mt-1" style={{ color: 'var(--bad, #c0392b)' }}>
+            {label}只能在 {lo}～{hi} 之间，超出的值不会被保存
+          </div>
+        )}
       </div>
     )
   }
@@ -368,7 +430,7 @@ export default function PersonalProfileForm({
     <div className="space-y-1">
       {/* ── 分区1: 基本信息 ── */}
       <section className={sectionClass} style={sectionStyle}>
-        <div className="section-title">基本信息{requiredStar}</div>
+        <div className="section-title">基本信息</div>
 
         <div className="text-xs mb-2" style={{ color: 'var(--muted)' }}>
           昵称
@@ -390,7 +452,13 @@ export default function PersonalProfileForm({
         />
 
         <div className="text-xs mb-2" style={{ color: 'var(--muted)' }}>
-          性别
+          性别{requiredStar}
+        </div>
+        {/* 10-22 第十四阶段·第一步 X5：把"到底要填几项"当面说清。
+            改前 7 个分区标题都挂红星、可 `handleSubmit` 只卡性别一项 ⇒ 顾客按红星去凑、
+            凑不齐还以为自己没填完。这里给的是**真口径**：必填＝性别，其余决定准不准。 */}
+        <div className="text-[11px] mb-3" style={{ color: 'var(--muted)' }}>
+          只选性别就能出建议。下面每一项都是选填，但填一项就多算一维——空着的那维会写明"没量到"。
         </div>
         <div className={`flex ${gap} mb-4`}>
           {GENDER_OPTIONS.map((opt) => (
@@ -414,7 +482,7 @@ export default function PersonalProfileForm({
             <button
               onClick={() => {
                 const next: CustomerProfile = { ...profile, birth_date: '', birth_hour: '' }
-                setProfile(next)
+                setOverride(next)
                 onChange?.(next)
               }}
               className="text-xs"
@@ -511,7 +579,7 @@ export default function PersonalProfileForm({
 
       {/* ── 分区2: 肤色与脸型 ── */}
       <section className={sectionClass} style={sectionStyle}>
-        <div className="section-title">肤色与脸型{requiredStar}</div>
+        <div className="section-title">肤色与脸型</div>
 
         <div className="text-xs mb-2" style={{ color: 'var(--muted)' }}>
           肤色冷暖（选填，与下面深浅一起用于判定色彩四季型）
@@ -534,6 +602,22 @@ export default function PersonalProfileForm({
           肤色细分
         </div>
         {renderOptBtns(SKIN_TONE_DETAIL_OPTIONS, 'skin_tone_detail', 'grid-cols-5')}
+
+        {/* 取色（选填）：浏览器本机算，照片不出设备。口径见 docs/依据/18 §2.1/§2.4 */}
+        <SkinSampler
+          compact={compact}
+          onConfirm={(undertone, sample) => {
+            // ⛔ 只碰冷暖这一格：深浅那栏照片判不了明暗（18 §2.3），留给用户自己确认
+            updateMany({ skin_tone: undertone, skin_hue: sample.h, skin_hex: sample.hex })
+          }}
+          onClear={() => {
+            // 第十三阶段·§四·3：只撤这一屏取出来的两个连续值（色相角 + 取样 hex），
+            // ⛔ 不动 `skin_tone`——清掉后色彩侧要退回手选肤色档（18 §三 缺测降级链）。
+            // 这里必须显式写 `undefined` 而不能 delete 一份拷贝再交给 updateMany：
+            // `updateMany` 是 {...profile, ...patch}，patch 里没这个键时旧值会原样活下来。
+            updateMany({ skin_hue: undefined, skin_hex: undefined })
+          }}
+        />
 
         <div className="text-xs mb-2 mt-4" style={{ color: 'var(--muted)' }}>
           色彩纯度（选填，与冷暖·深浅合起来定到十二型）
@@ -563,7 +647,7 @@ export default function PersonalProfileForm({
 
       {/* ── 分区3: 体型分析 ── */}
       <section className={sectionClass} style={sectionStyle}>
-        <div className="section-title">体型分析{requiredStar}</div>
+        <div className="section-title">体型分析</div>
 
         <div className="text-xs mb-2" style={{ color: 'var(--muted)' }}>
           体型分类
@@ -611,7 +695,7 @@ export default function PersonalProfileForm({
 
       {/* ── 分区4: 五官细节 ── */}
       <section className={sectionClass} style={sectionStyle}>
-        <div className="section-title">五官细节{requiredStar}</div>
+        <div className="section-title">五官细节</div>
 
         <div className="text-xs mb-2" style={{ color: 'var(--muted)' }}>
           眼大小
@@ -646,7 +730,7 @@ export default function PersonalProfileForm({
 
       {/* ── 分区5: 风格偏好 ── */}
       <section className={sectionClass} style={sectionStyle}>
-        <div className="section-title">风格偏好{requiredStar}</div>
+        <div className="section-title">风格偏好</div>
 
         <div className="text-xs mb-2" style={{ color: 'var(--muted)' }}>
           风格偏好
@@ -671,7 +755,7 @@ export default function PersonalProfileForm({
 
       {/* ── 分区6: 改善目标 ── */}
       <section className={sectionClass} style={sectionStyle}>
-        <div className="section-title">改善目标{requiredStar}</div>
+        <div className="section-title">改善目标</div>
 
         <div className="text-xs mb-2" style={{ color: 'var(--muted)' }}>
           身高愿望
@@ -691,7 +775,7 @@ export default function PersonalProfileForm({
 
       {/* ── 分区7: 其他偏好 ── */}
       <section className={sectionClass} style={sectionStyle}>
-        <div className="section-title">其他偏好{requiredStar}</div>
+        <div className="section-title">其他偏好</div>
 
         <div className="text-xs mb-2" style={{ color: 'var(--muted)' }}>
           季节

@@ -120,6 +120,14 @@ export default function CrossCabinetBrand({ brandData }: CrossCabinetBrandProps)
   const data = normalizeData(brandData as unknown as Record<string, unknown>)
   const summary = data.summary ?? { wardrobe_count: 0, cosmetic_count: 0, accessory_count: 0 }
 
+  // 价格区间:后端按三柜各自的 price 列算了 min/max/avg/count,老代码整块没渲染,
+  // 等于填了价钱也白填。count=0 那一档不显示(后端没价格时给的是全 0,不是 0 元)
+  const priceRows = [
+    { key: '衣橱', icon: '👗', range: data.price_range?.wardrobe },
+    { key: '化妆品', icon: '💄', range: data.price_range?.cosmetic },
+    { key: '配饰', icon: '💎', range: data.price_range?.accessory },
+  ].filter((r) => (r.range?.count ?? 0) > 0)
+
   return (
     <>
       <BrandList
@@ -151,6 +159,39 @@ export default function CrossCabinetBrand({ brandData }: CrossCabinetBrandProps)
               <span key={i} className="pill-tag">
                 {s}
               </span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* 价格区间卡片:三柜各一行,只有填了价的那几件参与统计 */}
+      {priceRows.length > 0 && (
+        <div className="glass-card p-3 animate-fade-in">
+          <div className="mb-2" style={{ fontSize: 14, fontWeight: 600 }}>
+            💰 价格区间
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            {priceRows.map((r) => (
+              <div
+                key={r.key}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  fontSize: '12px',
+                  color: 'var(--text)',
+                }}
+              >
+                <span style={{ minWidth: 62, color: 'var(--muted)' }}>
+                  {r.icon} {r.key}
+                </span>
+                <span style={{ fontWeight: 600 }}>
+                  ¥{r.range!.min} – ¥{r.range!.max}
+                </span>
+                <span style={{ color: 'var(--muted)' }}>
+                  均价 ¥{r.range!.avg} · {r.range!.count} 件填了价
+                </span>
+              </div>
             ))}
           </div>
         </div>
