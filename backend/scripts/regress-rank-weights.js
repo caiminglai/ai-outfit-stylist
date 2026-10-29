@@ -16,7 +16,7 @@
  *   - 不 require `../db/init`（那个模块一加载就建表、补列、清会话、跑 checkpoint，等于顺手动活库），
  *     而是自己开 `better-sqlite3` 的 `readonly: true` 句柄；
  *   - 不自动改 `RANK_WEIGHTS`、不写任何表。它只把建议数字打出来，改不改由人决定，
- *     改的位置是 `backend/services/recommendEngine.js` 里的 `RANK_WEIGHTS`（10-21 现量 L560）。
+ *     改的位置是 `backend/services/recommend/ranker.js` 里的 `RANK_WEIGHTS`（10-29 拆分后挪进排序层）。
  *
  * 依据档位（写进对外话术前必须知道）：回归出来的权重在样本上百之前只是**这批反馈的相关性**，
  * 不是新依据；`RANK_WEIGHTS` 现在这一组是产品口径（C 档手拍）。两者别混着说。
@@ -381,7 +381,7 @@ function printReport(reports, json) {
   )
   console.log(
     `线上现权：rule ${CURRENT_WEIGHTS.rule} / color ${CURRENT_WEIGHTS.color} / body ${CURRENT_WEIGHTS.body}` +
-      `（recommendEngine.js 的 RANK_WEIGHTS（L560），改就改这一行）` +
+      `（recommend/ranker.js 的 RANK_WEIGHTS，改就改这一行）` +
       (dims.length === DIM_KEYS.length
         ? ''
         : `｜这一档只有 ${dimCn(dims.length)}，等效现权 ${JSON.stringify(reports[0] && reports[0].current_weights_renorm)}`),
@@ -407,7 +407,7 @@ function printReport(reports, json) {
         (r.accuracy === null ? '' : `，判对率 ${r.accuracy}，向现权收缩 λ=${r.ridge_lambda}`),
     )
     console.log(
-      `判定：${r.worth_changing ? `值得改——照上面那行手改 recommendEngine.js 的 RANK_WEIGHTS（L560，只许动 ${dims.join('/')} 那几维）` : '不值得改——偏移没到 0.05，维持现权'}`,
+      `判定：${r.worth_changing ? `值得改——照上面那行手改 recommend/ranker.js 的 RANK_WEIGHTS（只许动 ${dims.join('/')} 那几维）` : '不值得改——偏移没到 0.05，维持现权'}`,
     )
   }
   console.log('\n本脚本不写库、不改代码。采纳与否由人判；样本上百前建议数字只当相关性看。')

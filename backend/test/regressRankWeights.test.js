@@ -72,11 +72,12 @@ function genRows(trueW, n, opt = {}) {
   return rows
 }
 
-test('漂移哨兵：脚本里复制的现权必须与 recommendEngine.js 的 RANK_WEIGHTS 一字不差', () => {
-  // 脚本不 require recommendEngine（那会顺带把 db/init 拉进来开活库），所以这里只能靠源码比对钉住
-  const src = codeOf(path.join(__dirname, '..', 'services', 'recommendEngine.js'))
+test('漂移哨兵：脚本里复制的现权必须与 ranker.js 的 RANK_WEIGHTS 一字不差', () => {
+  // 脚本不 require 引擎（那会顺带把 db/init 拉进来开活库），所以这里只能靠源码比对钉住；
+  // 10-29 拆分后 RANK_WEIGHTS 的唯一定义处在 services/recommend/ranker.js
+  const src = codeOf(path.join(__dirname, '..', 'services', 'recommend', 'ranker.js'))
   const m = src.match(/const RANK_WEIGHTS = \{([^}]*)\}/)
-  assert.ok(m, 'recommendEngine.js 里要能找到 RANK_WEIGHTS 那一行')
+  assert.ok(m, 'recommend/ranker.js 里要能找到 RANK_WEIGHTS 那一行')
   const live = {}
   for (const pair of m[1].split(',')) {
     const [k, v] = pair.split(':').map((s) => (s || '').trim())
