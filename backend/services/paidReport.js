@@ -398,7 +398,7 @@ function deliver(grant, { userId, sessionId, basisSessionId }) {
 
   const mode = basis.mode === 'personal' ? 'personal' : 'store'
   // `session_id` 那列 NOT NULL，而且它是"上次填的表单"预填的查询键之一：
-  // 塞空串会让这一行与别的空串行混在一起（同 profileArchive.js:390 那段拒绝兜底串的理由），
+  // 塞空串会让这一行与别的空串行混在一起（同 profileArchive.js:500-501 那段拒绝兜底串的理由（🔴 10-30 按内容重指：原写 390＝空行）），
   // 所以只准用本次请求的身份串，取不到就干脆不落库——宁可不发报告，不能发一份归属不明的报告。
   const sid = typeof sessionId === 'string' && sessionId.trim() ? sessionId.trim() : null
   if (!sid) {
