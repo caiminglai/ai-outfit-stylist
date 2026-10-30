@@ -1047,7 +1047,7 @@ function extractColors(text) {
         band,
         // 🔴 §二·1：句内扫出来的工艺词（牛仔裤／水洗布／迷彩服）记 `is_specific:false`——
         // 这个字提的是做法不是颜色（白丹宁也叫牛仔裤），拿它算 ΔE00 就是喂假数。
-        // 与明度档同一级：`recommendEngine.js:76` 那个 `is_specific && hex` 的 filter 自动把它挡在呼应外。
+        // 与明度档同一级：`recommendEngine.js:72` 那个 `is_specific && hex` 的 filter 自动把它挡在呼应外。
         is_specific: !d.craft,
         craft_word: !!d.craft,
         basis: d.basis,

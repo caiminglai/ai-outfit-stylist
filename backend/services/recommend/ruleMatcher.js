@@ -350,7 +350,6 @@ function matchRules(
   return matched
 }
 
-
 module.exports = {
   CATEGORIES,
   matchRules,

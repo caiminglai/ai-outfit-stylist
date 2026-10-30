@@ -103,3 +103,17 @@ jobs:
       # format:check 每次动完代码都要两侧各跑一次 `npm run format` 再验 rc=0——
       # 第二十五轮（3ba0647）就是漏了这一步，推上去 CI 直接红；10-11 已补跑（app 5 / backend 24 个文件纯排版，
       # 另 routes/models.js 本轮另有功能改动，算在第 25 个里）。
+      #   （2026-10-30 第六十二轮追加·backend 四份 prettier 红转绿后的现量，覆盖上面 10-22 那几行的 backend 读数：
+      #    被排版的四份＝`services/recommendEngine.js`／`services/recommend/ranker.js`／`services/recommend/ruleMatcher.js`／`test/colorMetrics.test.js`，
+      #    按仓库自己的 `backend/.prettierrc.json` 排，合计 2,688→2,683 行；四份 esbuild 压最小码后 sha256 与排前逐字节相同＝纯格式改动。
+      #    backend `format:check` **rc=1 → rc=0**（这条一转，本 job 才第一次能走到下面的 Lint 与 Unit test 两步）。
+      #    backend lint **第一次在本机可量**：**0 error／141 warning**（no-console 87／prefer-const 30／no-unused-vars 24；退出码 0 ⇒ 这步不会把 CI 跑红，它只卡 error）。
+      #    尺子可比性：后端 `node_modules` 只有 1 个条目跑不动 `npm run lint`，本机借 `app/node_modules` 的 eslint 配 `NODE_PATH` 读同一份 `backend/eslint.config.js`，
+      #    版本 9.39.5 与 `backend/package-lock.json` 钉的同版。报 148 份 vs 盘上 156 份 `.js`，差的 8 份＝`static/` 7＋`vendor/` 1，全在 ignores 里（CI 同口径）。
+      #    ⚠️ 上一行 10-22 记的 142 warning 比这次多 1 条 no-unused-vars，那是 10-22 之后代码自己变的，本轮纯格式不动条数，没逐条追来路、不编原因。
+      #    本机 `node --test`：**tests 393／pass 361／fail 32／skipped 0**，`test/*.test.js` **58** 份；32 条 fail 全是 `Cannot find module`
+      #    （better-sqlite3 30／bcryptjs 2，本机没装后端原生依赖），**断言级失败 0 条**；格式化前后同一把尺读数逐项相同。⇒ "58 份全绿"这句只有 CI 能说。
+      #    app 侧本轮一行没动，仍跑一遍作对照：`format:check` rc=0、`tsc -b --force` rc=0、`eslint .` 0 error／13 warning、`vite build` rc=0。
+      #    ⛔ GitHub Actions 的真实结果本机验不了（不跑联网 git、`gh` 不在 PATH），要看 Actions 页。
+      #    🔴 同轮新账：全仓有 **66 条**行号定位符指向 `recommendEngine.js` 的 979~1808 号段而该文件现 961 行——这些是 10-29 拆分之前就死的旧号，
+      #    本轮没动它们（动它们要按内容回代码逐条重找，是另一批工时），详见 `docs/形象设计模型-现状与路线.md` 第五十六节第 7 条。）

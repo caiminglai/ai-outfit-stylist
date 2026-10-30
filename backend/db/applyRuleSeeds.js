@@ -74,7 +74,7 @@ function normalizeCondition(cond) {
     return { error: `条件「属于」缺少候选值: ${field}` }
   }
   // 没声明权重的种子条件按 1 存。原来这里填 3，而后台新增条件(routes/rules.js:89)、
-  // 后台编辑器初值(admin-rules.js:432)、引擎取不到权重时(recommendEngine.js:363 兜底的 `: 1`)
+  // 后台编辑器初值(admin-rules.js:432)、引擎取不到权重时(recommendEngine.js:358 兜底的 `: 1`)
   // 三处都是 1 ⇒ 同一句"这条条件没说权重"在两条路径下意思相反，
   // 走种子进来的规则天生比手写的重 3 倍。
   const weight = Number(cond.weight) > 0 ? Number(cond.weight) : 1

@@ -12,11 +12,7 @@
  *   排序     → ./recommend/ranker.js（RANK_* 常数／rankDims／rankAndTruncate）
  */
 
-const {
-  enrichProfile,
-  getBodyShapeOutfitAdvice,
-  getFaceShapeGuide,
-} = require('./profileEnricher')
+const { enrichProfile, getBodyShapeOutfitAdvice, getFaceShapeGuide } = require('./profileEnricher')
 const { explainMatchedRecommendation } = require('./ruleExplainer')
 const {
   colorFit,
@@ -215,7 +211,6 @@ function getRecommendations(skinTone, faceShape, scenario) {
   const fallbackList = ownValue(defaults, asText(scenario)) || ownValue(defaults, '休闲')
   return fallbackList
 }
-
 
 /**
  * 规则那句文案 → 身体那一维的分（10-21 第十三阶段·第一步 §三·4 的唯一接线处）。
@@ -934,7 +929,6 @@ function buildRecommendation(
 function recommendationBodyDeviation(profile) {
   return bodyDeviation(enrichProfile(profile || {}))
 }
-
 
 module.exports = {
   getRecommendations,
