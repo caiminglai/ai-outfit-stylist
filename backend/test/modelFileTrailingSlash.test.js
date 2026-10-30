@@ -124,7 +124,20 @@ test('/models 静态口：编码尾斜杠 %2F 对禁用模型同样 404，对在
 test('收尾：删掉临时目录与库行，关端口', async () => {
   // 这一条不许 skip：前面三条无论是跑过还是被环境闸门跳过，端口都已经开了，不关就是僵尸进程
   fs.rmSync(tmpPath, { recursive: true, force: true })
+  // 上面那一刀只认"本次"的目录名（TMP_DIR 带 Date.now()），中途断言红或进程被打断时，
+  // 旧的那几颗会永久堆在 models/ 里：下一次 /admin/scan 按 (folder,file) 判重找不到行，
+  // 就把它们那两份 12 字节的假 .pmx 当新模型入库，展厅多出两个点开就 404 的人物模型
+  //（10-30 盘上就堆着 10-22 那一颗，`闸门尾斜杠测试-1792661649972/`）。
+  // 所以收尾改成"前缀清扫"：只认本文件造的两个前缀＋13 位时间戳，真模型目录名是
+  // 「角色+游戏[作者]」形态，不含数字时间戳，扫不到它们头上。
+  // 容器里 /models 是只读 bind mount ⇒ 这几颗本来建不出来，swept 为空数组，闸门不触发。
+  const swept = fs
+    .readdirSync(MODELS_DIR, { withFileTypes: true })
+    .filter((e) => e.isDirectory() && /^(闸门尾斜杠测试|写权限探测)-\d{13}$/.test(e.name))
+  for (const e of swept) fs.rmSync(path.join(MODELS_DIR, e.name), { recursive: true, force: true })
   assert.strictEqual(fs.existsSync(tmpPath), false, '临时目录必须删干净，否则会进下一轮扫描')
+  const stillThere = swept.map((e) => e.name).filter((n) => fs.existsSync(path.join(MODELS_DIR, n)))
+  assert.deepStrictEqual(stillThere, [], '历史残留删不掉：models/ 只读或目录被占用')
   memDb.prepare('DELETE FROM model_configs WHERE folder = ?').run(TMP_DIR)
   resetDisabledPmxCache()
   await new Promise((resolve) => server.close(resolve))
