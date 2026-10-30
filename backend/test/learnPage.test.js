@@ -33,6 +33,13 @@ const ADMIN_HTML = path.join(__dirname, '..', 'templates', 'admin.html')
 const ADMIN_JS = path.join(__dirname, '..', 'routes', 'admin.js')
 const ADMIN_CSS = path.join(__dirname, '..', 'static', 'admin', 'admin.css')
 
+// compose 在仓库外面（本机是 `E:/website/compose/`），本文件头第 15 行自己定的口径是
+// "ext 只判形状 ⛔ 不判在不在盘上——CI 在 Linux 上没有 E: 盘，判存在会造成假红"。
+// 所以这一档改成：路径可注入、不在场就老实 skip，绝不让 `readFileSync` 抛 ENOENT 冒充门禁红灯。
+const COMPOSE_YML =
+  process.env.STYLEAI_COMPOSE_YML || path.join(REPO, '..', 'compose', 'docker-compose.yml')
+const COMPOSE_PRESENT = fs.existsSync(COMPOSE_YML)
+
 const html = fs.readFileSync(PAGE, 'utf-8')
 
 /** 把 <span class="loc|ext">…</span> 全部抠出来（去重后保序） */
@@ -199,19 +206,6 @@ test('loc 锚点逐条核：文件在场、行号不越界（本页的信用全�
     anchors('loc').includes('backend/test/learnPage.test.js'),
     '页面 footer 说要由本测试逐条核锚点，正文里却不再提这份测试 ⇒ 那句话和这条判据得一起改',
   )
-  // 第 7 课讲挂载：compose 的 volumes 段确实从 29 行起，行号漂了这里先红
-  const compose = fs.readFileSync(path.join(REPO, '..', 'compose', 'docker-compose.yml'), 'utf-8')
-  const volLine = compose.split(/\r?\n/).findIndex((l) => /^\s+volumes:\s*$/.test(l)) + 1
-  assert.ok(volLine > 0, 'compose 里找不到 volumes 段')
-  const cited = anchors('ext').find((a) => a.startsWith('E:/website/compose/docker-compose.yml:'))
-  assert.ok(cited, '教程页没引用 compose 的挂载行段')
-  const from = Number(splitRef(cited)[1].split('-')[0])
-  assert.strictEqual(
-    from,
-    volLine,
-    `教程页引用的挂载起始行 ${from} 与 compose 现量 ${volLine} 不符`,
-  )
-
   // 第 7 课还有一句"COPY backend/ ./ 在构建那一刻把代码拷进镜像"
   const dockerfile = fs.readFileSync(path.join(REPO, 'Dockerfile'), 'utf-8').split(/\r?\n/)
   const copyLine = dockerfile.findIndex((l) => l.trim() === 'COPY backend/ ./') + 1
@@ -220,6 +214,30 @@ test('loc 锚点逐条核：文件在场、行号不越界（本页的信用全�
     `Dockerfile 里 COPY backend/ ./ 现在在第 ${copyLine} 行，教程页引的不是这一行`,
   )
 })
+
+// 第 7 课讲挂载：compose 的 volumes 段起始行要与教程页引的那一行一致，行号漂了这里先红。
+// compose 在仓库外面 ⇒ 缺席时 skip（写清原因），不再让 ENOENT 冒充门禁红灯（CI 上必红就是这条）。
+test(
+  'compose 挂载段起始行＝教程页 ext 锚点引的那一行（仓外文件，不在场则 skip）',
+  {
+    skip: COMPOSE_PRESENT
+      ? false
+      : `compose 不在盘上：${COMPOSE_YML}（仓外文件，CI 的 Linux 上没有它；本机要跑就用 STYLEAI_COMPOSE_YML 指路）`,
+  },
+  () => {
+    const compose = fs.readFileSync(COMPOSE_YML, 'utf-8')
+    const volLine = compose.split(/\r?\n/).findIndex((l) => /^\s+volumes:\s*$/.test(l)) + 1
+    assert.ok(volLine > 0, 'compose 里找不到 volumes 段')
+    const cited = anchors('ext').find((a) => a.startsWith('E:/website/compose/docker-compose.yml:'))
+    assert.ok(cited, '教程页没引用 compose 的挂载行段')
+    const from = Number(splitRef(cited)[1].split('-')[0])
+    assert.strictEqual(
+      from,
+      volLine,
+      `教程页引用的挂载起始行 ${from} 与 compose 现量 ${volLine} 不符`,
+    )
+  },
+)
 
 test('ext 锚点只判形状：一律 E:/website/ 开头，⛔ 不判在不在盘上（CI 的 Linux 没 E: 盘）', () => {
   const list = anchors('ext')

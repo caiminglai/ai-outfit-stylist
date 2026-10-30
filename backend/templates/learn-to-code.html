@@ -777,7 +777,7 @@ npm run dev</code></pre>
           <ol>
             <li>
               为什么 5173 能用到后端？因为
-              <span class="loc">app/vite.config.ts:20-27</span> 配了代理：<code>/api</code>、<code>/admin</code>、<code>/static</code>
+              <span class="loc">app/vite.config.ts:51-58</span> 配了代理：<code>/api</code>、<code>/admin</code>、<code>/static</code><!-- 10-30 第六十一轮：这条锚点原写 :20-27；同日函数式 manualChunks 的注释＋分包表把代理块下移到 51-58，就地改号不增行（本页被按行引用，且不在 CI 射程内，漂了不会报红）。 -->
               等前缀统统转给 <code>localhost:5000</code>。前端开发跑 5173，后端还是那个容器。
             </li>
             <li>

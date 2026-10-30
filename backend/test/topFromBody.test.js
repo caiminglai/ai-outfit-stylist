@@ -9,6 +9,10 @@
 const { test } = require('node:test')
 const assert = require('node:assert')
 const { topSpec, SPEC, NEUTRAL_BAND } = require('../services/topFromBody')
+// 锚点表本身也引进来：下面这几条断言要证的是「L 与彩度取自锚点、只有角度被照片顶掉」，
+// 那就得跟同一张表比，而不是把表里的数抄成字面量——10-24 换成 CIE 华裔实测锚点时，
+// 抄死的 57／46 与 hypot(10,19)／hypot(8,24) 四条全变红，就是这个抄法的代价。
+const { skinToneToLab } = require('../services/colorMetrics')
 
 /** 甲：肩偏窄、腰线平、腿身比在带内、BMI 26（条纹闸门关） */
 const JIA = {
@@ -412,10 +416,14 @@ test('只有冷暖词 ⇒ 照片把它顶成连续读数，整段仍只算一个
   assert.strictEqual(s.colour.anchor_count, 1)
   assert.strictEqual(s.colour.scoring, 'single')
   assert.match(s.colour.skin_label, /^冷暖 照片色相 45°（冷皮）$/)
-  // L 与 C 仍取自「自然」那颗锚点（L57,a10,b19），只有角度换成 45
-  assert.strictEqual(s.colour.skin_lab.L, 57)
-  assert.ok(Math.abs(_C(s.colour.skin_lab) - Math.hypot(10, 19)) < 1e-9)
-  assert.ok(Math.abs(_H(s.colour.skin_lab) - 45) < 1e-9)
+  // L 与彩度仍取自「自然」那颗锚点（现量：L58.53、a10.27、b16.77 ⇒ C=19.664837），只有角度换成 45
+  const AN_NAT = skinToneToLab('自然')
+  assert.strictEqual(s.colour.skin_lab.L, AN_NAT.L, 'L 没沿用深浅锚点的值')
+  assert.ok(
+    Math.abs(_C(s.colour.skin_lab) - Math.hypot(AN_NAT.a, AN_NAT.b)) < 1e-9,
+    '彩度被照片改掉了',
+  )
+  assert.ok(Math.abs(_H(s.colour.skin_lab) - 45) < 1e-9, '角度不是照片给的 45°')
   assert.ok(!s.colour.note.includes('两个口径'))
 })
 
@@ -424,8 +432,12 @@ test('只有深浅词 ⇒ 照片补出来的就是缺的那个冷暖口径，不
   assert.strictEqual(s.colour.anchor_count, 2)
   assert.strictEqual(s.colour.scoring, 'min')
   assert.match(s.colour.skin_label, /^深浅 小麦色／冷暖 照片色相 70°（暖皮）$/)
-  assert.strictEqual(s.colour.photo_lab.L, 46, '深浅锚点的 L 没进合成颗')
-  assert.ok(Math.abs(_C(s.colour.photo_lab) - Math.hypot(8, 24)) < 1e-9)
+  const AN_WHEAT = skinToneToLab('小麦色')
+  assert.strictEqual(s.colour.photo_lab.L, AN_WHEAT.L, '深浅锚点的 L 没进合成颗')
+  assert.ok(
+    Math.abs(_C(s.colour.photo_lab) - Math.hypot(AN_WHEAT.a, AN_WHEAT.b)) < 1e-9,
+    '合成颗彩度没守住锚点彩度',
+  )
   const noPhoto = topSpec({ ...JIA, skin_tone: null, skin_tone_detail: '小麦色' })
   assert.strictEqual(noPhoto.colour.anchor_count, 1, '没照片时竟然凭空多了个冷暖口径')
 })
