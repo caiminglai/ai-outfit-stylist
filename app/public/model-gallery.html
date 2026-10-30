@@ -564,6 +564,36 @@
       pointer-events: none;
       opacity: 0.4;
     }
+
+    /* ── 窄屏真点一遍补正（只新增规则，一条既有声明都没改）──
+       证据：工装 gate-logs/tap-gallery-before.json（390×844）与 tap-gallery-1280-before.json（1280×800）。
+       两档视口里 elementFromPoint 打在备案号中心都回 div.model-bar ⇒ 这一行链接其实点不到。
+       原因是 #beian-line 的 z-index:60 低于 .model-bar 的 100，而底栏是 fixed bottom:0、高 190，
+       备案行 bottom:6 正落在它里面。这里只把备案提到 101，几何不动：给它加内边距会把中间两张
+       模型卡片底部的点击区抢走（点到卡片却跳去备案页），15px 这个高度就留着并写明取舍。 */
+    #beian-line {
+      z-index: 101;
+    }
+
+    /* 触摸目标：搜索框与筛选芯片实测高 28px，窄屏抬到 36px。底栏随之由 190 长到 198，
+       而右侧控制列的 bottom:196 是硬编码值（.controls 规则里那条「实测底部栏高 188px」的注释就是它），
+       所以同一媒体查询里把它一起抬到 206，保证按钮列仍落在底栏上方。 */
+    @media (max-width: 480px) {
+      #model-search {
+        height: 36px;
+        border-radius: 18px;
+      }
+
+      .chip {
+        height: 36px;
+        line-height: 34px;
+        border-radius: 18px;
+      }
+
+      .controls {
+        bottom: 206px;
+      }
+    }
   </style>
 </head>
 
@@ -1167,6 +1197,7 @@
         renderer.toneMappingExposure = exposure;
 
         optimizeMaterials(currentMesh);
+        applyBodyShape(currentBody); // 体型驱动：骨骼是新加载的实例，切模后必须重应用一次（先缩放再取景，包围盒才含缩放）
         fitCameraToModel();
 
         // 更新模型信息
@@ -1580,6 +1611,127 @@
       window.parent.postMessage({ type: 'start-service' }, window.location.origin);
     });
 
+    // ======================== 体型驱动(顾客尺寸 → 模特体型) ========================
+    // 2026-10-29：顾客在表单里填过的身高/体重/胸/腰/臀/肩，由 ExhibitionHall.tsx 经
+    // postMessage({type:'set-body'}) 送进这个 iframe，映射到模特的骨骼缩放＋整体非均匀缩放，
+    // 让待机/服务态的模特"像我"。三条边界写死：
+    //  1. 展厅模型全是 MMD .pmx——没有体型滑杆，只有日文标准骨骼 ⇒ 只能 best-effort 按骨骼名
+    //     近似：找不到对应骨骼的维度就跳过（与"缺测不出分"同纪律），⛔ 不许因为缺骨骼报错。
+    //  2. BODY_BASE 是**展示用约定基准**（≈女装 160/84A 量级），不是国标数值：⛔ 不进打分、
+    //     ⛔ 不喂规则匹配、⛔ 不往档案写回。与 docs/依据/23 的词表出口约束同一条纪律。
+    //  3. 全部缩放钳制（骨骼 ±25%／整体 ±20%）：夸张变形会让顾客以为渲染坏了；腰／臀落在
+    //     相邻骨骼上时允许钳制内的叠加，这是近似的代价，写在明处。
+    const BODY_BASE = { height: 162, weight: 54, bust: 84, waist: 68, hip: 90, shoulder: 38 };
+    const BODY_CLAMP = { bone: 0.25, whole: 0.20 };
+    let currentBody = null; // {height?,weight?,bust?,waist?,hip?,shoulder?} cm/kg；null=未收到/清空
+
+    function clampBodyRatio(r, range) {
+      return Math.min(1 + range, Math.max(1 - range, r));
+    }
+
+    // MMD 骨骼名是日文（PMX 原生）或 Blender 风格的 .L/.R 后缀（转换模型），按候选顺序取第一个精确命中
+    function findBone(mesh, names) {
+      const bones = (mesh && mesh.skeleton && mesh.skeleton.bones) || [];
+      for (let i = 0; i < names.length; i++) {
+        const hit = bones.find((b) => b.name === names[i]);
+        if (hit) return hit;
+      }
+      return null;
+    }
+
+    function findBonesAll(mesh, names) {
+      const bones = (mesh && mesh.skeleton && mesh.skeleton.bones) || [];
+      return bones.filter((b) => names.indexOf(b.name) !== -1);
+    }
+
+    function setBoneScale(bone, x, y, z) {
+      // 原始 scale 存 userData：重应用时永远相对原值缩放，不会越乘越离谱
+      if (!bone.userData.__bodyOrig) {
+        bone.userData.__bodyOrig = { x: bone.scale.x, y: bone.scale.y, z: bone.scale.z };
+      }
+      const o = bone.userData.__bodyOrig;
+      bone.scale.set(o.x * x, o.y * y, o.z * z);
+    }
+
+    function resetBodyShape(mesh) {
+      if (!mesh) return;
+      const bones = (mesh.skeleton && mesh.skeleton.bones) || [];
+      bones.forEach((b) => {
+        if (b.userData.__bodyOrig) {
+          b.scale.set(b.userData.__bodyOrig.x, b.userData.__bodyOrig.y, b.userData.__bodyOrig.z);
+        }
+      });
+      if (mesh.userData.__bodyWhole) {
+        const w = mesh.userData.__bodyWhole;
+        mesh.scale.set(w.x, w.y, w.z);
+        mesh.userData.__bodyWhole = null;
+      }
+    }
+
+    function applyBodyShape(body) {
+      if (!currentMesh) return;
+      resetBodyShape(currentMesh); // 先还原再套新值：相对原始骨架算，不叠加
+      if (!body) return;
+      const num = (v) => (typeof v === 'number' && isFinite(v) && v > 0 ? v : null);
+      const h = num(body.height);
+      const w = num(body.weight);
+      const bust = num(body.bust);
+      const waist = num(body.waist);
+      const hip = num(body.hip);
+      const shoulder = num(body.shoulder);
+
+      // ① 整体缩放：Y←身高比；XZ←√(BMI/基准BMI)——围度近似随面积走，直接套体重比会夸张
+      let sy = 1;
+      let sxz = 1;
+      if (h) sy = clampBodyRatio(h / BODY_BASE.height, BODY_CLAMP.whole);
+      if (w) {
+        const hM = (h || BODY_BASE.height) / 100;
+        const baseM = BODY_BASE.height / 100;
+        const bmiRatio = (w / (hM * hM)) / (BODY_BASE.weight / (baseM * baseM));
+        sxz = clampBodyRatio(Math.sqrt(bmiRatio), BODY_CLAMP.whole);
+      }
+      if (h || w) {
+        if (!currentMesh.userData.__bodyWhole) {
+          currentMesh.userData.__bodyWhole = {
+            x: currentMesh.scale.x, y: currentMesh.scale.y, z: currentMesh.scale.z,
+          };
+        }
+        const o = currentMesh.userData.__bodyWhole;
+        currentMesh.scale.set(o.x * sxz, o.y * sy, o.z * sxz);
+      }
+
+      // ② 骨骼级差异：各围度比映射到对应骨骼的 XZ（骨骼长度方向是 Y，横扩只动 X/Z）
+      if (waist) {
+        const b = findBone(currentMesh, ['腰', '骨盤']);
+        if (b) {
+          const r = clampBodyRatio(waist / BODY_BASE.waist, BODY_CLAMP.bone);
+          setBoneScale(b, r, 1, r);
+        }
+      }
+      if (hip) {
+        const b = findBone(currentMesh, ['下半身', '骨盤']);
+        if (b) {
+          const r = clampBodyRatio(hip / BODY_BASE.hip, BODY_CLAMP.bone);
+          setBoneScale(b, r, 1, r);
+        }
+      }
+      if (bust) {
+        const b = findBone(currentMesh, ['上半身2', '上半身']);
+        if (b) {
+          const r = clampBodyRatio(bust / BODY_BASE.bust, BODY_CLAMP.bone);
+          setBoneScale(b, r, 1, r);
+          // 头是上半身的子骨骼，会被带着一起变宽 ⇒ 反向补一次，保持头中立
+          const head = findBone(currentMesh, ['頭']);
+          if (head) setBoneScale(head, 1 / r, 1, 1 / r);
+        }
+      }
+      if (shoulder) {
+        const bones = findBonesAll(currentMesh, ['左肩', '右肩', '肩.L', '肩.R']);
+        const r = clampBodyRatio(shoulder / BODY_BASE.shoulder, BODY_CLAMP.bone);
+        bones.forEach((b) => setBoneScale(b, r, 1, r));
+      }
+    }
+
     // ======================== 模式切换(展示页 / 服务页) ========================
     window.addEventListener('message', (e) => {
       // 安全:只接受同源 postMessage,防止跨域攻击
@@ -1606,6 +1758,11 @@
           ctrls.style.display = 'flex';
           stopCarousel();
         }
+      }
+      if (e.data?.type === 'set-body') {
+        // 体型驱动：父窗口把顾客六格尺寸送来；null=恢复默认体型，缺字段=不动对应轴。立即重应用到当前模特
+        currentBody = e.data.body && typeof e.data.body === 'object' ? e.data.body : null;
+        applyBodyShape(currentBody);
       }
     });
 

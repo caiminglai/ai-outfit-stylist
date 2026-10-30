@@ -251,7 +251,7 @@ function findBasis(userId, basisSessionId) {
 /**
  * 「到账事实」的两条来路，收敛成同一个形状交给 `deliver` 用。
  *
- * 🔴 第十四阶段·第一步 C1（`docs/依据/22` §十）：`app/public/pay.html:45/57/63` 三处对顾客承诺
+ * 🔴 第十四阶段·第一步 C1（`docs/依据/22` §十）：`app/public/pay.html:52/64/70` 三处对顾客承诺（10-30 窄屏补正在这三处之前插了 7 行 CSS，原号 45/57/63；按内容回读这三行一字未动。本行**净零加行**，因为 `docs/依据/22` 正按行号引本文件）
  * 「扫备用收款码＋上传截图＋我们人工确认后，就能回展厅「我的报告」领取这份细账」，
  * 而本文件原来**只认 `payment_orders`**（`claimReport` 第一句就是 `SELECT * FROM payment_orders`），
  * 后台审核口（`routes/payment.js:620-679`）又只 `UPDATE deposits`、⛔ 一行订单都不写
@@ -398,7 +398,7 @@ function deliver(grant, { userId, sessionId, basisSessionId }) {
 
   const mode = basis.mode === 'personal' ? 'personal' : 'store'
   // `session_id` 那列 NOT NULL，而且它是"上次填的表单"预填的查询键之一：
-  // 塞空串会让这一行与别的空串行混在一起（同 profileArchive.js:390 那段拒绝兜底串的理由），
+  // 塞空串会让这一行与别的空串行混在一起（同 profileArchive.js:500-501 那段拒绝兜底串的理由（🔴 10-30 按内容重指：原写 390＝空行）），
   // 所以只准用本次请求的身份串，取不到就干脆不落库——宁可不发报告，不能发一份归属不明的报告。
   const sid = typeof sessionId === 'string' && sessionId.trim() ? sessionId.trim() : null
   if (!sid) {

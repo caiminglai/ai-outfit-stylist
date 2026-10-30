@@ -656,7 +656,7 @@ const LIGHTNESS_TOKENS = {
 //       · 「腮红」造出 20 个 hex／19 行，全是句内扫描在「腮红」肚子上取到单字键 `红 #DD5563`；
 //       · 「肉色」0 行（库里没这种写法）；「肤调」0 行 ⇒ 不进名单，名单只放语料里真有的词。
 //     🔴 影响面与我上一版的判断相反，账记在 `21` §十二：色彩分**只吃** `top_style`／`outfit_top`
-//     那一格（`recommendEngine.js:1142` → `colorFit`），上面那些行全在 `reason`／`blush`／
+//     那一格（`recommendEngine.js:541` 认出上衣那一格、`recommend/colorSlots.js:194` 才真喂 `colorFit`（🔴 10-30 按内容重指：原写 1142；10-29 引擎拆成 961 行后 1142 越界） → `colorFit`），上面那些行全在 `reason`／`blush`／
 //     `foundation`／`technique` 这些**不进分**的槽位里 ⇒ 这道闸修的是**报告与后台印出来的假出处**，
 //     一个分数也不动。四个进分槽位里元词命中只有 4 处，其中 3 处是括号里真写了颜色的
 //     （「基础色上衣（白/黑/灰/藏蓝/米色）」⇒ 白），那三条本轮不动（它们确实写了色）。
@@ -1047,7 +1047,7 @@ function extractColors(text) {
         band,
         // 🔴 §二·1：句内扫出来的工艺词（牛仔裤／水洗布／迷彩服）记 `is_specific:false`——
         // 这个字提的是做法不是颜色（白丹宁也叫牛仔裤），拿它算 ΔE00 就是喂假数。
-        // 与明度档同一级：`recommendEngine.js:76` 那个 `is_specific && hex` 的 filter 自动把它挡在呼应外。
+        // 与明度档同一级：`recommendEngine.js:72` 那个 `is_specific && hex` 的 filter 自动把它挡在呼应外。
         is_specific: !d.craft,
         craft_word: !!d.craft,
         basis: d.basis,

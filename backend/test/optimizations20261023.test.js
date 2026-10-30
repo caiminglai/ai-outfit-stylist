@@ -262,7 +262,7 @@ test('S6：衣橱行没有 group_id，名单里记成 w<衣橱行id> 而不是�
 })
 
 test('S6：真实形状——rank 只挂在穿搭，其余四类没 rank 时名单照记、快照不编分数', () => {
-  // 10-23 5001 实例现量：引擎只重排穿搭一类（recommendEngine.js:1683），
+  // 10-23 5001 实例现量：引擎只重排穿搭一类（recommendEngine.js:788，10-30 按内容重指：原写 1683 是拆分前的位置，现引擎 961 行；"只在穿搭这一类"那条注释现在在 recommend/ranker.js:267），
   // 妆容/发型/配饰/姿势的条目根本没有 rank 键。瘦身后名单不能因此丢任何一类，
   // 快照也不许给没排过序的品类编一个 score 出来。
   const logId = writeRecommendationLog({

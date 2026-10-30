@@ -17,7 +17,7 @@
  * 3. **取不到就明说取不到**：闸门不过 ⇒ 回 `ok:false` 带一句原因，
  *    ⛔ 不退成「自然」、⛔ 不给默认值（全局硬规矩 2「缺测不出分」）。
  *
- * 换算数学与后端 `backend/services/colorMetrics.js:40 hexToLab()` 逐字同一条
+ * 换算数学与后端 `backend/services/colorMetrics.js:42 hexToLab()（🔴 10-30 按内容重指：原写 40，那一行是空行）` 逐字同一条
  *（A 档：GB/T 7921-2008《均匀色空间和色差公式》／ISO/CIE 11664 sRGB→CIELAB D65）。
  * ⚠️ 前端不能 require 后端，所以这份是**明知故开的第二份**——漂移防线见 18 §五a：
  * 后端有一条测试逐字钉住那两处切点，改这里必须同时改 `colorMetrics.js` 与那条测试。

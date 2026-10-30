@@ -17,7 +17,7 @@
  *  ⑦ `season`/`rating` 两轴只出账、**不进乘子**（季节那一格在 `rule_conditions` 里词形没归一，
  *     现量 10-21：`{"season": "春"}` 与 `"夏"` 两种写法混存；星级量的是打分的手松手紧）。
  *     🔴 10-21 第十一阶段·第一步：`occasion` **已从"只出账"升为进乘子**——依据是
- *     `docs/依据/19` §〇 第 4 条（投影 `utils/common.js:374` 一直带着 `occasion_tags`，
+ *     `docs/依据/19` §〇 第 4 条（投影 `utils/common.js:401`（🔴 10-30 按内容重指：原写 374 落在投影函数 `:385-402` 的 JSDoc 里） 一直带着 `occasion_tags`，
  *     当年那句"候选身上压根没有 occasion 这一格"没撑住；同一条尺子量 `grep -n occasion
  *     services/recommendEngine.js` 也从 0 处变成 3 处）。
  *  ⑧ 没身份 ⇒ 一条 SELECT 都不发；

@@ -157,7 +157,10 @@ test('individualTypologyAngle + itaClass: 肤色越深 ITA 越低', () => {
     Math.abs(individualTypologyAngle({ L: 60, a: 0, b: 10 }) - 45) < 1e-9,
     'ITA 弧度未换成角度',
   )
-  assert.ok(Math.abs(fair - 42.4) < 0.2, `白皙锚点 ITA 应≈42.4°（10-29 重锚定后实测 42.38），实测 ${fair}`)
+  assert.ok(
+    Math.abs(fair - 42.4) < 0.2,
+    `白皙锚点 ITA 应≈42.4°（10-29 重锚定后实测 42.38），实测 ${fair}`,
+  )
   assert.strictEqual(itaClass(fair), 'light')
   assert.strictEqual(itaClass(null), null)
   assert.strictEqual(itaClass(60), 'very light')

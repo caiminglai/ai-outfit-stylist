@@ -209,7 +209,7 @@ function parseConditionValue(rawValue) {
 function extractMatchValue(parsed, field) {
   // 对象格式: {"field": value}
   if (parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed)) {
-    // 判定层 recommendEngine.js:290-292 用的是 ownValue（`field in parsed` 会顺原型链捞），
+    // 判定层 recommendEngine.js:285-287 用的是 ownValue（`field in parsed` 会顺原型链捞），
     // 解释层原来用的是 `field in parsed` ⇒ 同一条条件两边结论相反：
     // field='__proto__'/'constructor' 时引擎当"没这个键"（永不命中），这里却把
     // Object.prototype / 那个构造函数本身当成"这条条件要求的值"打印给运营看。

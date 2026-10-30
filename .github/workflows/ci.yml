@@ -103,3 +103,33 @@ jobs:
       # format:check 每次动完代码都要两侧各跑一次 `npm run format` 再验 rc=0——
       # 第二十五轮（3ba0647）就是漏了这一步，推上去 CI 直接红；10-11 已补跑（app 5 / backend 24 个文件纯排版，
       # 另 routes/models.js 本轮另有功能改动，算在第 25 个里）。
+      #   （2026-10-30 第六十二轮追加·backend 四份 prettier 红转绿后的现量，覆盖上面 10-22 那几行的 backend 读数：
+      #    被排版的四份＝`services/recommendEngine.js`／`services/recommend/ranker.js`／`services/recommend/ruleMatcher.js`／`test/colorMetrics.test.js`，
+      #    按仓库自己的 `backend/.prettierrc.json` 排，合计 2,688→2,683 行；四份 esbuild 压最小码后 sha256 与排前逐字节相同＝纯格式改动。
+      #    backend `format:check` **rc=1 → rc=0**（这条一转，本 job 才第一次能走到下面的 Lint 与 Unit test 两步）。
+      #    backend lint **第一次在本机可量**：**0 error／141 warning**（no-console 87／prefer-const 30／no-unused-vars 24；退出码 0 ⇒ 这步不会把 CI 跑红，它只卡 error）。
+      #    尺子可比性：后端 `node_modules` 只有 1 个条目跑不动 `npm run lint`，本机借 `app/node_modules` 的 eslint 配 `NODE_PATH` 读同一份 `backend/eslint.config.js`，
+      #    版本 9.39.5 与 `backend/package-lock.json` 钉的同版。报 148 份 vs 盘上 156 份 `.js`，差的 8 份＝`static/` 7＋`vendor/` 1，全在 ignores 里（CI 同口径）。
+      #    ⚠️ 上一行 10-22 记的 142 warning 比这次多 1 条 no-unused-vars，那是 10-22 之后代码自己变的，本轮纯格式不动条数，没逐条追来路、不编原因。
+      #    本机 `node --test`：**tests 393／pass 361／fail 32／skipped 0**，`test/*.test.js` **58** 份；32 条 fail 全是 `Cannot find module`
+      #    （better-sqlite3 30／bcryptjs 2，本机没装后端原生依赖），**断言级失败 0 条**；格式化前后同一把尺读数逐项相同。⇒ "58 份全绿"这句只有 CI 能说。
+      #    app 侧本轮一行没动，仍跑一遍作对照：`format:check` rc=0、`tsc -b --force` rc=0、`eslint .` 0 error／13 warning、`vite build` rc=0。
+      #    ⛔ GitHub Actions 的真实结果本机验不了（不跑联网 git、`gh` 不在 PATH），要看 Actions 页。
+      #    🔴 同轮新账：全仓有 **66 条**行号定位符指向 `recommendEngine.js` 的 979~1808 号段而该文件现 961 行——这些是 10-29 拆分之前就死的旧号，
+      #    本轮没动它们（动它们要按内容回代码逐条重找，是另一批工时），详见 `docs/形象设计模型-现状与路线.md` 第五十六节第 7 条。）
+      #   （2026-10-30 第六十四轮追加·全仓行号定位符按内容重指的收口轮；上面第六十二轮那条「66 条越界」的账由本轮结，两份读数以本轮现跑为准）：
+      #    本轮没动一行业务语义：改的是文档与代码注释里的 `文件:行号`——`docs/依据/` 15 份＋代码/测试注释 7 份（含 `app/src/lib/skinSample.ts`），
+      #    22 份全部净零加行（判据＝`git diff --numstat -- docs/依据 app/src backend/services backend/test` 每份左右相等，整批 80 行换 80 行），所以没有任何一行代码被这次改动挪位；
+      #    本节这几行与 `docs/形象设计模型-现状与路线.md` 的新增小节是唯二的加行处，都只往文件末尾追加，不动前面任何一行。
+      #    新尺常驻进仓库：`backend/scripts/check-locators.js` 342 行（只读、不改文件、退出码恒 0），从单向扩成三向：
+      #    ①带文件名的锚点 1,354 个 ⇒ 可判 351／在位 108／要动 243（越界 45／空行 27／号偏 12／指错句 159）；
+      #    ②代码注释→`.md` 的行号 7 条 ⇒ 全部在场、0 越界；
+      #    ③同行裸续号 `:NNN`（上一版量不到的那类，10-29 引擎拆到 961 行后这类号越界得最凶）⇒ 可判 1,826／在位 1,534／要动 292（越界 207＋空行 85）。
+      #    ⚠️ 第三向只判「越界／空行」、判不了内容，归属靠"行内最近的文件名"，跨文件跨栏的句子会归错 ⇒ 292 是上限，不是精确欠账。
+      #    ⚠️ 要动 ≠ 全是欠账：句子里写"旧号／原写／改前／拆分前"的、以及带轮次日期的记录（`docs/复盘/`、`docs/进展报告/`、`docs/形象设计模型-现状与路线.md`、本文件）
+      #    按台账规矩判留——只加限定、不改写；只有把某个号当**现状**讲的句子才按内容重指，而且逐条重找，不许整批加位移。
+      #    定稿门禁读数（本轮文档改完后现跑）：backend `format:check` rc=0、`eslint .` 0 error／141 warning rc=0、
+      #    `node --test` tests 393／pass 361／fail 32／cancelled 0／skipped 0（32 条 fail 全是 `Cannot find module`：better-sqlite3 30＋bcryptjs 2，断言级失败 0）；
+      #    app `format:check` rc=0、`eslint .` 0 error／13 warning、`tsc -b --force` rc=0、`vite build` rc=0（2.52 s）。
+      #    ⛔ 本文件与 `docs/**` 都不在任何门禁射程内（prettier 只吃 `**/*.js`、eslint 只看 js），CI 不会替我校这些号；
+      #    谁再动 `recommendEngine.js`／`colorMetrics.js`／四页 html 的行数，都要在 `backend/` 里手动跑一次 `node scripts/check-locators.js` 对账。

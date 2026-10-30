@@ -45,7 +45,6 @@
 │   │   │   └── ErrorBoundary.tsx     # 全局错误边界
 │   │   ├── pages/ExhibitionHall.tsx  # 主页(单页双模式入口)
 │   │   ├── hooks/useResponsive.ts    # 响应式布局(桌面分屏/手机竖横屏)
-│   │   ├── lib/utils.ts              # 通用工具(cn 类名合并等)
 │   │   ├── types/index.ts            # 全局 TypeScript 类型
 │   │   ├── api.ts                    # 后端 API 封装(含 X-Session-Id)
 │   │   ├── App.tsx / main.tsx        # 入口
@@ -155,8 +154,8 @@ cd ../backend && npm install --registry=https://registry.npmmirror.com
 | `DASHSCOPE_API_KEY` | 否 | 只影响虚拟试穿:留空时原样返回你上传的人物图并标记 `degraded`;面容分析不读它(接口直接返回 501) |
 | `CUSTOMER_DATA_TTL` | 否 | 顾客临时会话过期秒数,默认 7200(2 小时) |
 
-> 只有虚拟试穿会调 DashScope,不存在独立的第三方试穿服务变量;面容分析接口不碰它,固定返回 501;星座文案是本地模板,代码未接 LLM(`package.json` 里的 `openai` 依赖 `backend/**/*.js` 零引用,实测结论)。
-> `openai` 这条依赖**没顺手删**:后端镜像用 `npm ci --omit=dev`,只改 `package.json` 而不同步 `package-lock.json` 会让构建当场失败;本机 `node_modules` 已按决定删掉不重装,锁文件只能单独重解,故列为待办而不是随手改一行。
+> 只有虚拟试穿会调 DashScope,不存在独立的第三方试穿服务变量;面容分析接口不碰它,固定返回 501;星座文案是本地模板,代码未接 LLM。2026-10-30 把这条零引用的 `openai` 依赖从 `backend/package.json` 删掉了(尺子:`grep -rn` 整个 `backend/` 只有 `package.json` 与 `package-lock.json` 两个文件提到 openai,`.js` 里 0 处;LLM 侧真正走的是 `services/dashscopeService.js`)。
+> 删依赖的同步口径(10-30 实测通):改完 `package.json` 必须在该目录跑 `npm install --package-lock-only`——它只重解 `package-lock.json`,不碰 `node_modules`(本机 `backend/node_modules` 是空目录,普通 `npm install` 会顺手装回 102 个包);随后用 `npm ci --dry-run --omit=dev` 验两者一致(退出 0),后端镜像里那条 `npm ci --omit=dev` 才不会当场失败。这条口径补上后,原先"只改 package.json 会让构建失败"的顾虑就不存在了。
 
 ### 3. 启动
 
@@ -427,8 +426,7 @@ npm run format:check
 │  │  ├─ index.css
 │  │  ├─ lib
 │  │  │  ├─ imagePick.ts
-│  │  │  ├─ skinSample.ts              # 中位数取样＋三道闸门＋冷暖切点(18 §二)
-│  │  │  └─ utils.ts
+│  │  │  └─ skinSample.ts              # 中位数取样＋三道闸门＋冷暖切点(18 §二)
 │  │  ├─ main.tsx
 │  │  ├─ pages
 │  │  │  └─ ExhibitionHall.tsx

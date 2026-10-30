@@ -293,12 +293,38 @@ export default function ExhibitionHall() {
     }
   }, [stage])
 
+  // 2026-10-29 体型驱动：把顾客/档案里已填的六格身体尺寸同步给展厅 iframe 的 3D 模特。
+  // 取 `profile ?? archiveProfile`（本次提交的优先，其次是长期档案的草稿）；两份都没有就送 null，
+  // 展厅侧恢复默认体型。缺哪个字段展厅就不动哪根轴——与"缺测不出分"同一条纪律。
+  const postBodyToGallery = useCallback(() => {
+    const iframe = iframeRef.current
+    if (!iframe?.contentWindow) return
+    const src = profile ?? archiveProfile
+    const body = src
+      ? {
+          height: src.height,
+          weight: src.weight,
+          bust: src.bust,
+          waist: src.waist,
+          hip: src.hip,
+          shoulder: src.shoulder,
+        }
+      : null
+    iframe.contentWindow.postMessage({ type: 'set-body', body }, window.location.origin)
+  }, [profile, archiveProfile])
+
+  useEffect(() => {
+    postBodyToGallery()
+  }, [postBodyToGallery])
+
   const handleIframeLoad = useCallback(() => {
     const iframe = iframeRef.current
     if (iframe?.contentWindow) {
       iframe.contentWindow.postMessage({ type: 'set-mode', mode: stage }, window.location.origin)
     }
-  }, [stage])
+    // 体型驱动：iframe 重载后 gallery 侧状态清零，必须补发一次当前尺寸
+    postBodyToGallery()
+  }, [stage, postBodyToGallery])
 
   const isSplitScreen = layoutMode === 'desktop-landscape' || layoutMode === 'mobile-landscape'
 

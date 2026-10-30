@@ -348,7 +348,6 @@ function rankAndTruncate(list, wardrobeRows, prefProfile = null, collabModel = n
   return out
 }
 
-
 module.exports = {
   RANK_WEIGHTS,
   COLOR_BORROW_WEIGHT,
