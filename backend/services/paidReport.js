@@ -251,7 +251,7 @@ function findBasis(userId, basisSessionId) {
 /**
  * 「到账事实」的两条来路，收敛成同一个形状交给 `deliver` 用。
  *
- * 🔴 第十四阶段·第一步 C1（`docs/依据/22` §十）：`app/public/pay.html:45/57/63` 三处对顾客承诺
+ * 🔴 第十四阶段·第一步 C1（`docs/依据/22` §十）：`app/public/pay.html:52/64/70` 三处对顾客承诺（10-30 窄屏补正在这三处之前插了 7 行 CSS，原号 45/57/63；按内容回读这三行一字未动。本行**净零加行**，因为 `docs/依据/22` 正按行号引本文件）
  * 「扫备用收款码＋上传截图＋我们人工确认后，就能回展厅「我的报告」领取这份细账」，
  * 而本文件原来**只认 `payment_orders`**（`claimReport` 第一句就是 `SELECT * FROM payment_orders`），
  * 后台审核口（`routes/payment.js:620-679`）又只 `UPDATE deposits`、⛔ 一行订单都不写

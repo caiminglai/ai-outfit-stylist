@@ -564,6 +564,36 @@
       pointer-events: none;
       opacity: 0.4;
     }
+
+    /* ── 窄屏真点一遍补正（只新增规则，一条既有声明都没改）──
+       证据：工装 gate-logs/tap-gallery-before.json（390×844）与 tap-gallery-1280-before.json（1280×800）。
+       两档视口里 elementFromPoint 打在备案号中心都回 div.model-bar ⇒ 这一行链接其实点不到。
+       原因是 #beian-line 的 z-index:60 低于 .model-bar 的 100，而底栏是 fixed bottom:0、高 190，
+       备案行 bottom:6 正落在它里面。这里只把备案提到 101，几何不动：给它加内边距会把中间两张
+       模型卡片底部的点击区抢走（点到卡片却跳去备案页），15px 这个高度就留着并写明取舍。 */
+    #beian-line {
+      z-index: 101;
+    }
+
+    /* 触摸目标：搜索框与筛选芯片实测高 28px，窄屏抬到 36px。底栏随之由 190 长到 198，
+       而右侧控制列的 bottom:196 是硬编码值（.controls 规则里那条「实测底部栏高 188px」的注释就是它），
+       所以同一媒体查询里把它一起抬到 206，保证按钮列仍落在底栏上方。 */
+    @media (max-width: 480px) {
+      #model-search {
+        height: 36px;
+        border-radius: 18px;
+      }
+
+      .chip {
+        height: 36px;
+        line-height: 34px;
+        border-radius: 18px;
+      }
+
+      .controls {
+        bottom: 206px;
+      }
+    }
   </style>
 </head>
 

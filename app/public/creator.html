@@ -50,6 +50,11 @@
     .sheet pre { background: #14171f; border: 1px solid #2a3040; border-radius: 8px; padding: 12px; font-size: 12px; white-space: pre-wrap; word-break: break-all; margin-top: 12px; }
     .empty { color: #6f7789; font-size: 13px; padding: 20px 0; }
     a { color: #8ab4f8; }
+    /* 窄屏真点一遍补正（只新增，不改上面任何一条）。证据：工装 gate-logs/tap-other-before.json，
+       390×844 实测「返回展厅」52x17、「付款与凭证」65x17，都低于 24px 点击下限。 */
+    @media (max-width: 480px) {
+      .sub a { display: inline-block; min-height: 24px; line-height: 24px; padding: 2px 8px; }
+    }
   </style>
 </head>
 <body>

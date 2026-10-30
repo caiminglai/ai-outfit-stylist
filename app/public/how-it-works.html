@@ -212,6 +212,15 @@
           padding: 8px 7px;
         }
       }
+      /* 窄屏真点一遍补正（只新增一个媒体查询，上面那条既有的一字未动）。
+         证据：工装 gate-logs/tap-other-before.json，390×844 实测四条导航按钮高 40px，抬到 44px。
+         页内另有 36 处 12px 文字本轮没动：它们是表格与徽章的密排文字，改字号要牵列宽，
+         挤横向滚动的风险实、可读性收益小，登记为待拍。 */
+      @media (max-width: 480px) {
+        nav a {
+          min-height: 44px;
+        }
+      }
     </style>
   </head>
   <body>

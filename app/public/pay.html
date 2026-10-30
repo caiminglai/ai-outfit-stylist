@@ -37,6 +37,13 @@
     .note { font-size: 12px; color: #6f7789; line-height: 1.7; }
     .alt { font-size: 12px; color: #8ab4f8; margin-top: 8px; cursor: pointer; }
     a { color: #8ab4f8; }
+    /* 窄屏真点一遍补正（只新增，不改上面任何一条）。证据：工装 gate-logs/tap-other-before.json，
+       390×844 实测 input#proof 高 25px、它的 label 高 17px、返回展厅链接高 16px，都够不上 24px 点击下限。 */
+    @media (max-width: 480px) {
+      label { min-height: 24px; line-height: 24px; }
+      input[type=file] { min-height: 44px; }
+      .note a { display: inline-block; min-height: 24px; line-height: 24px; padding: 2px 8px; }
+    }
   </style>
 </head>
 <body>
