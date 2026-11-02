@@ -130,7 +130,7 @@ document.getElementById('data-table-select').addEventListener('change', function
   if (State.currentTable) loadTableData();
 });
 document.getElementById('data-per-page').addEventListener('change', function() {
-  State.perPage = parseInt(this.value);
+  State.limit = parseInt(this.value);
   State.currentPage = 1;
   if (State.currentTable) loadTableData();
 });
@@ -178,7 +178,7 @@ function loadTableData() {
   container.className = 'loading'; container.textContent = '加载中...';
   pagination.style.display = 'none';
 
-  var url = API_BASE + '/data/' + State.currentTable + '?page=' + State.currentPage + '&per_page=' + State.perPage;
+  var url = API_BASE + '/data/' + State.currentTable + '?page=' + State.currentPage + '&limit=' + State.limit;
   if (State.storeId) url += '&store_id=' + encodeURIComponent(State.storeId);
 
   fetchJSON(url).then(function(res) {

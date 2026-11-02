@@ -75,6 +75,13 @@ function call(route, opt = {}) {
       res.body = b
       return res
     },
+    // sendCreated 要 res.setHeader('Location', …)；真 res 一定有，双重缺它就是一记假 500
+    setHeader() {
+      return res
+    },
+    getHeader() {
+      return undefined
+    },
   }
   handler({ params, query, body, headers, ip: '1.1.1.1', socket: {}, user }, res, () => {})
   return res
@@ -291,7 +298,7 @@ test('衣橱 fit_type（10-19 第三阶段·模块一）：四档落库、认不
     headers: { 'x-session-id': s },
     body: { name: '廓形衬衫', category: '上衣', fit_type: '廓形' },
   })
-  assert.strictEqual(ok.statusCode, 200, JSON.stringify(ok.body))
+  assert.strictEqual(ok.statusCode, 201, JSON.stringify(ok.body))
   assert.strictEqual(ok.body.data.fit_type, '廓形', 'POST 回来的那一行要带版型')
   assert.strictEqual(
     memDb.prepare('SELECT fit_type FROM user_wardrobe WHERE id = ?').get(ok.body.data.id).fit_type,
@@ -311,7 +318,7 @@ test('衣橱 fit_type（10-19 第三阶段·模块一）：四档落库、认不
     headers: { 'x-session-id': s },
     body: { name: '衬衫', category: '上衣' },
   })
-  assert.strictEqual(blank.statusCode, 200, JSON.stringify(blank.body))
+  assert.strictEqual(blank.statusCode, 201, JSON.stringify(blank.body))
   assert.strictEqual(blank.body.data.fit_type, null)
 
   const cleared = call(findRoute(wardrobeRouter, 'put', '/items/:itemId'), {
@@ -385,7 +392,7 @@ test('三柜 POST 的 price 同一把尺：0 保住、脏串归 NULL', () => {
     headers: { 'x-session-id': s },
     body: { name: '赠品上衣', category: '上衣', price: 0 },
   })
-  assert.strictEqual(p0.statusCode, 200, JSON.stringify(p0.body))
+  assert.strictEqual(p0.statusCode, 201, JSON.stringify(p0.body))
   assert.strictEqual(
     memDb.prepare('SELECT price FROM user_wardrobe ORDER BY id DESC LIMIT 1').get().price,
     0,
@@ -395,7 +402,7 @@ test('三柜 POST 的 price 同一把尺：0 保住、脏串归 NULL', () => {
     headers: { 'x-session-id': s },
     body: { name: '口红', category: '口红', price: '1,200' },
   })
-  assert.strictEqual(p1.statusCode, 200, JSON.stringify(p1.body))
+  assert.strictEqual(p1.statusCode, 201, JSON.stringify(p1.body))
   assert.strictEqual(
     memDb.prepare('SELECT price FROM user_cosmetics ORDER BY id DESC LIMIT 1').get().price,
     null,
@@ -406,7 +413,7 @@ test('三柜 POST 的 price 同一把尺：0 保住、脏串归 NULL', () => {
     headers: { 'x-session-id': s },
     body: { name: '项链', category: '项链', price: 0 },
   })
-  assert.strictEqual(p2.statusCode, 200, JSON.stringify(p2.body))
+  assert.strictEqual(p2.statusCode, 201, JSON.stringify(p2.body))
   assert.strictEqual(
     memDb.prepare('SELECT price FROM user_accessories ORDER BY id DESC LIMIT 1').get().price,
     0,

@@ -11,7 +11,7 @@ const express = require('express')
 const fs = require('fs')
 const path = require('path')
 const db = require('../db/init')
-const { sendSuccess, sendError } = require('../utils/response')
+const { sendSuccess, sendCreated, sendError } = require('../utils/response')
 const { generateUUID, UPLOAD_DIR, asId, getSessionId } = require('../utils/common')
 const { loginRequired, adminLoginRequired } = require('../middleware/auth')
 const { upload, validateImage } = require('../middleware/upload')
@@ -245,9 +245,10 @@ router.post('/order', loginRequired, async (req, res) => {
       `INSERT INTO payment_orders (out_trade_no, user_id, description, amount_fen, status, code_url)
        VALUES (?, ?, ?, ?, 'created', ?)`,
     ).run(outTradeNo, req.user.id, PRICE.title, amountFen, info.code_url)
-    return sendSuccess(
+    return sendCreated(
       res,
       { out_trade_no: outTradeNo, code_url: info.code_url, amount: amountFen / 100 },
+      `${req.baseUrl}/order/${outTradeNo}`,
       '下单成功，请扫码支付',
     )
   } catch (err) {
@@ -369,9 +370,10 @@ router.post('/alipay/order', loginRequired, (req, res) => {
       `INSERT INTO payment_orders (out_trade_no, user_id, description, amount_fen, status, code_url)
        VALUES (?, ?, ?, ?, 'created', ?)`,
     ).run(outTradeNo, req.user.id, PRICE.title, amountFen, payUrl)
-    return sendSuccess(
+    return sendCreated(
       res,
       { out_trade_no: outTradeNo, pay_url: payUrl, amount: amountFen / 100 },
+      `${req.baseUrl}/order/${outTradeNo}`,
       '下单成功，请前往支付宝付款',
     )
   } catch (err) {
@@ -451,9 +453,10 @@ router.post('/deposit', loginRequired, depositLimiter, upload.single('file'), (r
       throw err
     }
 
-    return sendSuccess(
+    return sendCreated(
       res,
       { id: Number(result.lastInsertRowid), status: 'pending', amount },
+      null,
       '凭证已提交，等待人工确认',
     )
   } catch (err) {
@@ -489,8 +492,19 @@ router.get('/my', loginRequired, (req, res) => {
     const proofRaw = typeof req.query.proof === 'string' ? req.query.proof.trim() : ''
     const proofId = /^\d+$/.test(proofRaw) ? Number(proofRaw) : null
     if (reportNo || proofId !== null) {
-      // 走限流：直接调用中间件函数，因为限流只该管这一支
-      return reportLimiter(req, res, () => {
+      // 走限流：直接调用中间件函数，因为限流只该管这一支。
+      // ⚠️ 第三个参数（也就是库里的 `next`）**必须接错误**：express-rate-limit 8.x 把任何内部
+      // 异常都塞给 `next(error)`（源码 `node_modules/express-rate-limit/dist/index.cjs:871-877`
+      // 那个 `handleAsyncErrors`），而这里 `next` 就是下面这个回调——原来它不接参数，等于
+      // ①限流器一抛错就"当没事发生"照样发报告（静默失败开放），②回调里业务若抛异常，
+      // 那次异常会经由 `.catch(next)` 回到同一个回调**再跑一遍业务**（`claimReport` 是要写库的）。
+      // 接住它、直接回 500，两条都关掉。全仓这样的内联调用只有这一处（尺子＝`grep -rn "Limiter(req, res" backend/routes backend/server.js backend/middleware`）。
+      // 上面那两条前提不是推测，钉在 `test/rateLimitWindow.test.js` 最后两条测试里（store 抛错走 next(err)、业务抛错会被再调一次）。
+      return reportLimiter(req, res, (limiterErr) => {
+        if (limiterErr) {
+          console.error('[收款] 这一支的限流中间件抛错:', limiterErr)
+          return sendError(res, '领取失败，请稍后重试', 500)
+        }
         // 这次填表用的会话号：门店快速模式那条样本只有 `sess_…` 会话号、没有 user_id
         // （`customer_sessions` 没这列），不带进来付了款的门店顾客会一律撞 409。
         // 判据见 `services/paidReport.js` 的 `findBasis`；形状闸门与 `middleware/auth.js` 的

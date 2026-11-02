@@ -34,6 +34,12 @@ ensureUploadDir()
 
 /**
  * 解析分页参数
+ *
+ * 全仓只有这一处分页闸门（2026-11-02 规范轮把 routes/admin.js 那份手搓的第二份并了进来，
+ * 它以前只认 `per_page`，别的列表口全认 `limit` ⇒ 同一个项目两套名字）。
+ * 现在统一认 `limit`，`per_page` 作为旧名继续收：后台页面、书签、以及路线文档里
+ * 写过的调用方式都不会一夜之间变成"参数没生效、默默回 20 条"。旧名只读不回显。
+ *
  * @param {object} query - req.query
  * @returns {{page: number, limit: number, offset: number, paginated: boolean}}
  */
@@ -48,10 +54,11 @@ function parsePagination(query) {
   const page = Math.min(MAX_PAGE, Math.max(1, parseInt(q.page, 10) || 1))
   // 这里不能写 `parseInt(q.limit,10) || 20`：limit=0 会被当成"没传"直接变 20，
   // 后面那层 Math.max(1, …) 下限就永远轮不到了。
-  const rawLimit = parseInt(q.limit, 10)
+  // 旧名 per_page 只在新名缺席时兜底：`?limit=5&per_page=50` 用的是 5，谁传得新听谁的。
+  const rawLimit = parseInt(q.limit !== undefined ? q.limit : q.per_page, 10)
   const limit = Number.isNaN(rawLimit) ? 20 : Math.min(100, Math.max(1, rawLimit))
   const offset = (page - 1) * limit
-  const paginated = q.page !== undefined || q.limit !== undefined
+  const paginated = q.page !== undefined || q.limit !== undefined || q.per_page !== undefined
   return { page, limit, offset, paginated }
 }
 

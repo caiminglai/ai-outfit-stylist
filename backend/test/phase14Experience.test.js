@@ -413,8 +413,12 @@ function findRoute(method, routePath) {
   throw new Error(`找不到路由 ${method} ${routePath}`)
 }
 
-/** 只调最后一个 handler＝业务本体；`loginRequired` 与 `reportLimiter` 都在这层之外 */
-function callMy(userId, query = {}) {
+/** 只调最后一个 handler＝业务本体；`loginRequired` 与 `reportLimiter` 都在这层之外
+ *  ⚠️ 必须 await：`/my` 的凭证支在 handler **内部**直接调 `reportLimiter(req, res, () => {...})`
+ *  （routes/payment.js:493），而 11-02 起限流工厂的内核是 express-rate-limit，它的中间件是
+ *  async 的（要先 `await store.increment`）⇒ 那个内层回调落在微任务里，同步读 res 只会读到 null。
+ *  生产不受影响：Express 不等返回值，响应照样发出去；受影响的只有"当场读 res"的这种测法。 */
+async function callMy(userId, query = {}) {
   const route = findRoute('get', '/my')
   const handler = route.stack[route.stack.length - 1].handle
   const res = {
@@ -436,7 +440,7 @@ function callMy(userId, query = {}) {
     },
     headersSent: false,
   }
-  handler(
+  await handler(
     {
       params: {},
       query,
@@ -452,13 +456,13 @@ function callMy(userId, query = {}) {
   return res
 }
 
-test('C1⑭ ?proof=<id> 走凭证支；?proof=abc 当没带 ⇒ 落只读支且零写库', () => {
+test('C1⑭ ?proof=<id> 走凭证支；?proof=abc 当没带 ⇒ 落只读支且零写库', async () => {
   const uid = ensureUser('sess-p14-route', '路由分发')
   addBasis(uid, 'sess-p14-route')
   const pid = addProof(uid, 'approved', 99, '截图-路由')
 
   const logsBefore = db.prepare('SELECT COUNT(*) n FROM recommendation_logs').get().n
-  const junk = callMy(uid, { proof: 'abc' })
+  const junk = await callMy(uid, { proof: 'abc' })
   assert.strictEqual(junk.statusCode, 200, '⛔ 一个写错的查询参数不该把只读页打成 400')
   assert.ok(junk.body.data.entitlement, '回的是只读支那份平铺读数')
   assert.strictEqual(
@@ -467,13 +471,13 @@ test('C1⑭ ?proof=<id> 走凭证支；?proof=abc 当没带 ⇒ 落只读支且�
     '只读支一行都不许写（第十二阶段矩阵 13 那条口径在这里继续成立）',
   )
 
-  const got = callMy(uid, { proof: String(pid) })
+  const got = await callMy(uid, { proof: String(pid) })
   assert.strictEqual(got.statusCode, 200, JSON.stringify(got.body).slice(0, 300))
   assert.strictEqual(got.body.data.report.paid_report.out_trade_no, 'DEPOSIT-' + pid)
 
   // 别人的凭证经路由 ⇒ 与"不存在"同一句话
   const other = ensureUser('sess-p14-other', '探测者')
-  const stolen = callMy(other, { proof: String(pid) })
+  const stolen = await callMy(other, { proof: String(pid) })
   assert.strictEqual(stolen.statusCode, 404)
 })
 

@@ -6,7 +6,7 @@ const express = require('express')
 const path = require('path')
 const fs = require('fs')
 const db = require('../db/init')
-const { sendSuccess, sendError } = require('../utils/response')
+const { sendSuccess, sendCreated, sendError } = require('../utils/response')
 const { generateUUID, UPLOAD_DIR, parsePagination, asId } = require('../utils/common')
 const { loginRequired } = require('../middleware/auth')
 const { upload, validateImage } = require('../middleware/upload')
@@ -73,13 +73,14 @@ router.post('/', loginRequired, uploadLimiter, upload.single('photo'), (req, res
       throw err
     }
 
-    return sendSuccess(
+    return sendCreated(
       res,
       {
         id: result.lastInsertRowid,
         url: imageUrl,
         type,
       },
+      null,
       '照片上传成功',
     )
   } catch (err) {

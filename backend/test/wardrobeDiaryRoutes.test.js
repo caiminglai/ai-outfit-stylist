@@ -108,7 +108,8 @@ test('① POST：user_id 与 rating 真落库，场合认词表内的值', async
     rating: 4,
     notes: '怕冷加了件外套',
   })
-  assert.equal(r.status, 200)
+  // POST /outfits 建了一条搭配日记 ⇒ 201（创建口约定）
+  assert.equal(r.status, 201)
   assert.equal(r.body.data.item_ids.length, 2, 'item_ids 回的是解析后的数组，不是 JSON 串')
   const row = memDb.prepare('SELECT * FROM wardrobe_outfits WHERE id = ?').get(r.body.data.id)
   assert.ok(row.user_id, 'user_id 必须落进去（游客也有一行，日记才能按人学偏好）')
@@ -147,7 +148,7 @@ test('① POST 闸门：表外场合 400／星级越界 400／别人的衣物 40
 
 test('① POST 场合留空是合法的（缺测不编造），星级没填＝NULL', async () => {
   const r = await call('POST', '/outfits', { name: '只记了衣服', item_ids: [itemA] })
-  assert.equal(r.status, 200)
+  assert.equal(r.status, 201)
   const row = memDb.prepare('SELECT * FROM wardrobe_outfits WHERE id = ?').get(r.body.data.id)
   assert.equal(row.occasion, null)
   assert.equal(row.rating, null)
@@ -256,7 +257,7 @@ test('⑤ 越权：PUT/DELETE 别人的行一律 404（不回 403）', async () 
 test('⑥ DELETE 本人的行：搭配没了，衣物一件不少', async () => {
   const itemsBefore = memDb.prepare('SELECT COUNT(*) AS n FROM user_wardrobe').get().n
   const r = await call('POST', '/outfits', { name: '要删掉的那套', item_ids: [itemA], rating: 2 })
-  assert.equal(r.status, 200)
+  assert.equal(r.status, 201)
   const del = await call('DELETE', `/outfits/${r.body.data.id}`)
   assert.equal(del.status, 200)
   assert.equal(del.body.data.deleted, true)
@@ -283,5 +284,5 @@ test('⑦ 词表取不到时只许留空（宁缺不猜，不收自由文本）'
   assert.equal(blocked.status, 400)
   assert.match(blocked.body.error.message, /场合词表还没建好/)
   const ok = await call('POST', '/outfits', { name: '词表空了老实留空', item_ids: [itemA] })
-  assert.equal(ok.status, 200)
+  assert.equal(ok.status, 201)
 })

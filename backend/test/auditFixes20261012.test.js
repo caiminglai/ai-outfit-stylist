@@ -65,6 +65,14 @@ function call(route, { params = {}, query = {}, body = {}, headers = {} }) {
       res.body = b
       return res
     },
+    // sendCreated 要 res.setHeader('Location', …)。express 的真 res 一定有这方法，
+    // 双重缺它＝创建口在 handler 的 try 里抛 TypeError ⇒ 平白 500，看着像业务炸了
+    setHeader() {
+      return res
+    },
+    getHeader() {
+      return undefined
+    },
   }
   handler({ params, query, body, headers, ip: '1.1.1.1', socket: {}, user: null }, res, () => {})
   return res
@@ -307,7 +315,8 @@ test('L12 item_ids 里挂别人的单品：400 且点名是哪条', () => {
 
 test('L12 数字字符串入库归一成正整数，重复 ID 只留一份', () => {
   const res = createOutfit([String(OWN_A), OWN_A, OWN_B])
-  assert.strictEqual(res.statusCode, 200, JSON.stringify(res.body))
+  // 201＝POST /outfits 真的建了一条搭配日记（创建口的约定，见 utils/response.js sendCreated）
+  assert.strictEqual(res.statusCode, 201, JSON.stringify(res.body))
   assert.deepEqual(res.body.data.item_ids, [OWN_A, OWN_B])
   const row = memDb
     .prepare('SELECT item_ids FROM wardrobe_outfits WHERE id = ?')
@@ -370,7 +379,7 @@ const MIN_RULE = {
 
 test('L2 priority 传字符串数字：入库是整数；传 "abc"：400 而不是 500', () => {
   const created = call(postGroup, { body: { ...MIN_RULE, priority: '12' } })
-  assert.strictEqual(created.statusCode, 200, JSON.stringify(created.body))
+  assert.strictEqual(created.statusCode, 201, JSON.stringify(created.body))
   const row = memDb
     .prepare('SELECT priority, typeof(priority) t FROM rule_groups WHERE id = ?')
     .get(created.body.data.id)

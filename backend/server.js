@@ -12,7 +12,6 @@ const express = require('express')
 const cors = require('cors')
 const compression = require('compression')
 const helmet = require('helmet')
-const rateLimit = require('express-rate-limit')
 
 // MIME类型映射(支持3D模型静态文件服务)
 const MIME_TYPES = {
@@ -48,6 +47,13 @@ const { isSkippedPath, isDisabledPmxPath } = require('./utils/model-utils')
 // 中间件
 const { requestLogger } = require('./middleware/logger')
 const { loginRequired, getSessionId, verifyAdminToken } = require('./middleware/auth')
+// 限流走本仓统一工厂（内核仍是 express-rate-limit）。11-02 之前这里直接
+// `require('express-rate-limit')`，于是同一台机器上有两套 429 实现：路由里那 23 道闸
+// 回 `{success:false,error:{...},retry_after}`，总闸和 /uploads 闸回不带 `retry_after` 的
+// 形状。合并成一套之后，前端只用信一个信封；`scripts/gen-openapi.js` 也才认得出
+// "这道闸是限流"（库自己造出来的中间件在路由栈里是匿名函数，只有工厂会在上面挂
+// `rateLimitProfile`）。行为差异见 `docs/形象设计模型-现状与路线.md` §61。
+const { rateLimit } = require('./middleware/rateLimit')
 
 // 路由
 const authRoutes = require('./routes/auth')
@@ -444,8 +450,14 @@ app.use((err, req, res, _next) => {
       err.code === 'LIMIT_FILE_SIZE'
         ? '图片超过 10MB 上限'
         : err.code === 'LIMIT_UNEXPECTED_FILE'
-          ? '上传的表单字段名不正确'
+          ? '上传的表单字段名不对，或该字段带的文件数超过上限'
           : '上传的文件数量或字段不符合要求'
+  } else if (err.uploadRejected === true) {
+    // multer 的 fileFilter 拒的是"这类文件不收"，"仅支持 jpg, jpeg, png, webp"这句是给用户
+    // 照着改的 ⇒ 生产也得给原话。放到下面那条 4xx 分支会被 isDev 拦掉、糊成"请求参数有误"。
+    status = 400
+    code = 'BAD_REQUEST'
+    message = err.message
   } else if (rawStatus >= 400 && rawStatus < 500) {
     status = rawStatus
     code = rawStatus === 404 ? 'NOT_FOUND' : rawStatus === 403 ? 'FORBIDDEN' : 'BAD_REQUEST'

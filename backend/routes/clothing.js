@@ -6,7 +6,7 @@ const express = require('express')
 const path = require('path')
 const fs = require('fs')
 const db = require('../db/init')
-const { sendSuccess, sendError } = require('../utils/response')
+const { sendSuccess, sendCreated, sendError } = require('../utils/response')
 const { generateUUID, UPLOAD_DIR, parsePagination, asText, asId } = require('../utils/common')
 const { upload, validateImage } = require('../middleware/upload')
 const { rateLimit } = require('../middleware/rateLimit')
@@ -59,7 +59,7 @@ router.post('/upload', uploadLimiter, upload.single('file'), (req, res) => {
       throw err
     }
 
-    return sendSuccess(
+    return sendCreated(
       res,
       {
         clothing_id: result.lastInsertRowid,
@@ -74,6 +74,7 @@ router.post('/upload', uploadLimiter, upload.single('file'), (req, res) => {
           item_name: itemName || '未命名',
         },
       },
+      null,
       '衣服照片上传成功',
     )
   } catch (err) {

@@ -60,6 +60,12 @@ test('把桶打空：第 101 条普通接口 429，同一时刻 /api/health 仍�
   assert.strictEqual(spent.status, 429, '闸门本身得先成立，否则下面"豁免"是空话')
   const body = await spent.json()
   assert.strictEqual(body.error.code, 'TOO_MANY_REQUESTS')
+  // 11-02 起总闸也走 `middleware/rateLimit.js` 工厂（以前 server.js 直接 require
+  // express-rate-limit，同一台机器上两套 429 实现：路由里那 23 道闸回带 `retry_after`
+  // 的信封，总闸和 /uploads 闸回不带的那一种）。前端只用信一个形状，所以这条必须钉住。
+  assert.strictEqual(typeof body.retry_after, 'number', '总闸的 429 也要带 retry_after 秒数')
+  assert.ok(body.retry_after >= 0 && body.retry_after <= 900, 'retry_after 应落在 15 分钟窗口内')
+  assert.strictEqual(body.error.message, '请求过于频繁,请 15 分钟后再试', '文案不能被工厂换掉')
 
   const health = await fetch(`${baseUrl}/api/health`)
   assert.strictEqual(health.status, 200, '修复前这里是 429：探针被顾客流量掐死')

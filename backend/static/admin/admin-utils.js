@@ -20,7 +20,8 @@ var State = {
   models: [],
   currentTable: null,
   currentPage: 1,
-  perPage: 20,
+  // 每页条数：键名跟后端的分页参数同名（2026-11-02 规范轮把 per_page 统一成 limit）
+  limit: 20,
   storeId: '',
   stores: [],
   editingRuleId: null,

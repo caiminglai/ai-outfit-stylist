@@ -1,8 +1,12 @@
 {
   "name": "style-ai-app",
   "private": true,
+  "license": "UNLICENSED",
   "version": "1.0.0",
   "type": "module",
+  "engines": {
+    "node": ">=24.0.0"
+  },
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",

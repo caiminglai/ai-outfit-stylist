@@ -11,7 +11,7 @@ const crypto = require('crypto')
 const fs = require('fs')
 const path = require('path')
 const db = require('../db/init')
-const { sendSuccess, sendError } = require('../utils/response')
+const { sendSuccess, sendCreated, sendError } = require('../utils/response')
 const { generateUUID, parsePagination, UPLOAD_DIR, asId } = require('../utils/common')
 const { loginRequired, adminLoginRequired } = require('../middleware/auth')
 const { upload, validateImage } = require('../middleware/upload')
@@ -198,9 +198,13 @@ router.post('/works', loginRequired, submitLimiter, (req, res) => {
       )
       .run(req.user.id, newShareCode(), type, title, summary, coverUrl, payloadText)
 
-    return sendSuccess(
+    return sendCreated(
       res,
       { id: Number(result.lastInsertRowid), status: 'pending' },
+      // 不发 Location：这一条是 'pending'，公开的 GET /works/:id 只放审核过的作品，
+      // 照 Location 去读实测 404「作品不存在或未通过审核」（test/createdStatus.test.js 钉着）。
+      // 指不到地方的 Location 比不给更糟——作者自己要看进度走 GET /creator/my。
+      null,
       '已提交，等待审核',
     )
   } catch (err) {

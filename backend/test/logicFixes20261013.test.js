@@ -85,6 +85,13 @@ function call(route, opt = {}) {
       res.body = b
       return res
     },
+    // sendCreated 要 res.setHeader('Location', …)；真 res 一定有，双重缺它就是一记假 500
+    setHeader() {
+      return res
+    },
+    getHeader() {
+      return undefined
+    },
   }
   handler({ params, query, body, headers, ip: '1.1.1.1', socket: {}, user }, res, () => {})
   return res
@@ -324,6 +331,45 @@ test('admin：数据浏览翻页有稳定顺序（页内升序、页间接得上
   assert.equal(p2.body.data.page, 2)
 })
 
+test('admin 分页：limit 是正名，per_page 只作旧名继续收，两个都给时听 limit', () => {
+  // 2026-11-02 规范轮：这条路由以前只认 per_page，别的列表口全认 limit ⇒ 同一个项目两套名字。
+  // 现在统一走 utils/common 的 parsePagination。旧名不能一夜作废：
+  // 后台页面的书签、路线文档里写过的调用方式都还在发 per_page，作废的表现是"默默回 20 条"，
+  // 不报错、最难查。
+  const byLimit = call(dataList, { params: { tableName: 'users' }, query: { limit: '3' } })
+  assert.equal(byLimit.statusCode, 200, JSON.stringify(byLimit.body))
+  assert.equal(byLimit.body.data.rows.length, 3)
+  assert.equal(byLimit.body.data.limit, 3, '出参用正名 limit')
+  assert.equal(byLimit.body.data.per_page, undefined, '旧名只读不回显，免得两套名字继续并存')
+
+  const byLegacy = call(dataList, { params: { tableName: 'users' }, query: { per_page: '4' } })
+  assert.equal(byLegacy.body.data.rows.length, 4, '旧名 per_page 必须照样生效')
+  assert.equal(byLegacy.body.data.limit, 4)
+
+  const both = call(dataList, {
+    params: { tableName: 'users' },
+    query: { limit: '5', per_page: '2' },
+  })
+  assert.equal(both.body.data.rows.length, 5, '两个都给时听新名')
+
+  // 上下限还是那一套：0 与负数不能变成"没传"或"不限"（SQLite 的负数 LIMIT 等于不设上限）
+  assert.equal(
+    call(dataList, { params: { tableName: 'users' }, query: { limit: '0' } }).body.data.limit,
+    1,
+    'limit=0 收成下限 1，不许当没传',
+  )
+  assert.equal(
+    call(dataList, { params: { tableName: 'users' }, query: { per_page: '-1' } }).body.data.limit,
+    1,
+    '旧名的负数同样收到 1，不能漏成"不限"',
+  )
+  assert.equal(
+    call(dataList, { params: { tableName: 'users' }, query: { limit: '9999' } }).body.data.limit,
+    100,
+    '上限 100 照旧',
+  )
+})
+
 test('admin：表名白名单仍拦住 constructor（顺原型链会拼出语法错）', () => {
   const res = call(dataList, { params: { tableName: 'constructor' }, query: {} })
   assert.equal(res.statusCode, 404)
@@ -537,7 +583,7 @@ test('cosmetic：POST 省略余量仍按 100，字符串数字收成整数', () 
     body: { name: '测试气垫', category: '底妆', remaining: '70' },
     headers: { 'x-session-id': COS_SID },
   })
-  assert.equal(ok.statusCode, 200, JSON.stringify(ok.body))
+  assert.equal(ok.statusCode, 201, JSON.stringify(ok.body))
   const row = memDb
     .prepare('SELECT remaining, typeof(remaining) ty FROM user_cosmetics WHERE name = ?')
     .get('测试气垫')
@@ -547,7 +593,7 @@ test('cosmetic：POST 省略余量仍按 100，字符串数字收成整数', () 
     body: { name: '测试眉笔', category: '眉笔' },
     headers: { 'x-session-id': COS_SID },
   })
-  assert.equal(dflt.statusCode, 200)
+  assert.equal(dflt.statusCode, 201)
   assert.equal(
     memDb.prepare('SELECT remaining FROM user_cosmetics WHERE name = ?').get('测试眉笔').remaining,
     100,

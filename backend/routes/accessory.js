@@ -6,7 +6,7 @@
  */
 const express = require('express')
 const db = require('../db/init')
-const { sendSuccess, sendError } = require('../utils/response')
+const { sendSuccess, sendCreated, sendError } = require('../utils/response')
 const {
   getSessionId,
   parseJsonField,
@@ -339,7 +339,8 @@ router.post('/items', writeLimiter, (req, res) => {
     const item = db
       .prepare('SELECT * FROM user_accessories WHERE id = ?')
       .get(result.lastInsertRowid)
-    return sendSuccess(res, { item: normalizeItem(item) })
+    // 201＋Location：这条口是真创建（上面 INSERT），且 GET /items/:itemId 在场
+    return sendCreated(res, { item: normalizeItem(item) }, `${req.baseUrl}/items/${item.id}`)
   } catch (err) {
     console.error('[配饰] 添加失败:', err)
     return sendError(res, '添加失败', 500)

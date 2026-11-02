@@ -98,6 +98,7 @@
 │   ├── uploads/                      # 用户上传(gitignore)
 │   ├── test/                         # 单元测试 56 个文件(尺子=ls backend/test/*.test.js | wc -l,10-22 21:3x 现量;node --test,非 vitest):推荐引擎/审美规则/今天这身/档案增强/日记×天气/付款即交付/版型推断(fitInference)＋采集三断点(phase13CollectionRoutes)＋后台「编程水平与独立路线」页(adminSkillPage)＋独立教程页(learnPage——⚠️ static/ 与 templates/ 不过 prettier/eslint,这两页只认各自的 test 这一把尺)
 │   ├── scripts/                      # 一次性维护脚本(非运行时必需)
+│   │   ├── gen-openapi.js            # 从 Express 路由栈生成 docs/api/openapi.json(--check 给 CI 防漂移)
 │   │   ├── flatten-textures.js       # 纹理文件扁平化
 │   │   ├── rebuild-db.js             # 重建数据库 + 更新模型字段
 │   │   ├── restructure-models.js     # 模型目录结构重组 + 命名统一
@@ -107,9 +108,10 @@
 │   ├── .prettierignore               # Prettier 忽略(node_modules/db/上传等)
 │   ├── server.js                     # 后端入口
 │   ├── .env / .env.example           # 环境变量(.env 已 gitignore)
-│   └── package.json                  # 脚本:start / dev / seed / format(:check) / lint(:fix) / test
+│   └── package.json                  # 脚本:start / dev / seed / openapi(:check) / format(:check) / lint(:fix) / test
 ├── docs/                             # 设计与路线文档(10-22 起有地图:先读 docs/README.md)
 │   ├── README.md                     # 文档地图:按"我要干什么"排 40 份 md / 三条前置规矩
+│   ├── api/openapi.json              # 机器可读接口说明书(由 backend/scripts/gen-openapi.js 生成,⛔ 不要手改)
 │   ├── 依据/                         # 每条判据的原始出处(01~10)+ 分层输入输出规范(11~22)
 │   ├── 复盘/                         # 三份工程复盘与审计台账
 │   └── 形象设计模型-现状与路线.md      # 数字形象目标 / 实测缺口 / 7 步实施路线(活文档)
@@ -498,6 +500,7 @@ npm run format:check
 │  │  ├─ diagnose-overlap.js
 │  │  ├─ fix-mojibake.js
 │  │  ├─ flatten-textures.js
+│  │  ├─ gen-openapi.js
 │  │  ├─ optimize-gz.js
 │  │  ├─ prune-orphan-model-dirs.js
 │  │  ├─ quarantine-orphans.js
@@ -704,7 +707,7 @@ npm run format:check
 │  │  │  └─ 人体肤色数据库-中文对照说明.md
 │  │  └─ 参考文献目录.xlsx
 │  ├─ 复盘
-│  │  ├─ audit-site3-2026-10-10.md
+│  │  ├─ 站3 全仓审计（2026-10-10）.md
 │  │  ├─ 站3全项目重审报告-20261012.md
 │  │  └─ 站3深夜轮-限流豁免与定位符重扫-20261013.md
 │  ├─ 形象设计模型-现状与路线.md

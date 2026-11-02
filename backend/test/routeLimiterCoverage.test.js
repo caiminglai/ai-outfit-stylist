@@ -40,8 +40,10 @@ function findRoute(router, method, routePath) {
   return null
 }
 
-/** 只驱动限流中间件本身：假 req/res + next 计数，绝不落到真业务 handler */
-function runMiddleware(mw, ip) {
+/** 只驱动限流中间件本身：假 req/res + next 计数，绝不落到真业务 handler
+ *  必须 await：11-02 起工厂内核是 express-rate-limit，它先 `await store.increment(key)`
+ *  再决定放行/拦，同步读 res 只会读到 null（手写桶是同步的，所以改造前不用等）。*/
+async function runMiddleware(mw, ip) {
   let nextCalled = false
   const res = {
     statusCode: null,
@@ -59,7 +61,7 @@ function runMiddleware(mw, ip) {
       return res
     },
   }
-  mw({ ip, socket: {}, headers: {} }, res, () => {
+  await mw({ ip, socket: {}, headers: {} }, res, () => {
     nextCalled = true
   })
   return { res, nextCalled }
@@ -78,20 +80,20 @@ test('payment 两条 notify 都挂在同一个专用限流实例上（各自不�
   )
 })
 
-test('notifyLimiter 额度 300/15 分钟：前 300 次放行，第 301 次才 429', () => {
+test('notifyLimiter 额度 300/15 分钟：前 300 次放行，第 301 次才 429', async () => {
   const limiter = findRoute(paymentRouter, 'post', '/notify').stack[0].handle
   for (let i = 1; i <= 300; i++) {
-    const r = runMiddleware(limiter, '8.8.8.8')
+    const r = await runMiddleware(limiter, '8.8.8.8')
     assert.strictEqual(r.nextCalled, true, `第 ${i} 次不该被拦，渠道重推不能被掐`)
   }
-  const blocked = runMiddleware(limiter, '8.8.8.8')
+  const blocked = await runMiddleware(limiter, '8.8.8.8')
   assert.strictEqual(blocked.nextCalled, false)
   assert.strictEqual(blocked.res.statusCode, 429)
   // 只吃验签这条 IP 的桶，不影响别的来源
-  assert.strictEqual(runMiddleware(limiter, '8.8.4.4').nextCalled, true)
+  assert.strictEqual((await runMiddleware(limiter, '8.8.4.4')).nextCalled, true)
 })
 
-test('wardrobe 六个写入口共用 writeLimiter（含本轮补上的 outfits/wishlist）', () => {
+test('wardrobe 六个写入口共用 writeLimiter（含本轮补上的 outfits/wishlist）', async () => {
   const writeRoutes = [
     ['post', '/items'],
     ['put', '/items/:itemId'],
@@ -109,8 +111,8 @@ test('wardrobe 六个写入口共用 writeLimiter（含本轮补上的 outfits/w
     else assert.strictEqual(route.stack[0].handle, shared, `${p} 用的必须是同一个 writeLimiter`)
   }
   for (let i = 1; i <= 30; i++)
-    assert.strictEqual(runMiddleware(shared, '7.7.7.7').nextCalled, true)
-  assert.strictEqual(runMiddleware(shared, '7.7.7.7').res.statusCode, 429)
+    assert.strictEqual((await runMiddleware(shared, '7.7.7.7')).nextCalled, true)
+  assert.strictEqual((await runMiddleware(shared, '7.7.7.7')).res.statusCode, 429)
 })
 
 test('wardrobe 读接口没被误挂写限流（GET 一律单层 handler）', () => {
@@ -134,7 +136,7 @@ test('payment 原有各闸位置不动：查单/凭证限流仍在，notify 之�
 // 100 次/15 分钟那道按 IP 的共享闸兜着，而本机出口是 CGNAT——一个 IP 后面是一片人，
 // 一个人连点"帮我配一套"就能把整栋楼的 /api 额度吃光（这轮真踩过，见记忆）。
 // 单独开桶、不与写入口共用：加满 30 件衣服不该让下一步分析被拦。
-test('wardrobe 六个分析口共用 analysisLimiter，且不与 writeLimiter 同实例', () => {
+test('wardrobe 六个分析口共用 analysisLimiter，且不与 writeLimiter 同实例', async () => {
   const analysisRoutes = [
     ['post', '/gaps'],
     ['post', '/evaluate'],
@@ -158,11 +160,15 @@ test('wardrobe 六个分析口共用 analysisLimiter，且不与 writeLimiter �
     '写入口与分析口分桶：20 次/分钟不该吃掉 30 次/分钟的写额度',
   )
   for (let i = 1; i <= 20; i++)
-    assert.strictEqual(runMiddleware(shared, '6.6.6.6').nextCalled, true, `第 ${i} 次不该被拦`)
-  assert.strictEqual(runMiddleware(shared, '6.6.6.6').res.statusCode, 429)
+    assert.strictEqual(
+      (await runMiddleware(shared, '6.6.6.6')).nextCalled,
+      true,
+      `第 ${i} 次不该被拦`,
+    )
+  assert.strictEqual((await runMiddleware(shared, '6.6.6.6')).res.statusCode, 429)
 })
 
-test('recommend 的 /feedback 与 /enhance 各挂上自己的桶，不吃 /engine 的额度', () => {
+test('recommend 的 /feedback 与 /enhance 各挂上自己的桶，不吃 /engine 的额度', async () => {
   const engine = findRoute(recommendRouter, 'post', '/engine')
   const feedback = findRoute(recommendRouter, 'post', '/feedback')
   const enhance = findRoute(recommendRouter, 'post', '/enhance')
@@ -178,10 +184,10 @@ test('recommend 的 /feedback 与 /enhance 各挂上自己的桶，不吃 /engin
   assert.strictEqual(new Set(handles).size, 3, '三条口各自一个桶，谁也不该吃掉谁的额度')
   for (let i = 1; i <= 60; i++)
     assert.strictEqual(
-      runMiddleware(feedback.stack[0].handle, '5.5.5.5').nextCalled,
+      (await runMiddleware(feedback.stack[0].handle, '5.5.5.5')).nextCalled,
       true,
       `反馈第 ${i} 次不该被拦`,
     )
-  assert.strictEqual(runMiddleware(feedback.stack[0].handle, '5.5.5.5').res.statusCode, 429)
-  assert.strictEqual(runMiddleware(enhance.stack[0].handle, '5.5.5.5').nextCalled, true)
+  assert.strictEqual((await runMiddleware(feedback.stack[0].handle, '5.5.5.5')).res.statusCode, 429)
+  assert.strictEqual((await runMiddleware(enhance.stack[0].handle, '5.5.5.5')).nextCalled, true)
 })

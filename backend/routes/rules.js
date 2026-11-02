@@ -4,7 +4,7 @@
  */
 const express = require('express')
 const db = require('../db/init')
-const { sendSuccess, sendError } = require('../utils/response')
+const { sendSuccess, sendCreated, sendError } = require('../utils/response')
 const { toEnabledBit, ownValue, asNumber, asFilters, asId } = require('../utils/common')
 const { adminLoginRequired } = require('../middleware/auth')
 const {
@@ -504,7 +504,8 @@ router.post('/groups', adminLoginRequired, (req, res) => {
       return info.lastInsertRowid
     })
 
-    return sendSuccess(res, { id: createGroup() })
+    const groupId = createGroup()
+    return sendCreated(res, { id: groupId }, `${req.baseUrl}/groups/${groupId}`)
   } catch (err) {
     console.error('[规则] 创建失败:', err)
     return sendError(res, '创建失败', 500)

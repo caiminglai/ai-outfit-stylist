@@ -97,7 +97,7 @@ test('⑧ POST 三格真落库并原样出账（自洽的一条）', async () =>
     feels_like_c: 3,
     weather_level: '寒冷',
   })
-  assert.equal(r.status, 200)
+  assert.equal(r.status, 201)
   assert.equal(r.body.data.wear_date, '2026-10-18')
   assert.equal(r.body.data.feels_like_c, 3)
   assert.equal(r.body.data.weather_level, '寒冷')
@@ -197,11 +197,11 @@ test('⑪ 只填一格合法；三格都不填 ⇒ 库里 NULL 且出账 null（
     item_ids: [itemId],
     weather_level: '舒适',
   })
-  assert.equal(oneCell.status, 200)
+  assert.equal(oneCell.status, 201)
   assert.equal(oneCell.body.data.feels_like_c, null, '没填体感＝NULL，⛔ 不许拿 0℃ 顶')
   assert.equal(oneCell.body.data.wear_date, null)
   const none = await call('POST', '/outfits', { name: '老实留空', item_ids: [itemId] })
-  assert.equal(none.status, 200)
+  assert.equal(none.status, 201)
   const row = memDb
     .prepare('SELECT wear_date, feels_like_c, weather_level FROM wardrobe_outfits WHERE id = ?')
     .get(none.body.data.id)
@@ -216,7 +216,7 @@ test('⑪ 只填一格合法；三格都不填 ⇒ 库里 NULL 且出账 null（
     feels_like_c: 0,
     weather_level: '寒冷',
   })
-  assert.equal(zero.status, 200)
+  assert.equal(zero.status, 201)
   assert.strictEqual(zero.body.data.feels_like_c, 0)
 })
 
@@ -226,7 +226,7 @@ test('⑫ 真今天这条收得下（东八区口径，⛔ 不许被 UTC 判成�
     item_ids: [itemId],
     wear_date: todayShanghai(),
   })
-  assert.equal(r.status, 200)
+  assert.equal(r.status, 201)
   assert.equal(r.body.data.wear_date, todayShanghai())
 })
 

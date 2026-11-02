@@ -6,7 +6,7 @@
  */
 const express = require('express')
 const db = require('../db/init')
-const { sendSuccess, sendError } = require('../utils/response')
+const { sendSuccess, sendCreated, sendError } = require('../utils/response')
 const { buildRecommendation, recommendationBodyDeviation } = require('../services/recommendEngine')
 const {
   topFitBody,
@@ -597,7 +597,7 @@ router.post('/items', writeLimiter, (req, res) => {
       )
 
     const item = db.prepare('SELECT * FROM user_wardrobe WHERE id = ?').get(result.lastInsertRowid)
-    return sendSuccess(res, normalizeItem(item))
+    return sendCreated(res, normalizeItem(item), `${req.baseUrl}/items/${item.id}`)
   } catch (err) {
     console.error('[衣橱] 添加失败:', err)
     return sendError(res, '添加失败', 500)
@@ -991,13 +991,14 @@ router.post('/outfits', writeLimiter, (req, res) => {
     const outfit = db
       .prepare('SELECT * FROM wardrobe_outfits WHERE id = ?')
       .get(result.lastInsertRowid)
-    return sendSuccess(
+    return sendCreated(
       res,
       {
         ...outfit,
         item_ids: parseJsonField(outfit.item_ids) || [],
         is_favorite: !!outfit.is_favorite,
       },
+      null,
       '搭配已创建',
     )
   } catch (err) {
@@ -1299,7 +1300,7 @@ router.post('/wishlist', writeLimiter, (req, res) => {
     const wish = db
       .prepare('SELECT * FROM shopping_wishlist WHERE id = ?')
       .get(result.lastInsertRowid)
-    return sendSuccess(res, wish)
+    return sendCreated(res, wish)
   } catch (err) {
     console.error('[衣橱] 添加心愿失败:', err)
     return sendError(res, '添加失败', 500)

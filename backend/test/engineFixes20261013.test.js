@@ -84,6 +84,13 @@ function call(route, opt = {}) {
       res.body = b
       return res
     },
+    // sendCreated 要 res.setHeader('Location', …)；真 res 一定有，双重缺它就是一记假 500
+    setHeader() {
+      return res
+    },
+    getHeader() {
+      return undefined
+    },
   }
   handler(
     { params, query, body, headers, ip: '1.1.1.1', socket: {}, user, file, ...extra },
@@ -441,7 +448,7 @@ test('clothing：上传时填的名字真的进了库，列表读得回来', () 
     file: { originalname: 'a.png', mimetype: 'image/png', buffer: PNG },
     body: { name: '白衬衫', category: '上衣' },
   })
-  assert.equal(r.statusCode, 200, JSON.stringify(r.body))
+  assert.equal(r.statusCode, 201, JSON.stringify(r.body))
   const row = memDb
     .prepare('SELECT item_name FROM clothing_items WHERE id = ?')
     .get(r.body.data.clothing_id)

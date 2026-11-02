@@ -4,7 +4,7 @@
  */
 const express = require('express')
 const db = require('../db/init')
-const { sendSuccess, sendError } = require('../utils/response')
+const { sendSuccess, sendCreated, sendError } = require('../utils/response')
 const { asText, asNumber, parseJsonField, toEnabledBit } = require('../utils/common')
 const { adminLoginRequired } = require('../middleware/auth')
 
@@ -141,7 +141,7 @@ router.post('/products', adminLoginRequired, (req, res) => {
         toEnabledBit(enabled, 1),
       )
 
-    return sendSuccess(res, { id: result.lastInsertRowid })
+    return sendCreated(res, { id: result.lastInsertRowid })
   } catch (err) {
     console.error('[库存] 添加失败:', err)
     return sendError(res, '添加失败', 500)
@@ -256,7 +256,7 @@ router.post('/categories', adminLoginRequired, (req, res) => {
     const result = db
       .prepare('INSERT INTO inventory_categories (name, code, sort_order) VALUES (?, ?, ?)')
       .run(categoryName, categoryCode, asNumber(sort_order, 0))
-    return sendSuccess(res, { id: result.lastInsertRowid })
+    return sendCreated(res, { id: result.lastInsertRowid })
   } catch (err) {
     console.error('[库存] 添加分类失败:', err)
     if (err.message && err.message.includes('UNIQUE')) {

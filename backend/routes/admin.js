@@ -10,7 +10,7 @@ const fs = require('fs')
 const db = require('../db/init')
 const { sendSuccess, sendError } = require('../utils/response')
 const { adminLoginRequired } = require('../middleware/auth')
-const { ownValue } = require('../utils/common')
+const { ownValue, parsePagination } = require('../utils/common')
 const { rateLimit } = require('../middleware/rateLimit')
 
 const router = express.Router()
@@ -215,8 +215,10 @@ router.get('/api/data/:tableName', adminLoginRequired, (req, res) => {
     // 畸形页码必须挡在这里：?page=abc 会绑成 NaN，SQLite 在 LIMIT/OFFSET 位上直接抛
     // "datatype mismatch" ⇒ 入参错回 500（2026-10-11 实测）；?per_page=-1 更糟，
     // 负数 LIMIT 在 SQLite 里等于"不限"，100 条的上限被整条绕过。
-    const page = Math.min(1000000, Math.max(1, parseInt(req.query.page, 10) || 1))
-    const perPage = Math.min(100, Math.max(1, parseInt(req.query.per_page, 10) || 20))
+    // 这两条闸门以前是本路由手搓的第二份（只认 per_page），2026-11-02 并进 utils/common
+    // 的 parsePagination：同一个项目里分页参数只有一套名字、一套上下限，
+    // per_page 作为旧名仍然收（旧页面/书签不会一夜之间默默变回 20 条）。
+    const { page, limit, offset } = parsePagination(req.query)
 
     // 安全检查：表名必须在已知列表中。
     // 这里必须只认表自己的键：/admin/api/data/constructor 用 TABLE_NAMES['constructor']
@@ -235,7 +237,6 @@ router.get('/api/data/:tableName', adminLoginRequired, (req, res) => {
     const whereParams = filterStore ? [storeId] : []
 
     const total = getRowCount(tableName, where, whereParams)
-    const offset = (page - 1) * perPage
 
     // 显式 ORDER BY rowid：SQLite 不保证不带排序的 LIMIT/OFFSET 返回顺序，这里把它定死。
     // 10-13 用同 schema 的干净库实测（users 插 25 条、每页 10 条）两条都要说清：
@@ -249,7 +250,7 @@ router.get('/api/data/:tableName', adminLoginRequired, (req, res) => {
     // 按 rowid 排就是插入序，且不需要任何索引。
     const rows = db
       .prepare(`SELECT * FROM ${tableName}${where} ORDER BY rowid LIMIT ? OFFSET ?`)
-      .all(...whereParams, perPage, offset)
+      .all(...whereParams, limit, offset)
 
     let storeList = null
     if (storeFilter) {
@@ -307,8 +308,10 @@ router.get('/api/data/:tableName', adminLoginRequired, (req, res) => {
         rows: normalizedRows,
         total,
         page,
-        per_page: perPage,
-        total_pages: Math.ceil(total / perPage),
+        // 出参也用规范名 limit（旧名 per_page 只读不回显）；全仓唯一读这两个字段的是
+        // static/admin/admin-data.js 的翻页条，它读 page/total/total_pages，本轮同轮改光
+        limit,
+        total_pages: Math.ceil(total / limit),
         store_filter: storeFilter,
         store_id: filterStore ? storeId : null,
         stores: storeList,

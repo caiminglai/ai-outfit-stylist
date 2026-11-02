@@ -31,6 +31,15 @@ jobs:
       - name: Format check
         run: npm run format:check
 
+      # 依赖体检：npm audit 是 npm 自带的命令，不新增依赖，它只查你已有的依赖。
+      # 11-02 起是**硬门**：两条 `lockfile 刷新`之后本机实测 `npm audit --audit-level=high` 在
+      # backend 与 app 两侧都回 rc=0（改前是 backend 13 条含 1 critical＋4 high、app 23 条含 8 high，
+      # 现在 high/critical 归零，只剩 8＋13 条 moderate＝minimatch 与 qs 那两族，够不到 high 阈值）。
+      # 以后上游新爆一条 high 把 CI 跑红，那是**信号**不是故障：要么升版本，要么临时把
+      # continue-on-error 加回来并在路线文档里记账，别默默删步骤。
+      - name: Dependency audit
+        run: npm audit --audit-level=high
+
       - name: Type check
         run: npm run typecheck
 
@@ -63,11 +72,23 @@ jobs:
       - name: Format check
         run: npm run format:check
 
+      # 依赖体检：同上，npm 自带命令、不新增依赖；11-02 起与 backend 一样是硬门（本机实测两侧 rc=0）
+      - name: Dependency audit
+        run: npm audit --audit-level=high
+
       - name: Lint
         run: npm run lint
 
       - name: Unit test
         run: npm test
+
+      # 接口说明书防漂移：docs/api/openapi.json 由 `backend/scripts/gen-openapi.js` 从
+      # Express 自己的路由栈生成，⛔ 不手写第二份清单。这条 `--check` 重新生成一遍、
+      # 与提交在仓库里的产物逐字节比对，不同就 rc=1 报 "OPENAPI DRIFT"。
+      # 于是"改了路由没重生成说明书"这种最常见的腐烂，在 CI 这一步就红，而不是等
+      # 接手的人照着过期的文档写前端。本机同一条命令实测 rc=0（见路线文档 §61）。
+      - name: OpenAPI spec is up to date
+        run: npm run openapi:check
 
       # 两个 job 都只跑本机已实测通过的门禁：
       #   app  typecheck 0 错 / lint 0 error 9 warning / build 通过

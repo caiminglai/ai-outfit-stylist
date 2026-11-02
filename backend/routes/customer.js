@@ -14,7 +14,7 @@
 const express = require('express')
 const crypto = require('crypto')
 const db = require('../db/init')
-const { sendSuccess, sendError } = require('../utils/response')
+const { sendSuccess, sendCreated, sendError } = require('../utils/response')
 const { stripIdentityFields } = require('../utils/common')
 const { buildRecommendation } = require('../services/recommendEngine')
 const { writeRecommendationLog } = require('../services/profileArchive')
@@ -125,7 +125,7 @@ router.post('/session', (req, res) => {
        VALUES (?, ?, ?, ?, 0)`,
     ).run(sessionId, storeId, profileData, expiresAt)
 
-    return sendSuccess(
+    return sendCreated(
       res,
       {
         session_id: sessionId,
@@ -134,6 +134,7 @@ router.post('/session', (req, res) => {
         privacy_notice: PRIVACY_NOTICE.highlight,
         profile_data: parseProfileData(profileData),
       },
+      `${req.baseUrl}/session/${sessionId}`,
       '顾客会话已创建',
     )
   } catch (err) {
