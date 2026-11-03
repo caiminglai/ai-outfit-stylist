@@ -16,8 +16,9 @@ const { generateUUID, UPLOAD_DIR, asId, getSessionId } = require('../utils/commo
 const { loginRequired, adminLoginRequired } = require('../middleware/auth')
 const { upload, validateImage } = require('../middleware/upload')
 const { rateLimit } = require('../middleware/rateLimit')
-// 日志走 utils/logger：console.log 只落 stdout，容器里查不到（别名与 server.js:42 保持一致）
-const { log: logMsg } = require('../utils/logger')
+// 日志走 utils/logger：console.* 只落 stdout，容器里那份不归本项目留档，落盘的只有
+// logs/server-*.log 这一份（别名与 server.js:42 保持一致，判据见 test/loggerDiscipline.test.js）
+const { log: logMsg, error: logErr } = require('../utils/logger')
 const wxpay = require('../services/wechatPay')
 const alipay = require('../services/alipay')
 const paidReport = require('../services/paidReport')
@@ -99,7 +100,7 @@ function closeStaleOrders(userId) {
     return r.changes
   } catch (err) {
     // 关单失败不该挡住下单或读数：那是清理动作，不是交易动作
-    console.error('[收款] 关闭超时未付单失败:', err)
+    logErr('[收款] 关闭超时未付单失败:', err)
     return 0
   }
 }
@@ -171,7 +172,7 @@ router.get('/qrcodes', (req, res) => {
       alipay_web: alipay.isConfigured(),
     })
   } catch (err) {
-    console.error('[收款] 读取收款配置失败:', err)
+    logErr('[收款] 读取收款配置失败:', err)
     return sendError(res, '读取收款配置失败', 500)
   }
 })
@@ -254,7 +255,7 @@ router.post('/order', loginRequired, async (req, res) => {
       '下单成功，请扫码支付',
     )
   } catch (err) {
-    console.error('[收款] 微信下单失败:', err.detail || err.message)
+    logErr('[收款] 微信下单失败:', err.detail || err.message)
     return sendError(res, '下单失败，请稍后再试', 502)
   }
 })
@@ -299,7 +300,7 @@ router.get('/order/:outTradeNo', loginRequired, orderQueryLimiter, async (req, r
       paid_at: fresh.paid_at,
     })
   } catch (err) {
-    console.error('[收款] 查单失败:', err)
+    logErr('[收款] 查单失败:', err)
     return sendError(res, '查单失败', 500)
   }
 })
@@ -324,7 +325,7 @@ const notifyLimiter = rateLimit({
 router.post('/notify', notifyLimiter, (req, res) => {
   const result = wxpay.handleNotify(req.rawBody || '', req.headers)
   if (!result.ok) {
-    console.error('[收款] 回调验签失败:', result.reason)
+    logErr('[收款] 回调验签失败:', result.reason)
     return res.status(401).json({ code: 'FAIL', message: '验签失败' })
   }
   const data = result.data
@@ -334,18 +335,18 @@ router.post('/notify', notifyLimiter, (req, res) => {
       .prepare('SELECT * FROM payment_orders WHERE out_trade_no = ?')
       .get(data.out_trade_no)
     if (!order) {
-      console.error('[收款] 回调对应订单不存在:', data.out_trade_no)
+      logErr('[收款] 回调对应订单不存在:', data.out_trade_no)
       return res.status(404).json({ code: 'FAIL', message: '订单不存在' })
     }
     // 金额必须等于下单金额，否则不是这一单该收的钱
     if (data.amount?.total !== order.amount_fen) {
-      console.error('[收款] 回调金额不符:', data.out_trade_no, data.amount?.total, order.amount_fen)
+      logErr('[收款] 回调金额不符:', data.out_trade_no, data.amount?.total, order.amount_fen)
       return res.status(400).json({ code: 'FAIL', message: '金额不符' })
     }
     markPaid(data.out_trade_no, data.transaction_id, JSON.stringify(data))
     return res.json({ code: 'SUCCESS', message: '成功' })
   } catch (err) {
-    console.error('[收款] 回调处理失败:', err)
+    logErr('[收款] 回调处理失败:', err)
     return res.status(500).json({ code: 'FAIL', message: '处理失败' })
   }
 })
@@ -379,7 +380,7 @@ router.post('/alipay/order', loginRequired, (req, res) => {
       '下单成功，请前往支付宝付款',
     )
   } catch (err) {
-    console.error('[收款] 支付宝下单失败:', err.detail || err.message)
+    logErr('[收款] 支付宝下单失败:', err.detail || err.message)
     return sendError(res, '下单失败，请稍后再试', 502)
   }
 })
@@ -391,7 +392,7 @@ router.post('/alipay/order', loginRequired, (req, res) => {
 router.post('/notify/alipay', notifyLimiter, (req, res) => {
   const result = alipay.handleNotify(req.body)
   if (!result.ok) {
-    console.error('[收款] 支付宝通知验签失败:', result.reason)
+    logErr('[收款] 支付宝通知验签失败:', result.reason)
     return res.status(401).send('fail')
   }
   const data = result.data
@@ -402,23 +403,18 @@ router.post('/notify/alipay', notifyLimiter, (req, res) => {
       .prepare('SELECT * FROM payment_orders WHERE out_trade_no = ?')
       .get(data.out_trade_no)
     if (!order) {
-      console.error('[收款] 支付宝通知对应订单不存在:', data.out_trade_no)
+      logErr('[收款] 支付宝通知对应订单不存在:', data.out_trade_no)
       return res.status(404).send('fail')
     }
     // 通知金额必须等于下单金额，否则不是这一单该收的钱
     if (alipay.yuanToFen(data.total_amount) !== order.amount_fen) {
-      console.error(
-        '[收款] 支付宝通知金额不符:',
-        data.out_trade_no,
-        data.total_amount,
-        order.amount_fen,
-      )
+      logErr('[收款] 支付宝通知金额不符:', data.out_trade_no, data.total_amount, order.amount_fen)
       return res.status(400).send('fail')
     }
     markPaid(data.out_trade_no, data.trade_no || '', JSON.stringify(data), 'alipay')
     return res.send('success')
   } catch (err) {
-    console.error('[收款] 支付宝通知处理失败:', err)
+    logErr('[收款] 支付宝通知处理失败:', err)
     return res.status(500).send('fail')
   }
 })
@@ -462,7 +458,7 @@ router.post('/deposit', loginRequired, depositLimiter, upload.single('file'), (r
       '凭证已提交，等待人工确认',
     )
   } catch (err) {
-    console.error('[收款] 提交凭证失败:', err)
+    logErr('[收款] 提交凭证失败:', err)
     return sendError(res, '提交凭证失败', 500)
   }
 })
@@ -504,7 +500,7 @@ router.get('/my', loginRequired, (req, res) => {
       // 上面那两条前提不是推测，钉在 `test/rateLimitWindow.test.js` 最后两条测试里（store 抛错走 next(err)、业务抛错会被再调一次）。
       return reportLimiter(req, res, (limiterErr) => {
         if (limiterErr) {
-          console.error('[收款] 这一支的限流中间件抛错:', limiterErr)
+          logErr('[收款] 这一支的限流中间件抛错:', limiterErr)
           return sendError(res, '领取失败，请稍后重试', 500)
         }
         // 这次填表用的会话号：门店快速模式那条样本只有 `sess_…` 会话号、没有 user_id
@@ -576,7 +572,7 @@ router.get('/my', loginRequired, (req, res) => {
       time_axis: '本响应里所有 *_beijing / paid_at / granted_at 字段是东八区显示串',
     })
   } catch (err) {
-    console.error('[收款] 读取凭证失败:', err)
+    logErr('[收款] 读取凭证失败:', err)
     return sendError(res, '读取凭证失败', 500)
   }
 })
@@ -627,7 +623,7 @@ router.get('/admin/list', adminLoginRequired, (req, res) => {
       summary: paidReport.businessSummary(),
     })
   } catch (err) {
-    console.error('[收款] 读取凭证列表失败:', err)
+    logErr('[收款] 读取凭证列表失败:', err)
     return sendError(res, '读取凭证列表失败', 500)
   }
 })
@@ -689,7 +685,7 @@ router.post('/admin/:id/status', adminLoginRequired, (req, res) => {
     if (result.changes === 0) return sendError(res, '凭证不存在', 404)
     return sendSuccess(res, { id, status }, '审核已保存')
   } catch (err) {
-    console.error('[收款] 审核失败:', err)
+    logErr('[收款] 审核失败:', err)
     return sendError(res, '审核失败', 500)
   }
 })
@@ -707,7 +703,7 @@ router.get('/admin/price', adminLoginRequired, (req, res) => {
       updated_at: row ? row.updated_at : null,
     })
   } catch (err) {
-    console.error('[收款] 读取标价失败:', err)
+    logErr('[收款] 读取标价失败:', err)
     return sendError(res, '读取标价失败', 500)
   }
 })
@@ -729,7 +725,7 @@ router.put('/admin/price', adminLoginRequired, (req, res) => {
     logMsg('[收款] 标价变更:', before / 100, '->', fen / 100)
     return sendSuccess(res, { amount: fen / 100, amount_fen: fen }, '收款金额已更新')
   } catch (err) {
-    console.error('[收款] 改价失败:', err)
+    logErr('[收款] 改价失败:', err)
     return sendError(res, '改价失败', 500)
   }
 })

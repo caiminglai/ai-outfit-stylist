@@ -32,10 +32,14 @@ db.exec(fs.readFileSync(path.join(REPO, 'db', 'schema.sql'), 'utf-8'))
 
 const routeSrc = fs.readFileSync(path.join(REPO, 'routes', 'wardrobe.js'), 'utf-8')
 const initSrc = fs.readFileSync(path.join(REPO, 'db', 'init.js'), 'utf-8')
+const imageSrcPath = path.join(REPO, '..', 'app', 'src', 'components', 'wardrobe', 'imageSrc.tsx')
 const tabSrc = fs.readFileSync(
   path.join(REPO, '..', 'app', 'src', 'components', 'WardrobeTab.tsx'),
   'utf-8',
 )
+// 11-03 大文件拆分轮：sameOriginImage 这一段从 WardrobeTab.tsx 逐字搬进上面那个模块，
+// 钉子不放松——定义体与父文件的 import 两头都要在场，缺一头渲染就回到认外站地址的老洞。
+const imageSrcSrc = fs.readFileSync(imageSrcPath, 'utf-8')
 
 function addWardrobe(session, name, imageUrl) {
   return db
@@ -114,7 +118,21 @@ test('④ 源码级：前端那条链五处都在（缺一个地址就丢）', (
     true,
     'handlePhotoUpload 要把后端返回的地址接进表单',
   )
-  assert.equal(tabSrc.includes('const sameOriginImage'), true, '渲染前只认同源相对地址')
+  assert.equal(
+    tabSrc.includes('const sameOriginImage'),
+    false,
+    '11-03 拆分后这段不该在父文件里留一份重复定义',
+  )
+  assert.equal(
+    imageSrcSrc.includes('const sameOriginImage'),
+    true,
+    '渲染前只认同源相对地址（定义在 wardrobe/imageSrc.tsx）',
+  )
+  assert.equal(
+    /import\s*\{[^}]*\bsameOriginImage\b[^}]*\}\s*from\s*'\.\/wardrobe\/imageSrc'/.test(tabSrc),
+    true,
+    '父文件要 import 这份同源校验，否则渲染那一格又没人把关',
+  )
   assert.equal(
     /image_url: p\.image_url \?\? ''/.test(tabSrc),
     true,

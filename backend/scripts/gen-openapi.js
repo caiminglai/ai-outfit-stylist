@@ -95,6 +95,36 @@ function sourceOf(file) {
   return fileCache.get(file)
 }
 
+/**
+ * 一个挂载点的注册语句可能在**几个文件**里。
+ *
+ * 为什么要这张表：`mountToFile` 只认 `server.js` 那句 `app.use('/api/wardrobe', wardrobeRoutes)`
+ * 指向的文件，而路由文件自己可以再拆（11-03 把「二、搭配组合」整段搬到
+ * `routes/wardrobeOutfit.js`，URL 前缀仍是 `/api/wardrobe`）。按挂载文件一处找注释
+ * 会找不到 ⇒ 摘要退回 `METHOD /path` 那种硬拼的丑东西，接口说明书凭空退化。
+ *
+ * 口径（刻意收得很窄，宁可漏也不认错）：候选＝挂载文件本身（**排第一**，原口径一个字不变）
+ * ＋它 `require('./x')` 进来、又在**不带路径**的 `use(x)` 里挂回去的那些文件。
+ * 为什么必须加这第二道筛：11-03 第一版只筛 require，于是顶层 `app.get('/health'` 在自己
+ * 文件里没注释（它上面确实没写），退到 require 名单里的 `routes/crossCabinet.js` 命中了
+ * 那一页自己的 `router.get('/health'` ⇒ 把**另一个接口**的「三柜整体健康检查」安到了
+ * `/health` 头上（现量：产物 327397→327410 B，唯一一处内容差就是这句）。带路径挂载的
+ * （`app.use('/api/x', xRoutes)`）各走各的 prefix，本就不该串味 ⇒ 这里只认同前缀的裸 use。
+ * ⛔ 不做递归：两层够覆盖"路由文件拆一段出去"。顺序即优先级，第一个查到注释的文件赢。
+ */
+function candidateFiles(prefix) {
+  const file = mountToFile[prefix] || (prefix === '' ? serverPath : null)
+  if (!file) return []
+  const src = sourceOf(file)
+  const out = [file]
+  for (const m of src.matchAll(/const\s+(\w+)\s*=\s*require\('\.\/([\w/.-]+)'\)/g)) {
+    // 只认「这个变量被不带路径地 use 进来」——裸 use 才是同一前缀下的续拆
+    const mountedBare = new RegExp('\\.use\\(\\s*' + m[1] + '\\s*\\)').test(src)
+    if (mountedBare) out.push(path.join(path.dirname(file), m[2] + '.js'))
+  }
+  return out
+}
+
 // banner 行（`// ===== 一、衣橱单品 CRUD =====`、整行只有 = - * 的分隔线）不算摘要
 const isBanner = (t) => /^[-=*·—\s]*$/.test(t) || (t.match(/[-=*]/g) || []).length > t.length * 0.4
 
@@ -383,11 +413,15 @@ function tagFor(p) {
 // `GET /api/accessory/gaps` 好读。退来的那条打 `x-summary-inherited: true` 说明来源。
 const commentByPath = new Map()
 for (const e of entries) {
-  const file = mountToFile[e.prefix] || (e.prefix === '' ? serverPath : null)
   const sub = e.rawPath.slice(e.prefix.length) || '/'
-  const own = commentAbove(file, e.method, sub)
-  if (own) commentByPath.set(e.rawPath + '#' + e.method, own)
-  if (own && !commentByPath.has(e.rawPath + '#*')) commentByPath.set(e.rawPath + '#*', own)
+  // 挂载文件排第一，查不到再按 require 顺序退到拆出去的那一层（见 candidateFiles）
+  for (const file of candidateFiles(e.prefix)) {
+    const own = commentAbove(file, e.method, sub)
+    if (!own) continue
+    commentByPath.set(e.rawPath + '#' + e.method, own)
+    if (!commentByPath.has(e.rawPath + '#*')) commentByPath.set(e.rawPath + '#*', own)
+    break
+  }
 }
 
 for (const e of entries) {

@@ -6,6 +6,9 @@ const express = require('express')
 const { sendSuccess, sendError } = require('../utils/response')
 const { asText, ownValue } = require('../utils/common')
 const { beijingDateStr } = require('../utils/beijingTime')
+// 报错与告警一律走 utils/logger：console.* 只落 stdout，容器里那份不归本项目留档，
+// 事后按订单号/用户查不到痕迹（判据见 test/loggerDiscipline.test.js）
+const { error: logErr } = require('../utils/logger')
 const {
   getDailyHoroscope,
   getAllHoroscopesBrief,
@@ -46,7 +49,7 @@ router.get('/daily', (req, res) => {
     const result = getDailyHoroscope(zodiac)
     return sendSuccess(res, result)
   } catch (err) {
-    console.error('[星座运势] 获取失败:', err)
+    logErr('[星座运势] 获取失败:', err)
     return sendError(res, '获取运势失败', 500)
   }
 })
@@ -66,7 +69,7 @@ router.get('/list', (req, res) => {
       '获取运势列表成功',
     )
   } catch (err) {
-    console.error('[星座运势] 获取列表失败:', err)
+    logErr('[星座运势] 获取列表失败:', err)
     return sendError(res, '获取运势列表失败', 500)
   }
 })

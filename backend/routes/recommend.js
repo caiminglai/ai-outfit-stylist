@@ -14,6 +14,9 @@ const { optionalUser, getCurrentUser, getSessionId } = require('../middleware/au
 const { rateLimit } = require('../middleware/rateLimit')
 const { gateBody } = require('../middleware/bodyGate')
 const { buildRecommendation } = require('../services/recommendEngine')
+// 报错与告警一律走 utils/logger：console.* 只落 stdout，容器里那份不归本项目留档，
+// 事后按订单号/用户查不到痕迹（判据见 test/loggerDiscipline.test.js）
+const { error: logErr, warn: logWarn } = require('../utils/logger')
 const {
   loadArchive,
   mergeWithArchive,
@@ -62,7 +65,7 @@ const router = express.Router()
  * 推荐模式取值表。
  * 库里 rule_groups.mode 实测只有 store／personal 两种（seed 264 组：store 102／personal 162），
  * 后台标签表也是这两档（static/admin/admin-utils.js:75），前端类型同样锁死
- * （app/src/api.ts:366 `'store' | 'personal'`）。原来这里是 `asText(data.mode) || 'store'`：
+ * （app/src/api/recommend.ts:10 `'store' | 'personal'`，11-03 按内容重指：这一段原先在 api.ts 里）。原来这里是 `asText(data.mode) || 'store'`：
  * 任意长串都能一路写进 recommendation_logs.mode，再由 routes/history.js:27 当作
  * `scenario` 原样回吐到"我的历史"里 ⇒ 一条脏数据就是一个用户看得见的假场景名。
  * 认不到就当没填的两档之一，不再往库里写第三种值。
@@ -137,7 +140,7 @@ function loadWardrobeForEngine(who) {
     return rows.map((row) => normalizeItem(row)).map(projectWardrobeForEngine)
   } catch (err) {
     // 读衣橱失败不该把整次推荐打挂：这一格读不到就是"没有可算的衣服"，退回改前的名单
-    console.error('[推荐] 读取衣橱候选失败:', err)
+    logErr('[推荐] 读取衣橱候选失败:', err)
     return []
   }
 }
@@ -153,7 +156,7 @@ router.post('/engine', recommendLimiter, async (req, res) => {
       return sendError(res, '缺少 profile 数据', 400)
     }
     // mode 认不到就 400，不再原样往库里写（见上面 RECOMMEND_MODES 的说明）。
-    // 前端 api.ts:366 把这两档写死在类型里，本仓没有第三种调用方。
+    // 前端 app/src/api/recommend.ts:10 把这两档写死在类型里，本仓没有第三种调用方。
     const normalizedMode = normalizeMode(data.mode, 'store')
     if (!normalizedMode.ok) return sendError(res, normalizedMode.error, 400)
     const mode = normalizedMode.mode
@@ -277,7 +280,7 @@ router.post('/engine', recommendLimiter, async (req, res) => {
       '规则引擎推荐已生成',
     )
   } catch (err) {
-    console.error('[推荐] 规则引擎失败:', err)
+    logErr('[推荐] 规则引擎失败:', err)
     return sendError(res, '推荐失败', 500)
   }
 })
@@ -325,7 +328,7 @@ router.post('/feedback', feedbackLimiter, (req, res) => {
     if (!stat) return sendError(res, '规则不存在', 404)
     return sendSuccess(res, stat, '反馈已记录')
   } catch (err) {
-    console.error('[推荐] 反馈记录失败:', err)
+    logErr('[推荐] 反馈记录失败:', err)
     return sendError(res, '反馈记录失败', 500)
   }
 })
@@ -364,7 +367,7 @@ router.delete('/feedback/group', feedbackLimiter, (req, res) => {
       deleted ? '这条评分已清除' : '这条本来就没有你的评分',
     )
   } catch (err) {
-    console.error('[推荐] 反馈撤销失败:', err)
+    logErr('[推荐] 反馈撤销失败:', err)
     return sendError(res, '撤销失败', 500)
   }
 })
@@ -410,7 +413,7 @@ router.post('/feedback/item', feedbackLimiter, (req, res) => {
       '这件衣服的评分已记录',
     )
   } catch (err) {
-    console.error('[推荐] 衣物评分记录失败:', err)
+    logErr('[推荐] 衣物评分记录失败:', err)
     return sendError(res, '评分记录失败', 500)
   }
 })
@@ -431,7 +434,7 @@ router.get('/feedback/items', (req, res) => {
       .filter((v) => Number.isSafeInteger(v) && v > 0)
     return sendSuccess(res, { items: listItemFeedback(actor, ids) })
   } catch (err) {
-    console.error('[推荐] 衣物评分读取失败:', err)
+    logErr('[推荐] 衣物评分读取失败:', err)
     return sendError(res, '查询失败', 500)
   }
 })
@@ -467,7 +470,7 @@ router.delete('/feedback/item', feedbackLimiter, (req, res) => {
       out.deleted ? '这件衣服的评分已清除' : '这件衣服本来就没有你的评分',
     )
   } catch (err) {
-    console.error('[推荐] 衣物评分撤销失败:', err)
+    logErr('[推荐] 衣物评分撤销失败:', err)
     return sendError(res, '撤销失败', 500)
   }
 })
@@ -504,10 +507,10 @@ router.post(
       // 调用方把某块传成非对象(如 {"top_spec":1})时那是 TypeError,本质是"入参结构不对",该 400,
       // 而不是被外层一律算成服务器故障 500。真正的内部异常仍归 500。
       if (err instanceof TypeError) {
-        console.warn('[推荐] 文案生成入参结构不对:', err.message)
+        logWarn('[推荐] 文案生成入参结构不对:', err.message)
         return sendError(res, 'recommendation 结构不正确', 400)
       }
-      console.error('[推荐] 文案生成失败:', err)
+      logErr('[推荐] 文案生成失败:', err)
       return sendError(res, '文案生成失败', 500)
     }
   },

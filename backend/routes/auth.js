@@ -14,8 +14,9 @@ const {
   getSessionId,
 } = require('../middleware/auth')
 const { rateLimit } = require('../middleware/rateLimit')
-// 日志走 utils/logger：console.log 只落 stdout，容器里查不到（别名与 server.js:42 保持一致）
-const { log: logMsg } = require('../utils/logger')
+// 日志走 utils/logger：console.* 只落 stdout，容器里那份不归本项目留档，落盘的只有
+// logs/server-*.log 这一份（别名与 server.js:42 保持一致，判据见 test/loggerDiscipline.test.js）
+const { log: logMsg, error: logErr, warn: logWarn } = require('../utils/logger')
 
 const router = express.Router()
 
@@ -128,7 +129,7 @@ function mergeGuestIntoAccount(guestSessionId, accountUserId, accountSessionId) 
   try {
     db.prepare('DELETE FROM users WHERE id = ?').run(guest.id)
   } catch (err) {
-    console.warn('[认证] 游客身份行未能删除:', err.message)
+    logWarn('[认证] 游客身份行未能删除:', err.message)
   }
 
   const total = Object.values(moved).reduce((a, b) => a + b, 0)
@@ -150,7 +151,7 @@ router.post('/guest', guestLimiter, (req, res) => {
 
     return sendSuccess(res, { session_id: sessionId, user_id: result.lastInsertRowid })
   } catch (err) {
-    console.error('[认证] 游客登录失败:', err)
+    logErr('[认证] 游客登录失败:', err)
     return sendError(res, '登录失败', 500)
   }
 })
@@ -202,7 +203,7 @@ router.post('/register', registerLimiter, (req, res) => {
     try {
       merged = mergeGuestIntoAccount(getSessionId(req), userId, sessionId)
     } catch (err) {
-      console.warn('[认证] 游客数据过户失败(注册已成功，数据仍在原游客身份下):', err.message)
+      logWarn('[认证] 游客数据过户失败(注册已成功，数据仍在原游客身份下):', err.message)
     }
 
     return sendSuccess(
@@ -211,7 +212,7 @@ router.post('/register', registerLimiter, (req, res) => {
       '注册成功',
     )
   } catch (err) {
-    console.error('[认证] 注册失败:', err)
+    logErr('[认证] 注册失败:', err)
     return sendError(res, '注册失败', 500)
   }
 })
@@ -241,7 +242,7 @@ router.post('/login', loginLimiter, (req, res) => {
     try {
       merged = mergeGuestIntoAccount(getSessionId(req), acc.user_id, acc.session_id)
     } catch (err) {
-      console.warn('[认证] 游客数据过户失败(登录已成功):', err.message)
+      logWarn('[认证] 游客数据过户失败(登录已成功):', err.message)
     }
 
     return sendSuccess(res, {
@@ -252,7 +253,7 @@ router.post('/login', loginLimiter, (req, res) => {
       merged,
     })
   } catch (err) {
-    console.error('[认证] 登录失败:', err)
+    logErr('[认证] 登录失败:', err)
     return sendError(res, '登录失败', 500)
   }
 })
@@ -287,7 +288,7 @@ router.post('/admin/login', adminLoginLimiter, (req, res) => {
     const token = generateAdminToken(admin.username)
     return sendSuccess(res, { token })
   } catch (err) {
-    console.error('[认证] 管理员登录失败:', err)
+    logErr('[认证] 管理员登录失败:', err)
     return sendError(res, '登录失败', 500)
   }
 })
@@ -336,7 +337,7 @@ router.get('/admin/accounts', adminLoginRequired, (req, res) => {
       })),
     })
   } catch (err) {
-    console.error('[认证] 读取会员列表失败:', err)
+    logErr('[认证] 读取会员列表失败:', err)
     return sendError(res, '读取失败', 500)
   }
 })
@@ -362,7 +363,7 @@ router.post('/admin/reset-password', adminLoginRequired, (req, res) => {
     logMsg(`[认证] 管理员已重置手机号 ${phone.slice(0, 3)}****${phone.slice(-4)} 的密码`)
     return sendSuccess(res, { phone }, '密码已重置，请把新密码交给本人')
   } catch (err) {
-    console.error('[认证] 重置密码失败:', err)
+    logErr('[认证] 重置密码失败:', err)
     return sendError(res, '重置失败', 500)
   }
 })

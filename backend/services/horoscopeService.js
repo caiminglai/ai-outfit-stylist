@@ -6,6 +6,9 @@
 const crypto = require('crypto')
 const { ownValue } = require('../utils/common')
 const { beijingDateStr } = require('../utils/beijingTime')
+// 报错与告警一律走 utils/logger：console.* 只落 stdout，容器里那份不归本项目留档，
+// 事后按订单号/用户查不到痕迹（判据见 test/loggerDiscipline.test.js）
+const { warn: logWarn } = require('../utils/logger')
 
 // ============================================================
 // 星座中文映射
@@ -710,7 +713,7 @@ function getAllHoroscopesBrief() {
         lucky_color: full.lucky_color,
       })
     } catch (e) {
-      console.warn(`[星座运势] 获取 ${sign} 概要失败:`, e.message)
+      logWarn(`[星座运势] 获取 ${sign} 概要失败:`, e.message)
     }
   }
   return briefList

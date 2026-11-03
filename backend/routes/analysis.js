@@ -9,6 +9,9 @@ const db = require('../db/init')
 const { sendSuccess, sendError } = require('../utils/response')
 const { loginRequired } = require('../middleware/auth')
 const { rateLimit } = require('../middleware/rateLimit')
+// 报错与告警一律走 utils/logger：console.* 只落 stdout，容器里那份不归本项目留档，
+// 事后按订单号/用户查不到痕迹（判据见 test/loggerDiscipline.test.js）
+const { error: logErr, warn: logWarn } = require('../utils/logger')
 const { gateBody, capJson, FORM_BLOB_LIMITS } = require('../middleware/bodyGate')
 const {
   loadPrefill,
@@ -54,7 +57,7 @@ router.get('/face/:photoId', loginRequired, (req, res) => {
 
     return sendSuccess(res, { feature })
   } catch (err) {
-    console.error('[分析] 获取面部分析结果失败:', err)
+    logErr('[分析] 获取面部分析结果失败:', err)
     return sendError(res, '获取分析结果失败', 500)
   }
 })
@@ -145,7 +148,7 @@ router.post('/body', loginRequired, (req, res) => {
       neck_length: metric.neck_length ?? null,
     })
   } catch (err) {
-    console.error('[分析] 保存身体指标失败:', err)
+    logErr('[分析] 保存身体指标失败:', err)
     return sendError(res, '保存失败', 500)
   }
 })
@@ -156,7 +159,7 @@ router.get('/body', loginRequired, (req, res) => {
     const metric = db.prepare('SELECT * FROM body_metrics WHERE user_id = ?').get(req.user.id)
     return sendSuccess(res, { metric: metric || null })
   } catch (err) {
-    console.error('[分析] 获取身体指标失败:', err)
+    logErr('[分析] 获取身体指标失败:', err)
     return sendError(res, '获取失败', 500)
   }
 })
@@ -173,7 +176,7 @@ router.get('/archive', loginRequired, (req, res) => {
       not_recorded: unrecordedNumCells(profile),
     })
   } catch (err) {
-    console.error('[分析] 获取长期档案失败:', err)
+    logErr('[分析] 获取长期档案失败:', err)
     return sendError(res, '获取失败', 500)
   }
 })
@@ -196,7 +199,7 @@ router.put('/archive', loginRequired, draftLimiter, (req, res) => {
     const draft = saveDraft(req.user.id, form)
     return sendSuccess(res, saved, draft ? '已保存' : '没有新内容要保存')
   } catch (err) {
-    console.error('[分析] 保存草稿失败:', err)
+    logErr('[分析] 保存草稿失败:', err)
     return sendError(res, '保存失败', 500)
   }
 })
@@ -307,7 +310,7 @@ router.delete('/archive', loginRequired, (req, res) => {
         }
       } catch (err) {
         filesFailed += 1
-        console.warn('[档案] 删除照片文件失败:', err.message)
+        logWarn('[档案] 删除照片文件失败:', err.message)
       }
     }
 
@@ -317,7 +320,7 @@ router.delete('/archive', loginRequired, (req, res) => {
       '您的档案与相关记录已删除',
     )
   } catch (err) {
-    console.error('[分析] 删除长期档案失败:', err)
+    logErr('[分析] 删除长期档案失败:', err)
     return sendError(res, '删除失败', 500)
   }
 })
@@ -346,7 +349,7 @@ router.post(
       }
       return sendSuccess(res, result)
     } catch (err) {
-      console.error('[风格诊断] 失败:', err)
+      logErr('[风格诊断] 失败:', err)
       return sendError(res, '诊断失败', 500)
     }
   },

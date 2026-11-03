@@ -2,9 +2,17 @@
  * 日志工具 - 同时输出到控制台和文件,按日期轮转,保留最近 7 天
  *
  * 用法:
- *   const { log, error } = require('./utils/logger')
+ *   const { log, error, warn } = require('./utils/logger')
  *   log('服务启动')          // 等同 console.log,同时写文件
+ *   warn('要留意')           // 等同 console.warn,文件里带 [WARN]
  *   error('出错了', err)     // 等同 console.error,同时写文件
+ *
+ * 为什么应用代码不许直接调 console.*：console 只把字打到 stdout/stderr，容器里那份输出
+ * 谁在收、留多久都不由本项目定；而 logs/server-YYYY-MM-DD.log 是本机与容器都保证留 7 天、
+ * 按北京日切的那一份。catch 里的报错走 console.error 等于"当场打印即销毁"，事后按订单号
+ * 或用户查不到任何痕迹。11-03 之前 routes 里有 160 处就是这个状态（判据与收口见
+ * `docs/依据/06-查证记录与负向结果.md` 的日志归口条目，纪律由
+ * `test/loggerDiscipline.test.js` 兜）。
  */
 
 const fs = require('fs')
@@ -114,6 +122,20 @@ function log(...args) {
 }
 
 /**
+ * 告警日志 - 输出到控制台(stderr)并写文件,带 [WARN] 标记
+ *
+ * 为什么单开一个通道而不是并进 [ERROR]：查问题时第一件事是按级别过滤，
+ * 把"配额快用完了"和"下单炸了"洗成同一个 [ERROR] 就把那一步做没了。
+ * @param {...any} args - 日志内容
+ */
+function warn(...args) {
+  console.warn(...args)
+  const message = args.map(safeText).join(' ')
+  writeToFile('[WARN] ' + message)
+  cleanupOldLogs()
+}
+
+/**
  * 错误日志 - 同时输出到控制台(stderr)和文件
  * @param {...any} args - 日志内容
  */
@@ -124,4 +146,4 @@ function error(...args) {
   cleanupOldLogs()
 }
 
-module.exports = { log, error, LOG_DIR, getTodayFileName, logTimeStamp }
+module.exports = { log, warn, error, LOG_DIR, getTodayFileName, logTimeStamp }

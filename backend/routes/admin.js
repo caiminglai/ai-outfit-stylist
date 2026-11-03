@@ -12,6 +12,9 @@ const { sendSuccess, sendError } = require('../utils/response')
 const { adminLoginRequired } = require('../middleware/auth')
 const { ownValue, parsePagination } = require('../utils/common')
 const { rateLimit } = require('../middleware/rateLimit')
+// 报错与告警一律走 utils/logger：console.* 只落 stdout，容器里那份不归本项目留档，
+// 事后按订单号/用户查不到痕迹（判据见 test/loggerDiscipline.test.js）
+const { error: logErr } = require('../utils/logger')
 
 const router = express.Router()
 
@@ -198,7 +201,7 @@ router.get('/api/tables', adminLoginRequired, (req, res) => {
       data: tablesInfo,
     })
   } catch (err) {
-    console.error('[管理] 获取表结构失败:', err)
+    logErr('[管理] 获取表结构失败:', err)
     return res
       .status(500)
       .json({ success: false, error: { code: 'INTERNAL_ERROR', message: '获取表结构失败' } })
@@ -318,7 +321,7 @@ router.get('/api/data/:tableName', adminLoginRequired, (req, res) => {
       },
     })
   } catch (err) {
-    console.error('[管理] 获取数据失败:', err)
+    logErr('[管理] 获取数据失败:', err)
     return res
       .status(500)
       .json({ success: false, error: { code: 'INTERNAL_ERROR', message: '获取数据失败' } })
@@ -371,7 +374,7 @@ router.get('/api/routes', adminLoginRequired, (req, res) => {
       data: filtered,
     })
   } catch (err) {
-    console.error('[管理] 获取路由失败:', err)
+    logErr('[管理] 获取路由失败:', err)
     return res
       .status(500)
       .json({ success: false, error: { code: 'INTERNAL_ERROR', message: '获取路由失败' } })
@@ -393,7 +396,7 @@ router.get('/api/stats', adminLoginRequired, (req, res) => {
       data: stats,
     })
   } catch (err) {
-    console.error('[管理] 获取统计失败:', err)
+    logErr('[管理] 获取统计失败:', err)
     return res
       .status(500)
       .json({ success: false, error: { code: 'INTERNAL_ERROR', message: '获取统计失败' } })
@@ -479,7 +482,7 @@ router.get(['/api/source', '/api/source/*'], adminLoginRequired, (req, res) => {
       },
     })
   } catch (err) {
-    console.error('[管理] 获取源代码失败:', err)
+    logErr('[管理] 获取源代码失败:', err)
     return res
       .status(500)
       .json({ success: false, error: { code: 'INTERNAL_ERROR', message: '获取源代码失败' } })
@@ -545,7 +548,7 @@ router.get('/api/functions', adminLoginRequired, (req, res) => {
 
     return res.json({ success: true, data: modules })
   } catch (err) {
-    console.error('[管理] 获取模块结构失败:', err)
+    logErr('[管理] 获取模块结构失败:', err)
     return res
       .status(500)
       .json({ success: false, error: { code: 'INTERNAL_ERROR', message: '获取模块结构失败' } })

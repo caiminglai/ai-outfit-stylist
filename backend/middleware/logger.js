@@ -8,7 +8,7 @@
  * （和 server.js 里 /uploads 那条同一口径）。
  */
 
-const { log } = require('../utils/logger')
+const { log: logMsg } = require('../utils/logger')
 
 /** 整值抹掉的敏感 query 键名（小写比较） */
 const MASKED_QUERY_KEYS = [
@@ -124,7 +124,7 @@ function requestLogger(req, res, next) {
     const duration = Date.now() - start
     const status = res.statusCode
     const tag = status >= 400 ? 'WARN' : 'INFO'
-    log(`[${tag}] ${method} ${url} ${status} ${duration}ms (${ip})`)
+    logMsg(`[${tag}] ${method} ${url} ${status} ${duration}ms (${ip})`)
   })
 
   next()

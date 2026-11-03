@@ -7,6 +7,9 @@ const db = require('../db/init')
 const { sendSuccess, sendCreated, sendError } = require('../utils/response')
 const { asText, asNumber, parseJsonField, toEnabledBit } = require('../utils/common')
 const { adminLoginRequired } = require('../middleware/auth')
+// 报错与告警一律走 utils/logger：console.* 只落 stdout，容器里那份不归本项目留档，
+// 事后按订单号/用户查不到痕迹（判据见 test/loggerDiscipline.test.js）
+const { error: logErr } = require('../utils/logger')
 
 const router = express.Router()
 
@@ -76,7 +79,7 @@ router.get('/products', adminLoginRequired, (req, res) => {
     })
     return sendSuccess(res, products)
   } catch (err) {
-    console.error('[库存] 获取商品失败:', err)
+    logErr('[库存] 获取商品失败:', err)
     return sendError(res, '获取失败', 500)
   }
 })
@@ -143,7 +146,7 @@ router.post('/products', adminLoginRequired, (req, res) => {
 
     return sendCreated(res, { id: result.lastInsertRowid })
   } catch (err) {
-    console.error('[库存] 添加失败:', err)
+    logErr('[库存] 添加失败:', err)
     return sendError(res, '添加失败', 500)
   }
 })
@@ -222,7 +225,7 @@ router.put('/products/:id', adminLoginRequired, (req, res) => {
 
     return sendSuccess(res, null)
   } catch (err) {
-    console.error('[库存] 更新失败:', err)
+    logErr('[库存] 更新失败:', err)
     return sendError(res, '更新失败', 500)
   }
 })
@@ -258,7 +261,7 @@ router.post('/categories', adminLoginRequired, (req, res) => {
       .run(categoryName, categoryCode, asNumber(sort_order, 0))
     return sendCreated(res, { id: result.lastInsertRowid })
   } catch (err) {
-    console.error('[库存] 添加分类失败:', err)
+    logErr('[库存] 添加分类失败:', err)
     if (err.message && err.message.includes('UNIQUE')) {
       return sendError(res, '分类编码已存在', 400)
     }
@@ -287,7 +290,7 @@ router.put('/categories/:id', adminLoginRequired, (req, res) => {
     }
     return sendSuccess(res, null)
   } catch (err) {
-    console.error('[库存] 更新分类失败:', err)
+    logErr('[库存] 更新分类失败:', err)
     if (err.message && err.message.includes('UNIQUE')) {
       return sendError(res, '分类编码已存在', 400)
     }

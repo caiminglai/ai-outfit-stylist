@@ -1,5 +1,5 @@
 /**
- * 排序层（10-29 从 recommendEngine.js 拆出，行为不变；原文 :804-1142）。
+ * 排序层（10-29 从 recommendEngine.js 拆出，行为不变；拆前原文 804-1142 行）。
  * 职责：三维加权综合分（rankDims）、同分裁决／强制在场／截断（rankAndTruncate）。
  * RANK_* 常数与 COLOR_BORROW_WEIGHT 的全部真相在这一个文件里，⛔ 别处不许抄第二份
  * （regressRankWeights.test.js 的漂移哨兵钉的就是本文件）。

@@ -19,6 +19,9 @@ const express = require('express')
 const db = require('../db/init')
 const { sendSuccess, sendError } = require('../utils/response')
 const { loginRequired } = require('../middleware/auth')
+// 报错与告警一律走 utils/logger：console.* 只落 stdout，容器里那份不归本项目留档，
+// 事后按订单号/用户查不到痕迹（判据见 test/loggerDiscipline.test.js）
+const { error: logErr } = require('../utils/logger')
 const { parsePagination, asId } = require('../utils/common')
 
 const router = express.Router()
@@ -58,7 +61,7 @@ router.get('/', loginRequired, (req, res) => {
 
     return sendSuccess(res, { history })
   } catch (err) {
-    console.error('[历史] 获取失败:', err)
+    logErr('[历史] 获取失败:', err)
     return sendError(res, '获取历史记录失败', 500)
   }
 })
@@ -87,7 +90,7 @@ router.get('/:id', loginRequired, (req, res) => {
 
     return sendSuccess(res, { record })
   } catch (err) {
-    console.error('[历史] 获取详情失败:', err)
+    logErr('[历史] 获取详情失败:', err)
     return sendError(res, '获取记录详情失败', 500)
   }
 })
@@ -113,7 +116,7 @@ router.delete('/:id', loginRequired, (req, res) => {
     )
     return sendSuccess(res, null)
   } catch (err) {
-    console.error('[历史] 删除失败:', err)
+    logErr('[历史] 删除失败:', err)
     return sendError(res, '删除失败', 500)
   }
 })

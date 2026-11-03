@@ -70,7 +70,7 @@ const REPS_MAX = 0.03
  * 出账的七个维度（`19` §五；第八阶段建的是前五个，本轮加 `warmth` 与 `reps`）。
  * ⚠️ 下面这段是 10-20 建档时的原话，**前提已在 10-21 被现量推翻**（`19` §十 订正第 1 条）：
  * 当时量到 `grep -n occasion services/recommendEngine.js` 回 0 处、并据此断言"候选身上只有色族与
- * 版型这两格取得到值"。今天同一把尺子回 **3 处**，而唯一投影 `utils/common.js:358-376`
+ * 版型这两格取得到值"。今天同一把尺子回 **3 处**，而唯一投影 `utils/common.js:392-410`
  * 一直带着 `fabric_weight`/`occasion_tags`。⇒ `occasion` 与厚薄这一维**从本轮起进乘子**；
  * `season` 仍只出账——不是取不到值，是 `rule_conditions` 里那一维的词形没归一
  * （现量 10-21：`{"season": "春"}` 与 `"夏"` 两种写法混存，`19` §三 第 7 条），
@@ -404,7 +404,7 @@ function candAxisValue(cand, axis, dim) {
     return tags.slice().sort((a, b) => a.localeCompare(b))[0]
   }
   if (axis === 'warmth') {
-    // 衣橱那一路的厚薄在 `body_fit.top.fabric_weight`（`topFitBody.js:716`，没填就是 null）；
+    // 衣橱那一路的厚薄在 `body_fit.top.fabric_weight`（`backend/services/topFit/shape.js:274`，没填就是 null）；
     // 直接投进来的行也可能只带 `fabric_weight` 这一格，两个来源都认，⛔ 只认那三个词。
     const v =
       asText(cand.fabric_weight) ||

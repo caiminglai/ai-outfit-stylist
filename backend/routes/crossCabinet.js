@@ -6,6 +6,9 @@
  */
 const express = require('express')
 const db = require('../db/init')
+// 报错与告警一律走 utils/logger：console.* 只落 stdout，容器里那份不归本项目留档，
+// 事后按订单号/用户查不到痕迹（判据见 test/loggerDiscipline.test.js）
+const { error: logErr } = require('../utils/logger')
 const { sendSuccess, sendError } = require('../utils/response')
 const {
   getSessionId,
@@ -712,7 +715,7 @@ router.get('/recommend', (req, res) => {
       },
     })
   } catch (err) {
-    console.error('[跨柜] 推荐失败:', err)
+    logErr('[跨柜] 推荐失败:', err)
     return sendError(res, '推荐失败', 500)
   }
 })
@@ -726,7 +729,7 @@ router.get('/seasonal', (req, res) => {
     const result = seasonalReminder({}, sessionId)
     return sendSuccess(res, result)
   } catch (err) {
-    console.error('[跨柜] 季节提醒失败:', err)
+    logErr('[跨柜] 季节提醒失败:', err)
     return sendError(res, '查询失败', 500)
   }
 })
@@ -740,7 +743,7 @@ router.get('/brands', (req, res) => {
     const result = analyzeBrandPreference(sessionId)
     return sendSuccess(res, result)
   } catch (err) {
-    console.error('[跨柜] 品牌分析失败:', err)
+    logErr('[跨柜] 品牌分析失败:', err)
     return sendError(res, '分析失败', 500)
   }
 })
@@ -754,7 +757,7 @@ router.get('/health', (req, res) => {
     const result = cabinetHealthCheck({}, sessionId)
     return sendSuccess(res, result)
   } catch (err) {
-    console.error('[跨柜] 健康检查失败:', err)
+    logErr('[跨柜] 健康检查失败:', err)
     return sendError(res, '检查失败', 500)
   }
 })

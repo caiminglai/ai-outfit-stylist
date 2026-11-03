@@ -16,6 +16,9 @@
 
 const db = require('../db/init')
 const { FIELD_LABELS } = require('./ruleExplainer')
+// 报错与告警一律走 utils/logger：console.* 只落 stdout，容器里那份不归本项目留档，
+// 事后按订单号/用户查不到痕迹（判据见 test/loggerDiscipline.test.js）
+const { error: logErr, warn: logWarn } = require('../utils/logger')
 const { strictNum, limitOf } = require('./bodyLimits')
 const { asText, asNumber, ownValue, stripIdentityFields } = require('../utils/common')
 
@@ -500,7 +503,7 @@ function writeRecommendationLog({ sessionId, userId, storeId, mode, profile, res
   // 不如在这里把原因说清楚。补一个兜底串更不行——预填是按 session_id 查的，
   // 大家共用同一个兜底值就等于把别人的画像回给下一个人。
   if (!sid) {
-    console.warn('[档案] 推荐样本未落库：缺少 session_id，无法归属到人')
+    logWarn('[档案] 推荐样本未落库：缺少 session_id，无法归属到人')
     return null
   }
   try {
@@ -529,7 +532,7 @@ function writeRecommendationLog({ sessionId, userId, storeId, mode, profile, res
     return Number(info.lastInsertRowid)
   } catch (err) {
     // 样本写不进去不能带崩推荐
-    console.error('[档案] 推荐样本写入失败:', err.message)
+    logErr('[档案] 推荐样本写入失败:', err.message)
     return null
   }
 }
@@ -574,7 +577,7 @@ function saveTags(userId, result) {
     }
     return loadTags(userId)
   } catch (err) {
-    console.error('[档案] 标签写入失败:', err.message)
+    logErr('[档案] 标签写入失败:', err.message)
     return []
   }
 }

@@ -46,6 +46,16 @@ jobs:
       - name: Lint
         run: npm run lint
 
+      # 前端行为测试（11-03 第二块大项开的第一条通道）：改前 `find app/src -name '*.test.*' -o
+      # -name '*.spec.*'` 现量 **0 份**、`app/package.json` 里没有 test 脚本，前端只有
+      # typecheck/lint/build 三道"能编译"的门 ⇒ 拆千行组件时没有任何回归防线。现在 vitest＋jsdom
+      # 跑 `src/**/*.test.{ts,tsx}`：肤色取色数学、选图预检、依据档位、toast 去重、EvidenceTag 真渲染。
+      # 跨语言的对账（前端那几份"明知故开的第二份常量"↔ 后端唯一实现处）不放这里，放
+      # `backend/test/frontendConstantsParity.test.js`——前端 tsconfig 的 types 只有 vite/client，
+      # 测试文件 import node:fs 会让上面的 Type check 红。
+      - name: Unit test
+        run: npm test
+
       - name: Build
         run: npm run build
 
@@ -89,6 +99,14 @@ jobs:
       # 接手的人照着过期的文档写前端。本机同一条命令实测 rc=0（见路线文档 §61）。
       - name: OpenAPI spec is up to date
         run: npm run openapi:check
+
+      # 静态资产门禁（11-03 新增，第六道门）：`app/public`＋`backend/static`＋`backend/templates`
+      # 这三处历史上不进任何门禁（prettier 只吃 `**/*.js`、eslint 只看 js），后台那几页 10-22 就栽过
+      # ——CI 全绿、页面是坏的，只有真浏览器看得见。`scripts/check-web-assets.js` 把 17 份第一方资产
+      # （html 基本盘：doctype/lang/charset/title；本地 src/href/action 能不能落到真文件或真路由；
+      # robots 与 sitemap 口径；后台 js 语法过 vm 解析）钉成 rc=1 会红的门，名单自动扫、不用维护。
+      - name: Web assets check
+        run: npm run assets:check
 
       # 两个 job 都只跑本机已实测通过的门禁：
       #   app  typecheck 0 错 / lint 0 error 9 warning / build 通过
@@ -154,3 +172,15 @@ jobs:
       #    app `format:check` rc=0、`eslint .` 0 error／13 warning、`tsc -b --force` rc=0、`vite build` rc=0（2.52 s）。
       #    ⛔ 本文件与 `docs/**` 都不在任何门禁射程内（prettier 只吃 `**/*.js`、eslint 只看 js），CI 不会替我校这些号；
       #    谁再动 `recommendEngine.js`／`colorMetrics.js`／四页 html 的行数，都要在 `backend/` 里手动跑一次 `node scripts/check-locators.js` 对账。
+      #   （2026-11-03 四项改进轮·前端测试通道与第六道门建档的现量，覆盖上面 10-30 那两行的读数，旧数只作历史留档）：
+      #    app 侧新开 `npm test`＝`vitest run`（本 job 的 Unit test 那步），devDependencies 加 vitest／jsdom／
+      #    @testing-library 的 react 与 dom 共四件，lockfile 同轮更新；本机现量 **5 份测试文件／52 条全过**
+      #    （肤色取色数学、选图预检、依据档位、toast 去重、EvidenceTag 真渲染），`eslint .` **0 error／0 warning**（55 份文件）、
+      #    `tsc -b --force` rc=0、`vite build` rc=0（2.78 s）、`format:check` rc=0、`npm audit --audit-level=high` rc=0。
+      #    backend 侧本轮两处加门：`assets:check`（上面 Web assets check 那步）与 `test/frontendConstantsParity.test.js`
+      #    （前端三处"明知故开的第二份常量"↔ 后端唯一实现处逐字对账）；本机现量 `node --test` **tests 928／pass 928／fail 0**、
+      #    `eslint .` **0 error／58 warning**（＝prefer-const 30＋no-unused-vars 28，no-console 87→0 由 `no-console: error` 逼平，
+      #    较 10-30 那行的 141 少 83 条）、`openapi:check` rc=0（116 条路径）、`assets:check` rc=0（17 份资产全过）、
+      #    `node scripts/check-locators.js` rc=0（扫描面 269 份；本轮新增的 6 份测试/配置文件贡献 **0** 条要动）。
+      #    ⚠️ vitest 在 jsdom 里只证"文本与结构在不在"，⛔ 不等于真浏览器点一次（那条规矩不变）；
+      #    ⛔ GitHub Actions 的真实读数本机仍验不了（不跑联网 git、`gh` 不在 PATH），要看 Actions 页。

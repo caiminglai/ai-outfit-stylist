@@ -30,7 +30,7 @@
 │   │   │   ├── recommend/            # 推荐结果卡片(RecommendTab/AlgorithmAnalysis/WeatherCard/HoroscopeCard/TryonCard/EnhancedTextCard)
 │   │   │   ├── CabinetManager.tsx    # 三柜调度器(Tab 按需加载)
 │   │   │   ├── CabinetConstants.ts   # 三柜常量
-│   │   │   ├── WardrobeTab.tsx       # 衣橱(CRUD/缺口分析/购物评估;"记一笔"日记面板挂在同目录 WardrobeDiary.tsx)
+│   │   │   ├── WardrobeTab.tsx       # 衣橱(CRUD/缺口分析/购物评估;"记一笔"日记面板挂在同目录 WardrobeDiary.tsx;11-03 拆分轮把图片地址/字段归一/偏差文案等 5 段挪进同目录 wardrobe/)
 │   │   │   ├── CosmeticTab.tsx       # 化妆品柜(CRUD/保质期/缺口分析)
 │   │   │   ├── AccessoryTab.tsx      # 配饰柜(CRUD/缺口分析)
 │   │   │   ├── CrossCabinetReport.tsx  # 跨柜联动总入口
@@ -40,13 +40,13 @@
 │   │   │   ├── CrossCabinetHealth.tsx  # 三柜健康检查
 │   │   │   ├── CustomerForm.tsx      # 门店模式顾客表单(快速采集)
 │   │   │   ├── PersonalProfileForm.tsx# 个人模式深度档案(全量采集)
-│   │   │   ├── RecommendationReport.tsx # 推荐结果展示(付费那份「我的报告」覆盖层复用同一渲染器,见同目录 PaidReports.tsx)
+│   │   │   ├── RecommendationReport.tsx # 推荐结果展示(付费那份「我的报告」覆盖层复用同一渲染器,见同目录 PaidReports.tsx;11-03 拆分轮把星级行与档位文案挪进同目录 recommend/)
 │   │   │   ├── InventoryCard.tsx     # 库存商品卡片
 │   │   │   └── ErrorBoundary.tsx     # 全局错误边界
-│   │   ├── pages/ExhibitionHall.tsx  # 主页(单页双模式入口)
+│   │   ├── pages/ExhibitionHall.tsx  # 主页(单页双模式入口;11-03 拆分轮把账号入口/服务面板/模型视图等 7 份挪进同目录 exhibition/)
 │   │   ├── hooks/useResponsive.ts    # 响应式布局(桌面分屏/手机竖横屏)
-│   │   ├── types/index.ts            # 全局 TypeScript 类型
-│   │   ├── api.ts                    # 后端 API 封装(含 X-Session-Id)
+│   │   ├── types/index.ts            # 全局 TypeScript 类型(11-03 拆分轮起本文件只做转发,正文在同目录那 10 份领域文件:profile/engine/rules/scores/wardrobe/cosmetic/accessory/crossCabinet/common/misc)
+│   │   ├── api.ts                    # 后端 API 封装(含 X-Session-Id;11-03 拆分轮起本文件只做转发,正文在同目录 api/ 那 12 份领域文件)
 │   │   ├── App.tsx / main.tsx        # 入口
 │   ├── public/                       # 独立静态页(vite 原样拷进 dist,后端 static 直发):model-gallery.html=3D 展厅 / pay.html=付款 / creator.html=投稿 / how-it-works.html=10-22 新建「这套系统是怎么造的」,展厅「选择模式」页第三张卡一键跳
 │   ├── build-esbuild.cjs             # 生产构建脚本(esbuild)
@@ -66,13 +66,13 @@
 │   │   ├── photos.js / analysis.js / tryon.js        # 上传/面容/试穿
 │   │   ├── clothing.js / weather.js / horoscope.js   # 服装识别/天气/星座
 │   │   └── history.js
-│   ├── services/                     # 服务层(27 个;尺子=ls backend/services/*.js | wc -l,10-22 05:3x 现量;新模块 wearPreference.js/collabFilter.js/itemFeedback.js、第五阶段 bodyDimEstimator.js、第十二阶段 paidReport.js(付款即交付:权益＋报告懒生成＋后台读数)、第十三阶段 fitInference.js(文案款式词/面料词→版型四档与厚薄三档,推不出回 null)都在这一层,下方树里不逐个列)
-│   │   ├── recommendEngine.js        # 推荐引擎(规则匹配 + 旧版兼容)
+│   ├── services/                     # 服务层(33 个;尺子=ls backend/services/*.js | wc -l,11-03 04:5x 现量;这一层另有 color/ enrich/ recommend/ topFit/ wardrobe/ 五个子目录,是拆分轮挪出去的正文,不计进上面这把尺;新模块 wearPreference.js/collabFilter.js/itemFeedback.js、第五阶段 bodyDimEstimator.js、第十二阶段 paidReport.js(付款即交付:权益＋报告懒生成＋后台读数)、第十三阶段 fitInference.js(文案款式词/面料词→版型四档与厚薄三档,推不出回 null)都在这一层,下方树里不逐个列)
+│   │   ├── recommendEngine.js        # 推荐引擎(规则匹配 + 旧版兼容;11-03 拆分轮把判族/重排/文案正文挪进同目录 recommend/ 那 7 份,本文件只留入口与编排)
 │   │   ├── ruleExplainer.js          # 把规则条件翻成中文(可解释性)
 │   │   ├── ruleFeedback.js           # 用户对规则的评好/差评计数
 │   │   ├── evidenceLevels.js         # 规则依据分档 A国标/B实证/C体系/D命理(判档唯一实现处)
-│   │   ├── colorMetrics.js           # 色度学(sRGB→Lab、CIEDE2000、色相角差、ITA°、上衣贴合分)
-│   │   ├── profileEnricher.js        # 档案增强(BMI/体型/腰臀比/腿身比/肩宽比;腰臀比分性别、腿身比按髋骨到脚跟 0.52/0.56 分档)
+│   │   ├── colorMetrics.js           # 色度学(sRGB→Lab、CIEDE2000、色相角差、ITA°、上衣贴合分;11-03 拆分轮把正文挪进同目录 color/ 那 5 份,本文件只留依据档位说明与转发出口)
+│   │   ├── profileEnricher.js        # 档案增强(BMI/体型/腰臀比/腿身比/肩宽比;腰臀比分性别、腿身比按髋骨到脚跟 0.52/0.56 分档;11-03 前一拆把五段正文挪进同目录 enrich/)
 │   │   ├── profileArchive.js         # 长期档案读写(身体/面容入库、算出的结论标签、计算前合并)
 │   │   ├── fullLookAdvisor.js        # 「今天这身」(三柜候选拼一套 + 冷暖皮定金属色)
 │   │   ├── baziWuxing.js             # 八字五行喜用神(命理口径,与 A/B 档分开表述)
@@ -96,7 +96,7 @@
 │   ├── templates/                    # 管理后台 HTML(admin.html / admin-login.html / learn-to-code.html＝/admin/learn 那份教程页)
 │   ├── static/                       # 管理后台 CSS/JS(⚠️ `.prettierignore` 与 `eslint.config.js` 都把 static/ 和 templates/ 整目录排除 ⇒ 这一片代码不过 CI 任何一道门，改动只能靠各自的 test 钉住)
 │   ├── uploads/                      # 用户上传(gitignore)
-│   ├── test/                         # 单元测试 56 个文件(尺子=ls backend/test/*.test.js | wc -l,10-22 21:3x 现量;node --test,非 vitest):推荐引擎/审美规则/今天这身/档案增强/日记×天气/付款即交付/版型推断(fitInference)＋采集三断点(phase13CollectionRoutes)＋后台「编程水平与独立路线」页(adminSkillPage)＋独立教程页(learnPage——⚠️ static/ 与 templates/ 不过 prettier/eslint,这两页只认各自的 test 这一把尺)
+│   ├── test/                         # 单元测试 67 个文件(尺子=ls backend/test/*.test.js | wc -l,11-03 04:5x 现量;node --test,非 vitest):推荐引擎/审美规则/今天这身/档案增强/日记×天气/付款即交付/版型推断(fitInference)＋采集三断点(phase13CollectionRoutes)＋后台「编程水平与独立路线」页(adminSkillPage)＋独立教程页(learnPage——⚠️ static/ 与 templates/ 不过 prettier/eslint,这两页只认各自的 test 这一把尺)
 │   ├── scripts/                      # 一次性维护脚本(非运行时必需)
 │   │   ├── gen-openapi.js            # 从 Express 路由栈生成 docs/api/openapi.json(--check 给 CI 防漂移)
 │   │   ├── flatten-textures.js       # 纹理文件扁平化

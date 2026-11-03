@@ -16,8 +16,9 @@ const fs = require('fs')
 const db = require('../db/init')
 const { sendSuccess, sendError } = require('../utils/response')
 const { firstBadScalar, asId } = require('../utils/common')
-// 日志走 utils/logger：console.log 只落 stdout，容器里查不到（别名与 server.js:42 保持一致）
-const { log: logMsg } = require('../utils/logger')
+// 日志走 utils/logger：console.* 只落 stdout，容器里那份不归本项目留档，落盘的只有
+// logs/server-*.log 这一份（别名与 server.js:42 保持一致，判据见 test/loggerDiscipline.test.js）
+const { log: logMsg, error: logErr } = require('../utils/logger')
 const { adminLoginRequired } = require('../middleware/auth')
 const {
   ICON_MAP,
@@ -120,7 +121,7 @@ router.get('/', (req, res) => {
     const models = rows.map(rowToGalleryModel)
     return sendSuccess(res, { models })
   } catch (err) {
-    console.error('[模型] 获取列表失败:', err)
+    logErr('[模型] 获取列表失败:', err)
     return sendError(res, '获取模型列表失败', 500)
   }
 })
@@ -153,7 +154,7 @@ router.get('/list', (req, res) => {
     const models = rows.map(rowToGalleryModel)
     return sendSuccess(res, models)
   } catch (err) {
-    console.error('[模型] 获取启用列表失败:', err)
+    logErr('[模型] 获取启用列表失败:', err)
     return sendError(res, '获取模型列表失败', 500)
   }
 })
@@ -168,7 +169,7 @@ router.get('/admin/list', adminLoginRequired, (req, res) => {
     const models = rows.map(rowToAdminModel)
     return sendSuccess(res, models)
   } catch (err) {
-    console.error('[模型] 获取管理列表失败:', err)
+    logErr('[模型] 获取管理列表失败:', err)
     return sendError(res, '获取模型列表失败', 500)
   }
 })
@@ -236,7 +237,7 @@ router.post('/admin/scan', adminLoginRequired, (req, res) => {
       stats: { total, new: newCount, skipped, cleanedUp },
     })
   } catch (err) {
-    console.error('[模型] 扫描失败:', err)
+    logErr('[模型] 扫描失败:', err)
     return sendError(res, '扫描模型失败', 500)
   }
 })
@@ -320,7 +321,7 @@ router.post('/admin/:id/toggle', adminLoginRequired, (req, res) => {
       newEnabled === 1 ? '模型已启用' : '模型已禁用',
     )
   } catch (err) {
-    console.error('[模型] 切换状态失败:', err)
+    logErr('[模型] 切换状态失败:', err)
     return sendError(res, '操作失败', 500)
   }
 })
@@ -421,7 +422,7 @@ router.put('/admin/:id', adminLoginRequired, (req, res) => {
     const updated = db.prepare('SELECT * FROM model_configs WHERE id = ?').get(id)
     return sendSuccess(res, rowToAdminModel(updated))
   } catch (err) {
-    console.error('[模型] 更新设置失败:', err)
+    logErr('[模型] 更新设置失败:', err)
     return sendError(res, '更新失败', 500)
   }
 })
@@ -454,7 +455,7 @@ router.delete('/admin/:id', adminLoginRequired, (req, res) => {
         : '模型已删除',
     )
   } catch (err) {
-    console.error('[模型] 删除失败:', err)
+    logErr('[模型] 删除失败:', err)
     return sendError(res, '删除失败', 500)
   }
 })
@@ -608,7 +609,7 @@ router.get('/file/*', (req, res, next) => {
       if (err.code === 'EACCES' || err.code === 'EPERM') {
         return sendError(res, '非法路径', 403)
       }
-      console.error('[模型] 文件下发失败:', err)
+      logErr('[模型] 文件下发失败:', err)
       return sendError(res, '文件服务错误', 500)
     }
 
@@ -661,7 +662,7 @@ router.get('/file/*', (req, res, next) => {
 
     return res.sendFile(fullPath, undefined, asFail)
   } catch (err) {
-    console.error('[模型] 文件服务失败:', err)
+    logErr('[模型] 文件服务失败:', err)
     return sendError(res, '文件服务错误', 500)
   }
 })

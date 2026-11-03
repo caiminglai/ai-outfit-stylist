@@ -39,17 +39,12 @@ const modelsRouter = require('../routes/models')
 const adminRouter = require('../routes/admin')
 const { addNewRules, newRules } = require('../db/add-rules')
 
-/** 按 method+path 找路由（admin 那条是数组路径，一起支持） */
-function findRoute(router, method, routePath) {
-  for (const layer of router.stack) {
-    const r = layer.route
-    if (!r || !r.methods[method.toLowerCase()]) continue
-    const p = r.path
-    const hit = Array.isArray(p) ? p.includes(routePath) : p === routePath
-    if (hit) return r
-  }
-  return null
-}
+/**
+ * 按 method+path 找路由（admin 那条是数组路径，一起支持）。
+ * 11-03 拆分轮起这份实现搬到 `test/helpers/routeLookup.js`：衣橱的「二、搭配组合管理」
+ * 拆成同前缀子路由后，平铺版会把 `/outfits` 读成"不存在"⇒ 假红，判据本身没错。
+ */
+const { findRoute } = require('./helpers/routeLookup')
 
 /** 只调最后一个 handler（业务本体），返回 {statusCode, body} */
 function call(route, { params = {}, query = {}, body = {}, headers = {} }) {

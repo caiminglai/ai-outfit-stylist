@@ -17,6 +17,10 @@
  * 🔴 11-03 第十四项轮·第 4 项：这七十几行是从 `EvidenceTag.tsx` 里**逐字搬出来**的——
  * `react-refresh/only-export-components` 不许一个文件既出组件又出常量／工具函数
  * （原文 "Fast refresh only works when a file only exports components"）。搬迁零改字。
+ *
+ * 🔴 11-03 前端测试轮：新加的 `backend/test/frontendConstantsParity.test.js` 第一次跑就逮到一处真漂——
+ * 本文件 B 档 note 末尾多写了「色差」两字（后端那份只到「CIEDE2000」）⇒ 已改回与后端逐字相同。
+ * A／B 两档的出处说明今后由那条门钉住，两边不许再各写一份。
  */
 
 export type EvidenceLevel = 'A' | 'B' | 'C' | 'D' | null | undefined
@@ -38,7 +42,7 @@ export const META: Record<'A' | 'B' | 'C' | 'D' | 'none', EvidenceMeta> = {
   },
   B: {
     short: '有实证文献',
-    note: '有同行评议论文与可复算公式（如 Schloss & Palmer 色相相似-和谐回归、WHO 腰臀比阈值、CIEDE2000 色差）',
+    note: '有同行评议论文与可复算公式（如 Schloss & Palmer 色相相似-和谐回归、WHO 腰臀比阈值、CIEDE2000）',
     color: 'var(--accent)',
   },
   C: {
@@ -65,10 +69,11 @@ export function pick(level: EvidenceLevel): keyof typeof META {
 
 /**
  * 给不能挂组件的地方用（如 `TopSpecCard` 那行"依据档位：A"）：只回中文短标签。
- * 参数放宽到 `string`：`top_spec` 那边出账类型写的是 `tier: string`（`types/index.ts:209/396/444`），
+ * 参数放宽到 `string`：`top_spec` 那边出账类型写的是 `tier: string`（11-03 按内容重指：`app/src/types/rules.ts:118`／`app/src/types/scores.ts:80`，原写 index.ts 的三个号已作废），
  * 认不出的词由 `pick` 归到"没标依据等级"，⛔ 不许为此改后端出账的类型。
  * 内部代码里仍然按 A/B/C/D 传值，⛔ 不改后端出账的字母。
  */
+
 export function evidenceLabel(level: EvidenceLevel | string): string {
   return META[pick(level as EvidenceLevel)].short
 }

@@ -4,10 +4,10 @@
  * 11-03 拆分：本文件只剩「编排 + 再导出」，算法按职责搬进 ./enrich/ 五个模块。
  * 对外的 require 路径与导出表一行没改 ⇒ 消费方（recommendEngine.js、routes、test）照旧。
  *   · ./enrich/bodyMetrics.js 体型与比例：BMI、体型五分类＋差值、部位级标签、腰臀比、腿身比、肩宽比（原文 :37-310）
- *   · ./enrich/colorMatch.js  肤色→色系／季型：色系表、四季型、十二型（原文 :312-461）
- *   · ./enrich/styleType.js   风格型与视觉比例档位：Kibbe 五型、比例档位中文化（原文 :463-557）
- *   · ./enrich/adviceMaps.js  查表出话的四张文案：体型穿搭、脸型、三庭五眼、体态（原文 :559-774）
- *   · ./enrich/baziFields.js  生日派生：周岁／年龄段＋八字五行（原文 :790-850）
+ *   · ./enrich/colorMatch.js  肤色→色系／季型：色系表、四季型、十二型（拆前原文 312-461 行）
+ *   · ./enrich/styleType.js   风格型与视觉比例档位：Kibbe 五型、比例档位中文化（拆前原文 463-557 行）
+ *   · ./enrich/adviceMaps.js  查表出话的四张文案：体型穿搭、脸型、三庭五眼、体态（拆前原文 559-774 行）
+ *   · ./enrich/baziFields.js  生日派生：周岁／年龄段＋八字五行（拆前原文 790-850 行）
  * 8.5 那张 occasion→scenario 小表留在本文件：它只服务 enrichProfile 里那一行映射，没有算法，
  * 单独立一个文件只会让"改一个场景词要开两个文件"。
  *

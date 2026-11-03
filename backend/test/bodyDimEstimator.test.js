@@ -727,7 +727,7 @@ test('接线⑥：端到端——只填身高体重的人现在能被打上架�
   assert.strictEqual(rankTopsByBody(withoutEst(e), tops).ranked.length, 1)
 
   // 两条生产入口都必须"先 enrich 再算偏差"，否则 `p.body_est` 这格根本不在场、接线在现场失灵
-  //（`recommendationBodyDeviation` 与 `buildRecommendation` 是 routes/wardrobe.js:1430 与推荐主链路各自的那一个入口）
+  //（`recommendationBodyDeviation` 与 `buildRecommendation` 是 routes/wardrobe.js:760 与推荐主链路各自的那一个入口）
   const eng = fs.readFileSync(path.join(__dirname, '..', 'services/recommendEngine.js'), 'utf8')
   assert.match(
     eng,

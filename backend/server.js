@@ -39,7 +39,7 @@ function getContentType(filePath) {
 const db = require('./db/init')
 
 // 日志工具(同时写控制台 + 文件,按日期轮转,保留 7 天)
-const { log: logMsg, error: logErr } = require('./utils/logger')
+const { log: logMsg, error: logErr, warn: logWarn } = require('./utils/logger')
 
 // 扫描时不入库的目录判定(zip备份/残缺模型/_bak_*),文件下发时同样拦掉
 const { isSkippedPath, isDisabledPmxPath } = require('./utils/model-utils')
@@ -136,7 +136,7 @@ const apiLimiter = rateLimit({
   // 不豁免的话浏览几个模型就吃掉 100 次额度，前端表现为"无法加载人物模型"白屏。
   // 回调由微信服务器推送、查单是前端几秒一次的轮询，都不该被总闸掐掉（429 会让微信
   // 按失败重推）；这两条在 payment 路由内有各自的限流或本就靠验签把关。
-  // /api/health 同理：它是给监控用的探针，本身不查库、无副作用。下面那道闸前面那句
+  // /api/health 同理：它是给监控用的探针，一次只读一条不写字段的查询，没有副作用。下面那道闸前面那句
   // "健康检查和静态文件不限流"的注释一直与代码不符：这道闸挂在 app.use('/api/') 上、
   // 健康路由在它后面注册，所以 /api/health 其实一直在吃额度
   // （10-13 现量：同一 IP 把桶打空后它回 429）。
@@ -144,7 +144,7 @@ const apiLimiter = rateLimit({
   // `/health`（不带 /api）本来就不在这道闸范围内，两条入口现在口径一致。
   // 判据读 originalUrl 而不是 req.path：这道闸挂在 `app.use('/api/')` 上，Express 会把
   // 挂载前缀从 req.url 里切掉 ⇒ 中间件里 req.path 只剩 '/health'（10-13 现量：写成
-  // req.path === '/api/health' 时豁免整个不生效，第 101 条照样 429）。🔴 第十四阶段追加 `/api/models/list` 进同一条豁免（取证与代价账见 docs/依据/22-…md §十二.9a 与路线 §五十三.2）：展厅待机态一开屏就 fetch 它＝"打开首页就送一次额度"，国内移动网络与门店 WiFi 普遍共用出口 IP ⇒ 桶是十几个人共享的，撞空后 429 被 showApiError 变成整屏"无法加载人物模型"；它虽有 ETag＋no-cache（routes/models.js:147-148）但闸在路由前面 ⇒ 304 照样吃额度，条件请求省字节省不到这一格；豁免代价＝零（一条 SELECT COUNT 加一遍已启用列表，无用户输入、无副作用）。
+  // req.path === '/api/health' 时豁免整个不生效，第 101 条照样 429）。🔴 第十四阶段追加 `/api/models/list` 进同一条豁免（取证与代价账见 docs/依据/22-…md §十二.9a 与路线 §五十三.2）：展厅待机态一开屏就 fetch 它＝"打开首页就送一次额度"，国内移动网络与门店 WiFi 普遍共用出口 IP ⇒ 桶是十几个人共享的，撞空后 429 被 showApiError 变成整屏"无法加载人物模型"；它虽有 ETag＋no-cache（routes/models.js:148-149）但闸在路由前面 ⇒ 304 照样吃额度，条件请求省字节省不到这一格；豁免代价＝零（一条 SELECT COUNT 加一遍已启用列表，无用户输入、无副作用）。
   skip: (req) =>
     ['/api/health', '/api/models/list'].includes(req.originalUrl.split('?')[0]) ||
     req.originalUrl.startsWith('/api/models/file/') ||
@@ -198,7 +198,33 @@ app.use(
 // 两个入口同一份逻辑：/api/health 给前端和管理后台用，/health 给容器与外部监控用。
 // 以前只有 /api/health，监控要是少写 /api 打 /health，会落到下面的 SPA 兜底——
 // 拿到 200 + index.html(text/html)，后端真炸了它也报"健康"，等于装了个假探针。
+//
+// 🔴 11-03 从"进程活着就报正常"改成真探针：以前这个函数体里一行库都不碰，
+// 于是 `db/init.js` 建库失败、库文件被换坏、磁盘只读这三种现场它照样回 200 +
+// "正常"，监控等于装了个永远不亮的灯。现在每次读一条 `SELECT 1`（只读、不写字段、
+// 不建表），读不到就 503 + status"异常"。
+// 代价与不变量：健康路由仍豁免在总闸的额度之外（上面 :139 那段），因为一次 SELECT 1
+// 比任何一个业务接口都便宜，把它掐了反而让监控分不清"服务炸了"和"我被限流了"；
+// 成功响应体**逐字不变**（同一个 data 对象、同样的 83 字节），因为发布自检脚本
+// `compose/tools/site3-release-selfcheck.sh` 与仓库测试都按那份形状断言，改形状
+// 会让发布门先红。失败才换形状。
 function healthHandler(req, res) {
+  let dbOk = false
+  let reason = ''
+  try {
+    dbOk = db.prepare('SELECT 1 AS ok').get()?.ok === 1
+    if (!dbOk) reason = 'SELECT 1 没读回 1'
+  } catch (e) {
+    reason = e.message
+  }
+  if (!dbOk) {
+    logErr('[健康] 数据库探针失败:', reason)
+    return res.status(503).json({
+      success: false,
+      error: { code: 'DB_UNAVAILABLE', message: '服务在跑，但读不到数据库' },
+      data: { status: '异常', service: 'Style AI 形象定制后端' },
+    })
+  }
   res.json({
     success: true,
     data: { status: '正常', service: 'Style AI 形象定制后端' },
@@ -522,7 +548,7 @@ function runLogPrune(tag) {
     const n = pruneOldLogs(90)
     if (n > 0) logMsg(`[清理] ${tag}：删除超过 90 天的推荐样本 ${n} 行（报告行豁免）`)
   } catch (err) {
-    console.warn(`[清理] 推荐样本滚动清理失败（${tag}）:`, err.message)
+    logWarn(`[清理] 推荐样本滚动清理失败（${tag}）:`, err.message)
   }
 }
 setTimeout(() => runLogPrune('启动首清'), 10000).unref()

@@ -7,6 +7,9 @@ const db = require('../../db/init')
 const { BODY_TYPE_ALIASES } = require('../bodyTypes')
 const { CATEGORY_CN_TO_EN } = require('../ruleExplainer')
 const { asText, ownValue } = require('../../utils/common')
+// 报错与告警一律走 utils/logger：console.* 只落 stdout，容器里那份不归本项目留档，
+// 事后按订单号/用户查不到痕迹（判据见 test/loggerDiscipline.test.js）
+const { warn: logWarn } = require('../../utils/logger')
 
 // ============================================================
 // 规则引擎推荐(基础版)
@@ -221,7 +224,7 @@ function _flushHitCounts(ids) {
     ).run(...uniq)
     return uniq.length
   } catch (err) {
-    console.warn(`[推荐引擎] 批量命中计数写入失败（${uniq.length} 组）: ${err.message}`)
+    logWarn(`[推荐引擎] 批量命中计数写入失败（${uniq.length} 组）: ${err.message}`)
     return 0
   }
 }

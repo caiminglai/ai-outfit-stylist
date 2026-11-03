@@ -121,8 +121,8 @@ const SPEC = {
   pattern: {
     tier: 'B 档但文献结论互相冲突（4 篇方向不一）⇒ 只当低权重修正，不许当判定',
     // 文案方向必须跟打分一致，否则顾客看到的理由和推荐排序是两回事：
-    // describeTop 读的条纹取值表 topFitBody.js:389（竖条=+1、横条=-1），落到轴上是 `:594`；want.pattern
-    // 直接取 want.volume（`:337`）⇒ 想加体量（want>0）的人被抬高的是**竖条**，想收（want<0）
+    // describeTop 读的条纹取值表 backend/services/topFit/deviation.js:207（竖条=+1、横条=-1），落到轴上是 `backend/services/topFit/shape.js:259`；want.pattern
+    // 直接取 want.volume（`backend/services/topFit/deviation.js:168`）⇒ 想加体量（want>0）的人被抬高的是**竖条**，想收（want<0）
     // 的是**横条**。原来这两句 label 把目标说反（plus 写"你想收窄时…选竖向"），
     // 而 plus 分支只会落在偏瘦的人身上（BMI<24 ⇒ want.volume>0），报告当场自相矛盾。
     plus: {

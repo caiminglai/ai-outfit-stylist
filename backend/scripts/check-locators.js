@@ -20,6 +20,11 @@
  * 第三向：同一行里裸写的续号 `:1013`（不带文件名，归属＝它之前、行内最近且能定位的那个文件名）。
  *   这一向只判「越界／空行」，判不了内容——裸号旁边没有标识符可对，所以它的数是上限、不是精确欠账。
  * 退出码恒为 0（这是体检不是门禁；要让 CI 拦红请另加阈值判断，别默认打开）。
+ *
+ * 11-03 扩容：被指文件的索引面从「backend|app/src 的 js/ts」扩到再加
+ * 「app/public|backend/static|backend/templates 的 html/css」，扫描面同步加 html/css
+ * （html 注释里也写定位符）。这层跟着 assets:check 门禁一起立：静态页有门禁管内容，
+ * 但它被按行号引用这件事以前没人查。
  */
 const fs = require('fs')
 const path = require('path')
@@ -34,10 +39,19 @@ const readTracked = () =>
     .split('\0')
     .filter((f) => f && !/node_modules|package-lock/.test(f))
 
-// 被指文件只索引 backend/ 与 app/src/ 下的 js/ts；同名多份时靠目录前缀消歧
+// 被指文件只索引 backend/ 与 app/src/ 下的 js/ts（11-03 起再加 app/ 根下那份单层配置，
+// 教程页按行号引 `app/vite.config.ts` 的 proxy 块），外加 11-03 起入门禁的静态页与样式
+// （仓内的 html/css/js：app/public 那几页、backend/static、backend/templates、app/index.html、
+//  app/src/index.css，连 vendor 进来的 three.js 也算——文档按行号引它们，而往 html 插一行
+//  会静默挪歪全仓对它的行号引用，不设这层索引就查不到。app/dist 是构建产物、不索引）；
+// 同名多份时靠目录前缀消歧
 const buildIndex = (files, restrict) => {
   const src = files.filter((f) =>
-    restrict ? /^(backend|app\/src)\//.test(f) && /\.(js|ts)$/.test(f) : true,
+    restrict
+      ? (/\.(js|ts)$/.test(f) &&
+          (/^(backend|app\/src)\//.test(f) || /^app\/[^/]+\.[jt]s$/.test(f))) ||
+        (/\.(html|css|js)$/.test(f) && !/^app\/dist\//.test(f))
+      : true,
   )
   const byPath = new Set(src)
   const byName = {}
@@ -60,7 +74,7 @@ const resolve = (token, idx) => {
 
 const main = () => {
   const all = readTracked()
-  const files = all.filter((f) => /\.(md|js|ts)$/.test(f))
+  const files = all.filter((f) => /\.(md|js|ts|html|css)$/.test(f))
   const idx = buildIndex(all, true)
   const idxAny = buildIndex(all, false)
   const cache = {}
@@ -75,7 +89,7 @@ const main = () => {
     }
     return cache[rel]
   }
-  const re = /([A-Za-z0-9._/-]+\.(?:js|ts)):(\d{1,5})/g
+  const re = /([A-Za-z0-9._/-]+\.(?:js|ts|html|css)):(\d{1,5})/g
   const cls = { 在位: 0, 越界: 0, 空行: 0, 号偏: 0, 指错句: 0, 定位不到: 0, 判不了: 0 }
   const perTarget = {}
   const perSrc = {}
@@ -138,7 +152,7 @@ const main = () => {
   console.log(
     '[定位符体检] 扫描面 ' +
       files.length +
-      ' 份（tracked 的 md+js+ts，除 node_modules/package-lock）',
+      ' 份（tracked 的 md+js+ts+html+css，除 node_modules/package-lock）',
   )
   console.log(
     '  第一向（带文件名的锚点）' +
@@ -163,7 +177,7 @@ const main = () => {
   console.log(
     '    判不了（锚点旁没有反引号标识符，不计入在位也不计入要动）' +
       cls.判不了 +
-      '／定位不到（文件名不在 backend|app/src 的 js/ts 里，含 html 目标）' +
+      '／定位不到（文件名不在索引面：backend|app/src 的 js/ts ＋ 除 app/dist 外的 html/css）' +
       cls.定位不到,
   )
   const top = (o) =>
@@ -329,7 +343,8 @@ const main = () => {
   console.log(
     '[定位符体检] 已知盲区：①第三向能数裸续号，但它只判「越界／空行」、判不了内容，且归属靠"行内最近的文件名"——' +
       '一句话里跨文件、跨栏时会归错，所以第三向的数是上限而不是精确欠账；' +
-      '②目标是 html 的锚点算得进第三向，但不算进第一向；③锚点前而不是后带主语的句子会误报成指错句。',
+      '②目标是 html/css 的锚点从 11-03 起也算进第一向（含 app/index.html、app/src/index.css 这类构建入口与样式，但 app/dist 那份产物不建索引）；' +
+      '③锚点前而不是后带主语的句子会误报成指错句。',
   )
   console.log(
     '[定位符体检] 口径提醒：要动 ≠ 全是欠账。句子里写着"旧号/原写/改前/拆分前"的是故意留的历史号，' +

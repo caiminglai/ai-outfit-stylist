@@ -109,8 +109,8 @@
               }
             }
           },
-          "400": {
-            "description": "错误 400",
+          "429": {
+            "description": "超过限流窗口",
             "content": {
               "application/json": {
                 "schema": {
@@ -119,8 +119,8 @@
               }
             }
           },
-          "429": {
-            "description": "超过限流窗口",
+          "503": {
+            "description": "错误 503",
             "content": {
               "application/json": {
                 "schema": {
@@ -156,8 +156,8 @@
               }
             }
           },
-          "400": {
-            "description": "错误 400",
+          "503": {
+            "description": "错误 503",
             "content": {
               "application/json": {
                 "schema": {

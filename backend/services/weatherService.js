@@ -3,6 +3,9 @@
  * 使用 Node.js 原生 fetch (v18+) 异步获取天气数据
  */
 const { ownValue } = require('../utils/common')
+// 报错与告警一律走 utils/logger：console.* 只落 stdout，容器里那份不归本项目留档，
+// 事后按订单号/用户查不到痕迹（判据见 test/loggerDiscipline.test.js）
+const { warn: logWarn } = require('../utils/logger')
 
 // 城市名称 -> (纬度, 经度) 映射
 const CITY_GEO = {
@@ -156,7 +159,7 @@ async function getWeather(location) {
   } catch (err) {
     // 自己抛的那两条带 status 的错误原样往上送，别把"502 数据不完整"洗成 500
     if (err && err.isWeatherError) throw err
-    console.warn(`[天气] Open-Meteo API 请求失败: ${err.message}`)
+    logWarn(`[天气] Open-Meteo API 请求失败: ${err.message}`)
     throw weatherError('天气服务暂时不可用，请稍后再试', 503)
   }
 }

@@ -95,8 +95,8 @@
 /* 本页的支付身份：优先沿用展厅 SPA 那一个，读不到才自己注册游客号。
    —— 10-21 第十二阶段·第一步改的口径。原来这里写死「不共用 key」，理由是
    SPA 那个 id 服务端没登记、提交凭证会被 loginRequired 挡成 401；那条已经过期：
-   `backend/middleware/auth.js:79` 的 `optionalUser` 现在会按形状门
-   `/^[A-Za-z0-9_-]{8,64}$/` 现场补一条游客行（同文件 :56 `ensureGuestUser`），
+   `backend/middleware/auth.js:82` 的 `optionalUser` 现在会按形状门
+   `/^[A-Za-z0-9_-]{8,64}$/` 现场补一条游客行（同文件 :59 `ensureGuestUser`），
    继续沿用同一个 id 反而是「付了钱却看不到报告」唯一的修法——
    两套 id 会把同一个人分成 `users` 里两行，订单落在本页这行，
    展厅「我的报告」按另一行查，什么都查不到。

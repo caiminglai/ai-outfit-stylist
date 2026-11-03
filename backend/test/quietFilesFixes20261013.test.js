@@ -154,8 +154,8 @@ test('日志：BigInt / 自引用对象不再在请求路径里抛（且不落�
     readdir: fs.readdirSync,
     stat: fs.statSync,
     // 换掉 console 是为了拦住 logger 往 stdout 打的那几行——TAP 从第 0 列读 `ok`/`not ok`，
-    // 测试中途冒出「探针 …」会污染解析。桩本身要读回原函数，故这三行都得豁免 no-console。
-    // eslint-disable-next-line no-console
+    // 测试中途冒出「探针 …」会污染解析。桩本身要读回原函数，所以下面 159-160 存真身、196-197 还原。
+    // no-console 豁免：11-03 起 eslint.config.js 对 test/** 整目录关掉这条，这里不用再就地 disable
     log: console.log,
     error: console.error,
   }
@@ -169,7 +169,7 @@ test('日志：BigInt / 自引用对象不再在请求路径里抛（且不落�
     fs.statSync = (p) => ({
       mtime: { getTime: () => (String(p).includes('2020') ? 0 : Date.now()) },
     })
-    // eslint-disable-next-line no-console
+    // no-console 豁免：11-03 起 eslint.config.js 对 test/** 整目录关掉这条，这里不用再就地 disable
     console.log = () => {}
     console.error = () => {}
 
@@ -192,7 +192,7 @@ test('日志：BigInt / 自引用对象不再在请求路径里抛（且不落�
       readdirSync: real.readdir,
       statSync: real.stat,
     })
-    // eslint-disable-next-line no-console
+    // no-console 豁免：11-03 起 eslint.config.js 对 test/** 整目录关掉这条，这里不用再就地 disable
     console.log = real.log
     console.error = real.error
   }

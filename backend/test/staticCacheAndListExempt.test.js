@@ -5,7 +5,7 @@
  *   （app/public/model-gallery.html:1452，🔴 10-30 窄屏补正在它之前插了 30 行 CSS，原号 1422），这笔额度不是用户主动点出来的，是"打开首页就送一次"。
  *   国内移动网络与门店 WiFi 普遍共用出口 IP ⇒ 100 次/15 分钟是十几个人共享的桶；撞空之后 429
  *   被前端的 showApiError 变成整屏"无法加载人物模型"。它虽然已经有 ETag＋`Cache-Control: no-cache`
- *   （backend/routes/models.js:147-148），但限流闸挂在路由前面 ⇒ 304 也照样吃额度，
+ *   （backend/routes/models.js:148-149），但限流闸挂在路由前面 ⇒ 304 也照样吃额度，
  *   条件请求省的是字节省不到这一格。现量（10-22 本机起实例）：把桶打空后 `/api/models/list` 回 429。
  * ② `/assets/**` 以前回 `Cache-Control: public, max-age=0`。这里的文件都是 vite 内容哈希名
  *   （如 `CabinetManager-CEKUQ9l7.js`），文件名即版本 ⇒ 回访时那一次 304 往返本来可以整次省掉。

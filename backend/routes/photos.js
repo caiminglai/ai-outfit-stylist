@@ -11,6 +11,9 @@ const { generateUUID, UPLOAD_DIR, parsePagination, asId } = require('../utils/co
 const { loginRequired } = require('../middleware/auth')
 const { upload, validateImage } = require('../middleware/upload')
 const { rateLimit } = require('../middleware/rateLimit')
+// 报错与告警一律走 utils/logger：console.* 只落 stdout，容器里那份不归本项目留档，
+// 事后按订单号/用户查不到痕迹（判据见 test/loggerDiscipline.test.js）
+const { error: logErr } = require('../utils/logger')
 
 const router = express.Router()
 
@@ -84,7 +87,7 @@ router.post('/', loginRequired, uploadLimiter, upload.single('photo'), (req, res
       '照片上传成功',
     )
   } catch (err) {
-    console.error('[照片] 上传失败:', err)
+    logErr('[照片] 上传失败:', err)
     return sendError(res, '上传失败', 500)
   }
 })
@@ -111,7 +114,7 @@ router.get('/', loginRequired, (req, res) => {
 
     return sendSuccess(res, { photos })
   } catch (err) {
-    console.error('[照片] 获取列表失败:', err)
+    logErr('[照片] 获取列表失败:', err)
     return sendError(res, '获取列表失败', 500)
   }
 })
@@ -166,16 +169,12 @@ router.delete('/:id', loginRequired, (req, res) => {
         fs.unlinkSync(filepath)
       }
     } catch (err) {
-      console.error(
-        '[照片] 数据库记录已删除，但物理文件没删掉，需要人工清理:',
-        filepath,
-        err.message,
-      )
+      logErr('[照片] 数据库记录已删除，但物理文件没删掉，需要人工清理:', filepath, err.message)
     }
 
     return sendSuccess(res, null)
   } catch (err) {
-    console.error('[照片] 删除失败:', err)
+    logErr('[照片] 删除失败:', err)
     return sendError(res, '删除失败', 500)
   }
 })

@@ -10,22 +10,24 @@
  *   色彩槽位 → ./recommend/colorSlots.js（取色／关系色展开／借色支路）
  *   规则匹配 → ./recommend/ruleMatcher.js（条件求值／matchRules／命中计数落库）
  *   排序     → ./recommend/ranker.js（RANK_* 常数／rankDims／rankAndTruncate）
+ *
+ * 11-03 大文件拆分轮（同样行为不变、20 键逐键不变，`test/splitReExportSurface.test.js` 钉住）：
+ *   旧版硬编码推荐 → ./recommend/legacyRecs.js（getRecommendations 那一张兜底表）
+ *   文案→身体维   → ./recommend/textBodyFit.js（ruleTextBodyFit）
+ *   肤色取值口    → ./recommend/skinForColor.js（_skinForColor，18 号规范 §2.5 那唯一一处）
+ *   衣橱候选      → ./recommend/wardrobeCandidates.js（buildRecommendation 的第 6 步整块，纯函数）
  */
 
 const { enrichProfile, getBodyShapeOutfitAdvice, getFaceShapeGuide } = require('./profileEnricher')
 const { explainMatchedRecommendation } = require('./ruleExplainer')
-const {
-  colorFit,
-  extractColors,
-  skinToneToLab,
-  skinUndertoneFromHue,
-  synthesizeSkinLab,
-} = require('./colorMetrics')
-const { asText, ownValue } = require('../utils/common')
-const { topFitBody, bodyDeviation, isTopCategory, FIT_TYPE_VALUES } = require('./topFitBody')
+// 11-03 拆分轮：`colorMetrics` 那五个名字（colorFit／extractColors／skinToneToLab／skinUndertoneFromHue／
+// synthesizeSkinLab）跟着 `_skinForColor`、`ruleTextBodyFit`、第 6 步一起搬进 ./recommend/ 下的三个模块，
+// 本文件不再直接取色——⛔ 取色与肤色合成的口径只有一个来路，就是那三个模块。
+const { asText } = require('../utils/common')
+const { bodyDeviation } = require('./topFitBody')
 const { generateWardrobeOutfits } = require('./wardrobeOutfitGenerator')
 // 第十三阶段·第一步 §三：款式词／面料词 → 版型档的推断层（⛔ 值域与松量映射都在 topFitBody 那边，这里只认档）
-const { inferFitType, inferFabricWeight } = require('./fitInference')
+// ⇒ 11-03 起这一层的消费者是 `./recommend/textBodyFit.js`（`inferFitType`／`inferFabricWeight` 在那边用）
 const { topSpec } = require('./topFromBody')
 // 10-20 第八阶段·一e：隐性偏好乘子（乘子本身在 recommend/ranker.js 里用；画像与乘子的口径全在 wearPreference.js 里）
 // 参数一律从那一侧取，排序层不许自己另抄一份数（同一件事两层各持一份是本项目反复清扫的病灶）
@@ -76,233 +78,11 @@ const {
   rankDims,
   rankAndTruncate,
 } = require('./recommend/ranker')
-
-/**
- * 获取穿搭推荐
- * @param {string|null} skinTone - 肤色
- * @param {string|null} faceShape - 脸型
- * @param {string} scenario - 场景
- * @returns {Array} 推荐结果列表
- */
-function getRecommendations(skinTone, faceShape, scenario) {
-  const defaults = {
-    通勤: [
-      {
-        top_style: '白色衬衫',
-        bottom_style: '深色西裤',
-        color_combo: '白+蓝',
-        reason: '简洁干练,职场必备',
-        match_level: '默认',
-        skin_tone: skinTone || '通用',
-        face_shape: faceShape || '通用',
-        scenario,
-      },
-      {
-        top_style: '针织开衫',
-        bottom_style: '直筒裤',
-        color_combo: '米+灰',
-        reason: '温柔知性,通勤百搭',
-        match_level: '默认',
-        skin_tone: skinTone || '通用',
-        face_shape: faceShape || '通用',
-        scenario,
-      },
-      {
-        top_style: '西装外套',
-        bottom_style: '铅笔裙',
-        color_combo: '黑+灰',
-        reason: '专业大气,会议首选',
-        match_level: '默认',
-        skin_tone: skinTone || '通用',
-        face_shape: faceShape || '通用',
-        scenario,
-      },
-    ],
-    约会: [
-      {
-        top_style: 'V领碎花裙',
-        bottom_style: '',
-        color_combo: '浅粉+白',
-        reason: '甜美浪漫,约会首选',
-        match_level: '默认',
-        skin_tone: skinTone || '通用',
-        face_shape: faceShape || '通用',
-        scenario,
-      },
-      {
-        top_style: '修身针织衫',
-        bottom_style: 'A字裙',
-        color_combo: '白+杏',
-        reason: '优雅温柔,展现气质',
-        match_level: '默认',
-        skin_tone: skinTone || '通用',
-        face_shape: faceShape || '通用',
-        scenario,
-      },
-    ],
-    面试: [
-      {
-        top_style: '翻领大衣',
-        bottom_style: '西裤',
-        color_combo: '灰+黑',
-        reason: '专业稳重,面试首选',
-        match_level: '默认',
-        skin_tone: skinTone || '通用',
-        face_shape: faceShape || '通用',
-        scenario,
-      },
-      {
-        top_style: '衬衫',
-        bottom_style: '直筒裙',
-        color_combo: '白+深蓝',
-        reason: '简洁大方,给人信赖感',
-        match_level: '默认',
-        skin_tone: skinTone || '通用',
-        face_shape: faceShape || '通用',
-        scenario,
-      },
-    ],
-    休闲: [
-      {
-        top_style: '圆领T恤',
-        bottom_style: '牛仔裤',
-        color_combo: '白+蓝',
-        reason: '舒适百搭,日常首选',
-        match_level: '默认',
-        skin_tone: skinTone || '通用',
-        face_shape: faceShape || '通用',
-        scenario,
-      },
-      {
-        top_style: '卫衣',
-        bottom_style: '运动裤',
-        color_combo: '灰+黑',
-        reason: '休闲舒适,轻松自在',
-        match_level: '默认',
-        skin_tone: skinTone || '通用',
-        face_shape: faceShape || '通用',
-        scenario,
-      },
-    ],
-    聚会: [
-      {
-        top_style: '亮片上衣',
-        bottom_style: '高腰裙',
-        color_combo: '金+黑',
-        reason: '闪耀吸睛,聚会焦点',
-        match_level: '默认',
-        skin_tone: skinTone || '通用',
-        face_shape: faceShape || '通用',
-        scenario,
-      },
-      {
-        top_style: '修身连衣裙',
-        bottom_style: '',
-        color_combo: '酒红+黑',
-        reason: '优雅大气,派对首选',
-        match_level: '默认',
-        skin_tone: skinTone || '通用',
-        face_shape: faceShape || '通用',
-        scenario,
-      },
-    ],
-  }
-
-  // scenario 来自请求体（buildRecommendation 里是 profile.scenario），
-  // 写 defaults[scenario] 时 scenario='constructor' 会拿到 Object 构造函数，
-  // 调用方 `for (const item of fallback)` 立刻 TypeError ⇒ 推荐接口回 500。
-  const fallbackList = ownValue(defaults, asText(scenario)) || ownValue(defaults, '休闲')
-  return fallbackList
-}
-
-/**
- * 规则那句文案 → 身体那一维的分（10-21 第十三阶段·第一步 §三·4 的唯一接线处）。
- * 做法＝认出版型档 ⇒ 造一条**只带 `fit_type` 与 `fabric_weight` 两件**的伪上衣行 ⇒
- * 调现成的 `topFitBody(null, 伪行, bodyDev)`（与衣橱那一路同一个调用形状：person 传 null、dev 传现算的那份）。
- * 松量走的是 `ease_src:'fit_type'` 那条已有分支，**"这一格按半格计覆盖率"是 `topFitBody` 自己给的**，
- * ⛔ 排序层不再乘第二个折扣（同一件事两层各折一次＝上面 `COLOR_BORROW_WEIGHT` 那条禁令）。
- * 认不出档（0 档或 ≥2 档冲突）⇒ 回 `null`，这一维继续整块缺席、继续吃 `RANK_ALGO_ABSENCE_PENALTY`，
- * ⛔ 不许为了"让身体维在场"放宽判据（§三·3 第 2 条）。
- * @param {string|null} topText 上衣那一格的文案
- * @param {object} bodyDev 这个人的身材偏差（`bodyDeviation(enriched)` 的返回值）
- * @returns {null|{body_fit:object, fit_type:string|null, fabric_weight:string|null, words:{fit:string[],fabric:string[]}}}
- */
-function ruleTextBodyFit(topText, bodyDev) {
-  const fit = inferFitType(topText)
-  const fab = inferFabricWeight(topText)
-  if (!fit && !fab) return null
-  const pseudo = {
-    name: String(topText === null || topText === undefined ? '' : topText).slice(0, 40),
-    fit_type: fit ? fit.fit_type : null,
-    fabric_weight: fab ? fab.fabric_weight : null,
-  }
-  const bf = topFitBody(null, pseudo, bodyDev)
-  // 只有面料档、六轴一格都算不出 ⇒ topFitBody 给的总分是 null ⇒ 缺测不出分，这一维照样缺席
-  if (!bf || bf.score == null) return null
-  bf.inferred_from = 'rule_text'
-  bf.inferred_words = { fit: fit ? fit.words : [], fabric: fab ? fab.words : [] }
-  return {
-    body_fit: bf,
-    fit_type: pseudo.fit_type,
-    fabric_weight: pseudo.fabric_weight,
-    words: bf.inferred_words,
-  }
-}
-
-/**
- * 肤色进色彩维的**唯一**取值口（第十阶段·第一步，docs/依据/18-肤色采集输入输出规范-20261021.md §2.5）。
- *
- * 为什么要收成一个（现量，10-21）：改前这里有四个各自拼字符串的读数点
- * （`:1047`/`:1096`/`:1128` 三处喂 `colorFit`，`:1072` 一处喂硬编码兜底），
- * 谁再新增第五处就会多一套口径；而第九阶段那条唯一真样本正是死在这条链的第一环——
- * `face_profiles` 里 `user_id=3` 那行肤色两格逐字 NULL ⇒ `colorFit(null, …)` 回 null ⇒
- * 快照 `color:null` ⇒ 二维回归闸门到不了（`17` §9.4）。
- *
- * 🔴 三条不许改的口径：
- *  ① **深浅（L 与 C）只认档名锚点，⛔ 不吃照片的绝对明度**。合成 Lab 的 L/C 一律取自
- *     `SKIN_TONE_ANCHORS`（10-29 起升 B 档：CIE 汇编华裔 404 人分位子样实测，仍非测色仪逐人实测），照片只贡献色相角 h。
- *     理由＝Alipour 2026 实测非受控成像下固定阈值分型 22.9% ＜ 基线 51.3%（`依据/02` §2 第 4 条），
- *     现量反例：`#E8C4B8` 经 `hexToLab` 得 L=81.89，比华裔 P95＝65.87 高 16 个点（`依据/04` §1.4）。
- *     ⛔ 更不许拿人群 P50（L 58.58／C 20.61）去补一个"看起来像实测"的明度——
- *     那是 `docs/依据/README.md:64` 硬规矩 2 逐字禁止的动作。
- *  ② **深浅档没选 ⇒ 照片那一维不接管**（`source` 永远不等于 `photo_sample`）。
- *     用户只确认冷暖、深浅留空时照样出分：`冷皮/自然/暖皮` 三个词本身就在这张 8 档表里。
- *  ③ 三样都拿不到 ⇒ 返回 `lab:null`，调用方把 null 原样交给 `colorFit` ⇒ 它回 null ⇒
- *     色彩维缺席（缺测不出分），⛔ 不在这里编一个肤色。
- *
- * @param {object} enriched enrichProfile 之后的画像（含档案回填的档名）
- * @param {object} profile 本次请求体原样（`skin_hue` 只可能从这里来，客户端递不进 Lab）
- * @returns {{lab:{L:number,a:number,b:number,C:number,h:number}|null, source:string|null, hue:number|null, undertone:string|null}}
- */
-function _skinForColor(enriched, profile) {
-  const toneText = enriched.skin_tone_detail || enriched.skin_tone || profile.skin_tone || null
-  const depth = skinToneToLab(toneText)
-  // SKIN_TONE_ANCHORS 的取值只有 L/a/b（C 是 colorFit 内部现补的），这里同样先算出来再合成，
-  // ⛔ 但绝不把 C 写回那张共享表——它是模块级常量，写一次污染之后每一次取色。
-  const depthLab = depth ? { L: depth.L, a: depth.a, b: depth.b } : null
-  const depthC = depthLab ? Math.hypot(depthLab.a, depthLab.b) : null
-
-  const rawHue = profile.skin_hue !== undefined ? profile.skin_hue : enriched.skin_hue
-  const hue = Number(rawHue)
-  // 用户自选深浅（0~100）→ 0~1；没有则 undefined，synthesizeSkinLab 自动回退到锚点 L
-  const rawLightness =
-    profile.skin_lightness !== undefined ? profile.skin_lightness : enriched.skin_lightness
-  const lightness01 =
-    rawLightness !== undefined && rawLightness !== null && rawLightness !== ''
-      ? Math.max(0, Math.min(1, Number(rawLightness) / 100))
-      : undefined
-  // 闸门全在 synthesizeSkinLab 里（非有限数／越过 h 闸／档名认不出 ⇒ null），这里不再自己拼条件。
-  const synth = synthesizeSkinLab(toneText, hue, lightness01)
-  if (synth)
-    return { lab: synth.lab, source: 'photo_sample', hue: synth.lab.h, undertone: synth.undertone }
-
-  return {
-    lab: depthLab ? { ...depthLab, C: depthC } : null,
-    source: depthLab ? 'manual' : null,
-    hue: Number.isFinite(hue) && skinUndertoneFromHue(hue) !== null ? hue : null,
-    undertone: Number.isFinite(hue) ? skinUndertoneFromHue(hue) : null,
-  }
-}
+// 11-03 拆分轮：旧版硬编码推荐／文案→身体维／肤色取值口／衣橱候选那四段搬到 ./recommend/ 下四个模块
+const { getRecommendations } = require('./recommend/legacyRecs')
+const { ruleTextBodyFit } = require('./recommend/textBodyFit')
+const { _skinForColor } = require('./recommend/skinForColor')
+const { collectWardrobeTops } = require('./recommend/wardrobeCandidates')
 
 /**
  * 构建完整的推荐结果
@@ -685,91 +465,8 @@ function buildRecommendation(
   }
 
   // 6. 衣橱里量过尺寸的上衣进候选集（10-19 第二阶段「通脉」；10-21 第九阶段·第一步放开门店模式）
-  //    规则命中的那几条是"该买什么"的文字结论，身上没有一件实测过的衣服 ⇒ 廓形那一维永远空转。
-  //    真正带成品尺寸的只有衣柜里的那几行，所以把它们也当候选：
-  //    它们不是规则命中的 ⇒ 不吃规则基础分那一维，由 rankDims 按在场维归一 + 覆盖率折扣。
-  //    ⛔ 四格实测一个都没填、版型也没选的行进不来（不是排最后，是不参与排序）。
-  //    10-19 第三阶段·模块一把门槛从"必须量到尺"放宽成"至少有一条算得出的依据"：
-  //    只选一档版型的那件也进得来，松量由版型区间中值估出来、在覆盖率里只按半格计，
-  //    最后仍要过 `topFitBody` 的覆盖率惩罚 ⇒ "选个版型"占不到便宜，但公式照样能跑。
-  //
-  //    🔴 10-21 改口的这一条（`docs/依据/17` §五 第 1 条）：原来写死 `mode === 'personal'`，
-  //    于是**门店模式看不到任何带尺寸的候选**——身体那一维在门店流程里连进场的机会都没有
-  //    （现量 10-21 盘外副本：store 传了 wardrobe_items ⇒ `from_wardrobe=0`）。放开成
-  //    "profile 里带了 `wardrobe_items` 就进"，两档都开门。
-  //    ⛔ 安全性靠上游而不是这里：这些行只可能是**本次会话自己**扫码/录入的那几件
-  //    （`routes/recommend.js` 按 session_id 过滤，见 17 §五 第 2 条），
-  //    请求不带这一格时候选池与改前逐条相同（17 §七 那条"默认关得住"的回归防线）。
-  const wardrobeTops = []
-  if (Array.isArray(profile.wardrobe_items) && profile.wardrobe_items.length > 0) {
-    const skinForColor = skinColor.lab
-    for (const raw of profile.wardrobe_items || []) {
-      if (!raw || typeof raw !== 'object') continue
-      if (!isTopCategory(raw.category)) continue
-      const hasMeasure = [raw.shoulder_cm, raw.bust_cm, raw.length_cm, raw.waistband_cm].some(
-        (v) => v !== null && v !== undefined && String(v).trim() !== '',
-      )
-      const hasFitType = FIT_TYPE_VALUES.includes(
-        typeof raw.fit_type === 'string' ? raw.fit_type.trim() : '',
-      )
-      if (!hasMeasure && !hasFitType) continue
-      const bf = topFitBody(null, raw, bodyDev)
-      if (!bf) continue
-      delete bf.person // 这个人自己的数整份报告只留一份（见 _computed.body_deviation）
-      const entry = {
-        source: 'wardrobe',
-        wardrobe_item_id: raw.id ?? null,
-        group_id: null,
-        group_name: `衣橱里的：${raw.name || '没填名字的一件'}`,
-        priority: null,
-        score: null,
-        feedback: null,
-        evidence_level: null,
-        top_style: raw.name || null,
-        bottom_style: null,
-        dress_style: null,
-        color_combo: raw.color || null,
-        // 这条不是规则命中的 ⇒ 不写 explanation（那个对象是"命中了哪些规则条件"的口径，
-        // 前端按 ✓ 列表渲染并打"匹配分/优先级"，给它一份算分依据会显示成假的东西）。
-        // 算分依据放在 reason 这一句人话里 + body_fit.top.signals 里。
-        reason: `衣柜实测：${raw.name || '没填名字的一件'}。${(bf.top.signals || [])
-          .slice(0, 4)
-          .join('；')}。这一分的依据是你自己量出来的成品尺寸，不是规则文本`,
-        body_fit: bf,
-        // 🔴 10-21 第十一阶段·第一步（`docs/依据/19` §五 第 3 条）：场合与厚薄这两格要进乘子，
-        // 就得先出现在这条候选身上——原来这一路只带颜色与身体，`occasion` 升档等于白升（读不到值就逐条隐身）。
-        // ⛔ 只认数组（`utils/common.js:374` 投影出来就是数组），非数组当没填；
-        // ⛔ 不在这里判词表：`user_wardrobe.occasion_tags` 由 `routes/wardrobe.js` 写入口收口，
-        //   这一层只负责"取得到值"，词表那条尺子不抄第二份。
-        occasion_tags: Array.isArray(raw.occasion_tags)
-          ? raw.occasion_tags.map((t) => asText(t)).filter(Boolean)
-          : [],
-        // 厚薄有两个来源：投影带的那一格，或 `topFitBody` 算完挂在 `body_fit.top` 上的那一格
-        // （`topFitBody.js:716`，没填是 null）。两个都认，⛔ 只认薄/中/厚三个词——判词的事在 `candAxisValue`。
-        fabric_weight: asText(raw.fabric_weight) || bf.top.fabric_weight || null,
-      }
-      // 衣橱这一处的颜色有两个来源：顾客填的「颜色」栏（raw.color，可以直接写 hex）
-      // 和商品名（raw.name，「雾霾蓝卫衣」这种把色写在名字里的写法）。改前只读颜色栏一个字段
-      // ⇒ 那一栏空着、色写在名字里的行，色彩维整个缺席；口径与 topFitBody 的体量那一格一致：
-      // ⛔ 先试颜色栏、取不到才试名字，不许把两串拼一起（拼串会让 '#111111' 不再是纯 hex 串）。
-      const colorCandidates = [asText(raw.color), asText(raw.name)].filter(Boolean)
-      let fit = null
-      entry.color_text = null
-      for (const candidate of colorCandidates) {
-        fit = colorFit(skinForColor, candidate)
-        if (fit) {
-          entry.color_text = candidate
-          break
-        }
-      }
-      if (fit) entry.color_fit = fit
-      entry.color_basis = fit ? fit.basis : null
-      entry.color_parts = fit
-        ? extractColors(String(entry.color_text || '')).filter((c) => c.is_specific).length
-        : 0
-      wardrobeTops.push(entry)
-    }
-  }
+  //    口径注释与实现全在 ./recommend/wardrobeCandidates.js（逐字搬走，一处未改）。
+  const wardrobeTops = collectWardrobeTops(profile, { skinLab: skinColor.lab, bodyDev })
 
   // 7. 算法重排 + Top N（穿搭这一类；见本节开头"算法重排"）
   //    偏好画像整次推荐只现算一次（不在 rankDims 里逐条查库——那是 8×N 次 SELECT）。

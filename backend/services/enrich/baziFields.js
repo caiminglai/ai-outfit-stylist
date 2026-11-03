@@ -1,5 +1,5 @@
 /**
- * 生日派生层：周岁／年龄段＋八字五行（11-03 从 profileEnricher.js 拆出，行为不变；原文 :790-850）。
+ * 生日派生层：周岁／年龄段＋八字五行（11-03 从 profileEnricher.js 拆出，行为不变；拆前原文 790-850 行）。
  *
  * 职责：由 `birth_date`（和 `birth_hour`）算出规则条件要用的 age／age_range 与
  * day_master_element／favorable_element／unfavorable_element，外加报告页展示的 bazi／bazi_today。

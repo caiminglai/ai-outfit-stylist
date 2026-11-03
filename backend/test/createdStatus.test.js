@@ -52,7 +52,7 @@ const { generateAdminToken } = require('../middleware/auth')
 
 const SESS = 'sess-created-201'
 // 签名对只证明"持密钥方签过"，不证明账号还在：verifyAdminToken 还要 admin_users 里有这条
-// 活着的行，所以这里既要造行、又要用同一个 username 去签（现量 auth.js:173 那句 SELECT）
+// 活着的行，所以这里既要造行、又要用同一个 username 去签（现量 `backend/middleware/auth.js:171` 那句 SELECT）
 memDb
   .prepare('INSERT INTO admin_users (username, password_hash, is_active) VALUES (?, ?, 1)')
   .run('created-201-tester', 'not-a-real-hash')

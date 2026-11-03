@@ -9,6 +9,9 @@
  *
  * 这道豁免只在真实 HTTP 请求里才成立（skip 判据读 req.path），所以起临时实例：
  * PORT=0 + db/init 内存替身，测完关端口。
+ *
+ * 11-03 追加两条：`/health` 从"进程活着就报正常"改成真探针之后，成功侧仍回逐字不变的
+ * 83 字节，库读不到那侧改回 503「异常」（判据见文件下面那两测试的注释）。
  * 运行: node --test test/healthRateLimitExempt.test.js
  */
 const test = require('node:test')
@@ -86,6 +89,44 @@ test('把桶打空：第 101 条普通接口 429，同一时刻 /api/health 仍�
 test('豁免只给健康口：紧接着的普通接口照旧 429，闸没有被顺手放宽', async () => {
   const still = await fetch(`${baseUrl}${BURNER}`)
   assert.strictEqual(still.status, 429, '/api/health 不该把整条 /api 的额度一起放掉')
+})
+
+// ============================================================
+// 11-03：`/health` 从"进程活着就报正常"改成真探针
+// ============================================================
+// 改前这个 handler 一行库都不碰，`db/init.js` 建库失败、库文件被换坏、磁盘只读这三种现场
+// 它照样回 200 + "正常"，监控等于装了个永远不亮的灯。下面两条钉住改后的行为：
+// ① 成功响应体逐字不变（同样 83 字节、同一份 data），因为发布自检脚本
+//    `compose/tools/site3-release-selfcheck.sh:31-34` 和一堆按 83 B 记账的文档都读它；
+// ② 库读不到时必须改口：503 + status「异常」+ code DB_UNAVAILABLE，两条入口同一个口径。
+
+test('真探针·成功侧：83 字节的响应体逐字没变（发布门与文档都按这份形状记账）', async () => {
+  const r = await fetch(`${baseUrl}/api/health`)
+  assert.strictEqual(r.status, 200)
+  const text = await r.text()
+  assert.strictEqual(
+    Buffer.byteLength(text, 'utf8'),
+    83,
+    '成功响应体字节数变了 ⇒ 发布自检与文档口径要一起改',
+  )
+  assert.deepStrictEqual(JSON.parse(text).data, {
+    status: '正常',
+    service: 'Style AI 形象定制后端',
+  })
+})
+
+test('真探针·失败侧：库读不到时回 503「异常」，不再报"正常"（改前这里是 200）', async () => {
+  memDb.close() // 把内存替身关掉，模拟"进程在跑但库没了"
+  for (const p of ['/api/health', '/health']) {
+    const r = await fetch(`${baseUrl}${p}`)
+    assert.strictEqual(r.status, 503, `${p}：库没了还回 200 就是假健康`)
+    const j = await r.json()
+    assert.strictEqual(j.success, false)
+    assert.strictEqual(j.data.status, '异常')
+    assert.strictEqual(j.error.code, 'DB_UNAVAILABLE')
+    // 服务名照旧带着，方便看板认出是哪一路探针
+    assert.strictEqual(j.data.service, 'Style AI 形象定制后端')
+  }
 })
 
 test('收尾：关端口', async () => {

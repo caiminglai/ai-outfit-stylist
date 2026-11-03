@@ -16,6 +16,9 @@ const { generateUUID, parsePagination, UPLOAD_DIR, asId } = require('../utils/co
 const { loginRequired, adminLoginRequired } = require('../middleware/auth')
 const { upload, validateImage } = require('../middleware/upload')
 const { rateLimit } = require('../middleware/rateLimit')
+// 报错与告警一律走 utils/logger：console.* 只落 stdout，容器里那份不归本项目留档，
+// 事后按订单号/用户查不到痕迹（判据见 test/loggerDiscipline.test.js）
+const { error: logErr } = require('../utils/logger')
 
 const router = express.Router()
 
@@ -79,7 +82,7 @@ router.get('/works', (req, res) => {
       items: rows.map((r) => ({ ...r, author_name: nameById.get(r.user_id) || '匿名作者' })),
     })
   } catch (err) {
-    console.error('[创作者] 读取作品列表失败:', err)
+    logErr('[创作者] 读取作品列表失败:', err)
     return sendError(res, '读取作品列表失败', 500)
   }
 })
@@ -112,7 +115,7 @@ router.get('/works/:id', (req, res) => {
       author_name: (author && author.nickname) || '匿名作者',
     })
   } catch (err) {
-    console.error('[创作者] 读取作品详情失败:', err)
+    logErr('[创作者] 读取作品详情失败:', err)
     return sendError(res, '读取作品详情失败', 500)
   }
 })
@@ -144,7 +147,7 @@ router.post('/works/:id/view', viewLimiter, (req, res) => {
     const fresh = db.prepare('SELECT heat, share_views FROM creator_works WHERE id = ?').get(id)
     return sendSuccess(res, { id, heat: fresh.heat, share_views: fresh.share_views })
   } catch (err) {
-    console.error('[创作者] 记录浏览失败:', err)
+    logErr('[创作者] 记录浏览失败:', err)
     return sendError(res, '记录浏览失败', 500)
   }
 })
@@ -208,7 +211,7 @@ router.post('/works', loginRequired, submitLimiter, (req, res) => {
       '已提交，等待审核',
     )
   } catch (err) {
-    console.error('[创作者] 提交作品失败:', err)
+    logErr('[创作者] 提交作品失败:', err)
     return sendError(res, '提交作品失败', 500)
   }
 })
@@ -224,7 +227,7 @@ router.post('/cover', loginRequired, submitLimiter, upload.single('file'), (req,
     fs.writeFileSync(path.join(UPLOAD_DIR, filename), req.file.buffer)
     return sendSuccess(res, { url: `/uploads/${filename}` }, '封面已上传')
   } catch (err) {
-    console.error('[创作者] 上传封面失败:', err)
+    logErr('[创作者] 上传封面失败:', err)
     return sendError(res, '上传封面失败', 500)
   }
 })
@@ -263,7 +266,7 @@ router.get('/my', loginRequired, (req, res) => {
       totals: agg,
     })
   } catch (err) {
-    console.error('[创作者] 读取我的作品失败:', err)
+    logErr('[创作者] 读取我的作品失败:', err)
     return sendError(res, '读取我的作品失败', 500)
   }
 })
@@ -304,7 +307,7 @@ router.get('/admin/list', adminLoginRequired, (req, res) => {
       limit: ADMIN_LIST_LIMIT,
     })
   } catch (err) {
-    console.error('[创作者] 读取审核列表失败:', err)
+    logErr('[创作者] 读取审核列表失败:', err)
     return sendError(res, '读取审核列表失败', 500)
   }
 })
@@ -327,7 +330,7 @@ router.post('/admin/:id/review', adminLoginRequired, (req, res) => {
     if (result.changes === 0) return sendError(res, '作品不存在', 404)
     return sendSuccess(res, { id, status }, '审核已保存')
   } catch (err) {
-    console.error('[创作者] 审核失败:', err)
+    logErr('[创作者] 审核失败:', err)
     return sendError(res, '审核失败', 500)
   }
 })
@@ -344,7 +347,7 @@ router.post('/admin/:id/feature', adminLoginRequired, (req, res) => {
     if (result.changes === 0) return sendError(res, '作品不存在', 404)
     return sendSuccess(res, { id, featured }, featured ? '已设为精选' : '已取消精选')
   } catch (err) {
-    console.error('[创作者] 精选设置失败:', err)
+    logErr('[创作者] 精选设置失败:', err)
     return sendError(res, '精选设置失败', 500)
   }
 })

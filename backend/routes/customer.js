@@ -19,6 +19,9 @@ const { stripIdentityFields } = require('../utils/common')
 const { capJson, FORM_BLOB_LIMITS } = require('../middleware/bodyGate')
 const { buildRecommendation } = require('../services/recommendEngine')
 const { writeRecommendationLog } = require('../services/profileArchive')
+// 报错与告警一律走 utils/logger：console.* 只落 stdout，容器里那份不归本项目留档，
+// 事后按订单号/用户查不到痕迹（判据见 test/loggerDiscipline.test.js）
+const { error: logErr } = require('../utils/logger')
 
 const router = express.Router()
 
@@ -143,7 +146,7 @@ router.post('/session', (req, res) => {
       '顾客会话已创建',
     )
   } catch (err) {
-    console.error('[顾客] 创建会话失败:', err)
+    logErr('[顾客] 创建会话失败:', err)
     return sendError(res, '创建会话失败', 500)
   }
 })
@@ -178,7 +181,7 @@ router.get('/session/:sessionId', (req, res) => {
       '获取会话成功',
     )
   } catch (err) {
-    console.error('[顾客] 获取会话失败:', err)
+    logErr('[顾客] 获取会话失败:', err)
     return sendError(res, '获取会话失败', 500)
   }
 })
@@ -229,7 +232,7 @@ router.put('/session/:sessionId', (req, res) => {
       '会话已更新',
     )
   } catch (err) {
-    console.error('[顾客] 更新会话失败:', err)
+    logErr('[顾客] 更新会话失败:', err)
     return sendError(res, '更新会话失败', 500)
   }
 })
@@ -273,7 +276,7 @@ router.post('/session/:sessionId/sync', (req, res) => {
       '数据已同步到门店',
     )
   } catch (err) {
-    console.error('[顾客] 同步失败:', err)
+    logErr('[顾客] 同步失败:', err)
     return sendError(res, '同步失败', 500)
   }
 })
@@ -298,7 +301,7 @@ router.delete('/session/:sessionId', (req, res) => {
     }
     return sendSuccess(res, { deleted: true })
   } catch (err) {
-    console.error('[顾客] 删除失败:', err)
+    logErr('[顾客] 删除失败:', err)
     return sendError(res, '删除失败', 500)
   }
 })
@@ -348,7 +351,7 @@ router.post('/session/:sessionId/recommend', (req, res) => {
       '推荐已生成',
     )
   } catch (err) {
-    console.error('[顾客] 推荐失败:', err)
+    logErr('[顾客] 推荐失败:', err)
     return sendError(res, '推荐失败', 500)
   }
 })

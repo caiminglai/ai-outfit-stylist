@@ -49,7 +49,7 @@ const { WEATHER_LEVELS, levelFromFeelsLike } = require('./weatherService')
 // "这一条候选的厚薄是哪一档"与偏好层用同一个读法（它认 `fabric_weight` 与 `body_fit.top.fabric_weight` 两个来源）。
 // ⛔ 不在这里再写一份取格逻辑：两路信号读同一格，读法分叉等于两个 factor 建在不同口径上。
 const { candAxisValue } = require('./wearPreference')
-// 🔴 第三路（`21` §五）：判族那把尺子唯一真相源是 `colorMetrics.js:935`（🔴 10-30 按内容重指：原写 933＝它 JSDoc 的 `@returns` 行） 的 `colorFamily`，
+// 🔴 第三路（`21` §五）：判族那把尺子唯一真相源是 `backend/services/color/resolve.js:276`（11-03 按内容重指：这一段原先在 colorMetrics.js，本轮拆到 color/ 子目录，号落在 `function colorFamily(input)` 声明那一行） 的 `colorFamily`，
 // 偏好层读别人衣橱用的就是它（`wearPreference.js:234`）⇒ 这一层必须调同一个函数，⛔ 不抄第二份族表。
 const { colorFamily } = require('./colorMetrics')
 

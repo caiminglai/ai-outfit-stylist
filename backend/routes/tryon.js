@@ -16,6 +16,9 @@ const { loginRequired, optionalUser } = require('../middleware/auth')
 const { upload, validateImage } = require('../middleware/upload')
 const { rateLimit } = require('../middleware/rateLimit')
 const dashscope = require('../services/dashscopeService')
+// 报错与告警一律走 utils/logger：console.* 只落 stdout，容器里那份不归本项目留档，
+// 事后按订单号/用户查不到痕迹（判据见 test/loggerDiscipline.test.js）
+const { error: logErr, warn: logWarn } = require('../utils/logger')
 
 const router = express.Router()
 
@@ -75,7 +78,7 @@ router.post(
           resultUrl = await dashscope.virtualTryon(personUrl, garmentUrl)
         }
       } catch (e) {
-        console.warn('[试穿] DashScope 服务不可用，使用降级模式:', e.message)
+        logWarn('[试穿] DashScope 服务不可用，使用降级模式:', e.message)
       }
 
       // 降级模式：返回人物照片作为结果
@@ -118,7 +121,7 @@ router.post(
           // 不回滚到 500：图已经生成好了、链接就在本次响应里，删文件等于把用户刚拿到的结果毁掉。
           // 但要打成 error 并把 saved 如实带回响应，别让它继续是一条没人看的 warn
           saved = false
-          console.error('[试穿] 结果落库失败(文件已返回但未入账):', e.message)
+          logErr('[试穿] 结果落库失败(文件已返回但未入账):', e.message)
         }
       }
 
@@ -135,7 +138,7 @@ router.post(
         degraded ? '未接入试穿模型，返回的是你的原图' : '虚拟试穿完成',
       )
     } catch (err) {
-      console.error('[试穿] 直接试穿失败:', err)
+      logErr('[试穿] 直接试穿失败:', err)
       return sendError(res, '试穿失败', 500)
     }
   },

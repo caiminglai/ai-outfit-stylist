@@ -10,6 +10,9 @@ const crypto = require('crypto')
 const db = require('../db/init')
 const { getSessionId } = require('../utils/common')
 const { sendError } = require('../utils/response')
+// 报错与告警一律走 utils/logger：console.* 只落 stdout，容器里那份不归本项目留档，
+// 事后按订单号/用户查不到痕迹（判据见 test/loggerDiscipline.test.js）
+const { error: logErr } = require('../utils/logger')
 
 /**
  * 滚动记录会话活跃时间（users.last_active_at）
@@ -94,7 +97,7 @@ function optionalUser(req) {
 function getAdminSecret() {
   const secret = process.env.SECRET_KEY
   if (!secret) {
-    console.error('[安全] SECRET_KEY 未配置！管理员认证将不可用')
+    logErr('[安全] SECRET_KEY 未配置！管理员认证将不可用')
   }
   return secret || ''
 }

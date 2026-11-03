@@ -6,6 +6,9 @@
  */
 const express = require('express')
 const db = require('../db/init')
+// 报错与告警一律走 utils/logger：console.* 只落 stdout，容器里那份不归本项目留档，
+// 事后按订单号/用户查不到痕迹（判据见 test/loggerDiscipline.test.js）
+const { error: logErr } = require('../utils/logger')
 const { sendSuccess, sendCreated, sendError } = require('../utils/response')
 const {
   getSessionId,
@@ -283,7 +286,7 @@ router.get('/items', (req, res) => {
 
     return sendSuccess(res, { items: normalized, count: normalized.length })
   } catch (err) {
-    console.error('[配饰] 查询失败:', err)
+    logErr('[配饰] 查询失败:', err)
     return sendError(res, '查询失败', 500)
   }
 })
@@ -343,7 +346,7 @@ router.post('/items', writeLimiter, (req, res) => {
     // 201＋Location：这条口是真创建（上面 INSERT），且 GET /items/:itemId 在场
     return sendCreated(res, { item: normalizeItem(item) }, `${req.baseUrl}/items/${item.id}`)
   } catch (err) {
-    console.error('[配饰] 添加失败:', err)
+    logErr('[配饰] 添加失败:', err)
     return sendError(res, '添加失败', 500)
   }
 })
@@ -363,7 +366,7 @@ router.get('/items/:itemId', (req, res) => {
 
     return sendSuccess(res, { item: normalizeItem(item) })
   } catch (err) {
-    console.error('[配饰] 查询失败:', err)
+    logErr('[配饰] 查询失败:', err)
     return sendError(res, '查询失败', 500)
   }
 })
@@ -442,7 +445,7 @@ router.put('/items/:itemId', writeLimiter, (req, res) => {
     const item = db.prepare('SELECT * FROM user_accessories WHERE id = ?').get(itemId)
     return sendSuccess(res, normalizeItem(item))
   } catch (err) {
-    console.error('[配饰] 更新失败:', err)
+    logErr('[配饰] 更新失败:', err)
     return sendError(res, '更新失败', 500)
   }
 })
@@ -462,7 +465,7 @@ router.delete('/items/:itemId', writeLimiter, (req, res) => {
 
     return sendSuccess(res, { deleted: true })
   } catch (err) {
-    console.error('[配饰] 删除失败:', err)
+    logErr('[配饰] 删除失败:', err)
     return sendError(res, '删除失败', 500)
   }
 })
@@ -482,7 +485,7 @@ router.post('/gaps', gateBody({ objects: ['profile'] }), (req, res) => {
     const result = analyzeAccessoryGaps(profile, sessionId)
     return sendSuccess(res, result)
   } catch (err) {
-    console.error('[配饰] 缺口分析失败:', err)
+    logErr('[配饰] 缺口分析失败:', err)
     return sendError(res, '分析失败', 500)
   }
 })
@@ -505,7 +508,7 @@ router.get('/gaps', (req, res) => {
     const result = analyzeAccessoryGaps(profile, sessionId)
     return sendSuccess(res, result)
   } catch (err) {
-    console.error('[配饰] 缺口分析失败:', err)
+    logErr('[配饰] 缺口分析失败:', err)
     return sendError(res, '分析失败', 500)
   }
 })
@@ -528,7 +531,7 @@ router.post('/evaluate', gateBody({ objects: ['profile', 'candidate'] }), (req, 
     const result = evaluateAccessoryPurchase(profile, sessionId, candidate)
     return sendSuccess(res, result, result.verdict)
   } catch (err) {
-    console.error('[配饰] 购物评估失败:', err)
+    logErr('[配饰] 购物评估失败:', err)
     return sendError(res, '评估失败', 500)
   }
 })
@@ -544,7 +547,7 @@ router.post('/suggest', gateBody({ objects: ['profile'] }), (req, res) => {
     const result = suggestAccessoryPurchases(profile, sessionId)
     return sendSuccess(res, result.suggestions)
   } catch (err) {
-    console.error('[配饰] 购物推荐失败:', err)
+    logErr('[配饰] 购物推荐失败:', err)
     return sendError(res, '推荐失败', 500)
   }
 })
@@ -565,7 +568,7 @@ router.get('/suggest', (req, res) => {
     const result = suggestAccessoryPurchases(profile, sessionId)
     return sendSuccess(res, result.suggestions)
   } catch (err) {
-    console.error('[配饰] 购物推荐失败:', err)
+    logErr('[配饰] 购物推荐失败:', err)
     return sendError(res, '推荐失败', 500)
   }
 })

@@ -5,6 +5,9 @@
 const express = require('express')
 const { sendSuccess, sendError } = require('../utils/response')
 const { asText } = require('../utils/common')
+// 报错与告警一律走 utils/logger：console.* 只落 stdout，容器里那份不归本项目留档，
+// 事后按订单号/用户查不到痕迹（判据见 test/loggerDiscipline.test.js）
+const { warn: logWarn } = require('../utils/logger')
 const { getWeather, buildTemperatureProfile } = require('../services/weatherService')
 
 const router = express.Router()
@@ -32,7 +35,7 @@ router.get('/', async (req, res) => {
     // 服务层把"取不到"分成了 404/502/503 三种，这里照状态码送出去并带上原因，
     // 前端那行 setError(e.message) 才会显示"城市没收录"而不是含糊的 500
     const status = Number.isInteger(err.status) ? err.status : 500
-    console.warn('[天气] 查询失败:', err.message)
+    logWarn('[天气] 查询失败:', err.message)
     return sendError(res, err.message || '天气查询失败', status)
   }
 })
@@ -51,7 +54,7 @@ router.get('/profile', async (req, res) => {
     // （改前 `null <= 5` 成立 ⇒ 上游缺字段会回"寒冷"，把"没取到"说成"今天很冷"）。
     // 这里照 502 说破：日记表单拿到这句会提示用户改手选，⛔ 不许前端自己补一个档。
     if (!profile) {
-      console.warn('[天气] 上游未返回可用体感温度:', JSON.stringify(weather.feelsLike))
+      logWarn('[天气] 上游未返回可用体感温度:', JSON.stringify(weather.feelsLike))
       return sendError(res, '上游没有返回可用的体感温度，请改用手工选择天气档', 502)
     }
     // set 转 list 以便 JSON 序列化
@@ -60,7 +63,7 @@ router.get('/profile', async (req, res) => {
     return sendSuccess(res, { weather: { ...weather, location }, profile })
   } catch (err) {
     const status = Number.isInteger(err.status) ? err.status : 500
-    console.warn('[天气] 穿衣策略查询失败:', err.message)
+    logWarn('[天气] 穿衣策略查询失败:', err.message)
     return sendError(res, err.message || '天气查询失败', status)
   }
 })

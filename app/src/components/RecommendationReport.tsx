@@ -1,12 +1,6 @@
 /** 建议报告页 - 门店/个人模式 + 天气/AI文案/星座/试穿增强功能 */
 import { useEffect, useState } from 'react'
-import type {
-  CustomerProfile,
-  EngineRecommendation,
-  InventoryProduct,
-  RuleRecommendationItem,
-  WeatherData,
-} from '../types'
+import type { InventoryProduct, RuleRecommendationItem, WeatherData } from '../types'
 import {
   deleteItemFeedback,
   deleteRuleFeedback,
@@ -24,89 +18,9 @@ import { FIELD_LABELS, HIDDEN_FIELDS } from './recommend/reportFields'
 import TryonCard from './recommend/TryonCard'
 import TopSpecCard from './recommend/TopSpecCard'
 import WeatherCard from './recommend/WeatherCard'
-
-/** 两把星的哪一把（10-19 第三阶段·模块三）：审美＝这套好不好看，合身＝上衣上身合不合身 */
-type StarKind = 'aesthetic' | 'fit'
-
-const STAR_LABELS: Record<StarKind, { label: string; note: string }> = {
-  aesthetic: { label: '好看', note: '这套搭配整体好不好看（主要对着色彩那一维）' },
-  fit: { label: '合身', note: '上衣穿在身上合不合身（主要对着廓形那一维）' },
-}
-
-/**
- * 一行五星。点同一颗最高的星＝取消这一把（送 null 清空，不是送 0——0 会被后端拦成 400）。
- * ⛔ 不用 <input type=range>：星级是离散的五档，滑条在手机上会给出"3.4 星"这种后端不收的值。
- */
-function StarRow({
-  kind,
-  value,
-  busy,
-  onPick,
-}: {
-  kind: StarKind
-  value: number | null
-  busy: boolean
-  onPick: (v: number | null) => void
-}) {
-  const shown = value ?? 0
-  return (
-    <span className="flex items-center gap-1 text-xs" style={{ color: 'var(--muted)' }}>
-      <span>{STAR_LABELS[kind].label}</span>
-      {[1, 2, 3, 4, 5].map((n) => (
-        <button
-          key={n}
-          type="button"
-          disabled={busy}
-          className="star-btn"
-          title={
-            n === shown ? `再点一下取消这${STAR_LABELS[kind].label}的星` : STAR_LABELS[kind].note
-          }
-          onClick={() => onPick(n === shown ? null : n)}
-          style={{
-            background: 'transparent',
-            border: 'none',
-            padding: '0 1px',
-            fontSize: '14px',
-            lineHeight: 1,
-            cursor: busy ? 'default' : 'pointer',
-            color: n <= shown ? 'var(--accent)' : 'var(--line)',
-          }}
-        >
-          {n <= shown ? '★' : '☆'}
-        </button>
-      ))}
-    </span>
-  )
-}
-
-interface RecommendationReportProps {
-  recommendation: EngineRecommendation
-  profile: CustomerProfile
-  mode: 'store' | 'personal'
-  sessionId?: string
-  onSync?: () => void
-  onDelete?: () => void
-  onBack?: () => void
-  synced?: boolean
-  syncing?: boolean
-  compact?: boolean
-  /** 🔴 §四·1：顾客在天气卡里选了哪个城市（上一份报告算的时候用的是哪一个） */
-  weatherCity?: string | null
-  /** 上一次生成时后端给的天气出处账：'live'＝按体感温度折了档；'failed'＝名单外或上游没取到 */
-  weatherSource?: 'live' | 'failed' | null
-  /** 'failed' 时后端那句人话（含可选城市名单回显），原样显示，⛔ 前端自己编第二句 */
-  weatherNotice?: string | null
-  /** 选了城市之后按这个城市重算一遍穿搭（⛔ 不自动定位，点了才算，`19` §一 已裁） */
-  onRegenerate?: () => void
-  /** 城市变了要通知上层：真正调 `/engine` 的在那里，本组件不自己发推荐请求 */
-  onWeatherCityChange?: (c: string | null) => void
-  /**
-   * 🔴 10-22 第十四阶段·第一步 X8：后端随推荐结果一起带回的那句隐私声明（真相源见
-   * `pages/ExhibitionHall.tsx` 的 `privacyNotice` 注释）。有就显示、没有就**整行不出现**，
-   * ⛔ 显示"未知"、⛔ 前端自己补一句承诺。
-   */
-  privacyNotice?: string
-}
+import { StarRow } from './recommend/StarRow'
+import type { StarKind } from './recommend/starLabels'
+import type { RecommendationReportProps } from './recommend/types'
 
 export default function RecommendationReport({
   recommendation,

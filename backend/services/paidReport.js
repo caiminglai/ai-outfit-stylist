@@ -13,10 +13,10 @@
  *   3. **后台三张经营读数**（§七）：实收／掉在中段的／漏斗。只读数，⛔ 不改 `/admin/api/stats` 的语义。
  *
  * 🔴 三条不能错的口径：
- *  - `markPaid`（`routes/payment.js:206-233`）在把订单置 `paid` 的同时，**还会往 `deposits` 插一条
- *    `approved` 镜像**（`:224-227`，`proof_url` 写死空串）。所以两张账不能相加，凭证流那一路必须把镜像剔掉；
+ *  - `markPaid`（`routes/payment.js:209-236`）在把订单置 `paid` 的同时，**还会往 `deposits` 插一条
+ *    `approved` 镜像**（`:228-230`，`proof_url` 写死空串）。所以两张账不能相加，凭证流那一路必须把镜像剔掉；
  *    🔴 剔镜像那把尺子**本文件是唯一出处**（`ONLINE_MIRROR` 那段 SQL ＋ 下面 `isOnlineMirror()`），
- *    `routes/payment.js` 的审核口现在反过来调它（`:639`），⛔ 两边各起一把（同层两把尺子是本项目反复清扫的病灶）。
+ *    `routes/payment.js` 的审核口现在反过来调它（`:651`），⛔ 两边各起一把（同层两把尺子是本项目反复清扫的病灶）。
  *  - 库里 `created_at`/`paid_at` 全是 SQLite `datetime('now')`＝**UTC**。窗口比较只在 SQL 里用
  *    `datetime('now', '-30 days')` 同一把尺子做，⛔ 不与东八区日期串比；只有给用户看的那一刻才转东八区。
  *  - 重放引擎算报告时 `incrementHitCount` 一律传 **false**：领取可能重复发生（重试、多设备），
@@ -25,6 +25,9 @@
 const db = require('../db/init')
 const { buildRecommendation } = require('./recommendEngine')
 const { beijingTimestamp } = require('../utils/beijingTime')
+// 报错与告警一律走 utils/logger：console.* 只落 stdout，容器里那份不归本项目留档，
+// 事后按订单号/用户查不到痕迹（判据见 test/loggerDiscipline.test.js）
+const { error: logErr } = require('../utils/logger')
 
 /**
  * 在线支付「镜像凭证」的判据（与下面 JS 侧的 `isOnlineMirror()` 同一条，⛔ 不另起一把尺子）。
@@ -418,7 +421,7 @@ function deliver(grant, { userId, sessionId, basisSessionId }) {
       },
     )
   } catch (err) {
-    console.error('[交付] 报告生成失败:', err)
+    logErr('[交付] 报告生成失败:', err)
     return { code: 500, error: '报告生成失败，请稍后再试', reason: 'engine_failed' }
   }
 
@@ -476,7 +479,7 @@ function deliver(grant, { userId, sessionId, basisSessionId }) {
       return Number(info.lastInsertRowid)
     })()
   } catch (err) {
-    console.error('[交付] 报告落库失败:', err)
+    logErr('[交付] 报告落库失败:', err)
     return { code: 500, error: '报告保存失败，请稍后再试', reason: 'insert_failed' }
   }
 
@@ -504,7 +507,7 @@ function replay(logId, userId) {
     profile = null
   }
   if (!report || !report.paid_report) {
-    console.error('[交付] 报告行读不出结构:', logId)
+    logErr('[交付] 报告行读不出结构:', logId)
     return { code: 500, error: '报告已损坏，请联系客服', reason: 'corrupt' }
   }
   return { code: 200, data: { report, profile, mode: row.mode, log_id: row.id, fresh: false } }

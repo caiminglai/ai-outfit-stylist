@@ -6,6 +6,10 @@
  * 注意：如果 DASHSCOPE_API_KEY 为空，返回模拟数据（MVP 降级模式）
  */
 
+// 报错与告警一律走 utils/logger：console.* 只落 stdout，容器里那份不归本项目留档，
+// 事后按订单号/用户查不到痕迹（判据见 test/loggerDiscipline.test.js）
+const { log: logMsg, warn: logWarn } = require('../utils/logger')
+
 /**
  * 获取 DashScope API Key
  * @returns {string}
@@ -180,7 +184,7 @@ async function analyzeFace(photoUrl) {
     // 解析失败，返回模拟数据
     return mockFaceAnalysis()
   } catch (err) {
-    console.warn(`[DashScope] 人脸分析API调用失败: ${err.message}`)
+    logWarn(`[DashScope] 人脸分析API调用失败: ${err.message}`)
     return mockFaceAnalysis()
   }
 }
@@ -274,7 +278,7 @@ async function virtualTryon(photoUrl, garmentUrl = null) {
 
   // 未配置 API Key 或没有服装图片，返回原图
   if (!apiKey || !garmentUrl) {
-    console.log(
+    logMsg(
       `[DashScope] 虚拟试穿降级模式: api_key=${apiKey ? '有' : '无'}, garment_url=${garmentUrl ? '有' : '无'}`,
     )
     return photoUrl
@@ -317,7 +321,7 @@ async function virtualTryon(photoUrl, garmentUrl = null) {
     const outputUrl = result?.output?.results?.[0]?.url
     return outputUrl || photoUrl
   } catch (err) {
-    console.warn(`[DashScope] 虚拟试穿API调用失败: ${err.message}`)
+    logWarn(`[DashScope] 虚拟试穿API调用失败: ${err.message}`)
     return photoUrl
   }
 }

@@ -7,6 +7,9 @@ const db = require('../db/init')
 const { sendSuccess, sendCreated, sendError } = require('../utils/response')
 const { toEnabledBit, ownValue, asNumber, asFilters, asId } = require('../utils/common')
 const { adminLoginRequired } = require('../middleware/auth')
+// 报错与告警一律走 utils/logger：console.* 只落 stdout，容器里那份不归本项目留档，
+// 事后按订单号/用户查不到痕迹（判据见 test/loggerDiscipline.test.js）
+const { error: logErr } = require('../utils/logger')
 const {
   explainGroup,
   FIELD_LABELS,
@@ -507,7 +510,7 @@ router.post('/groups', adminLoginRequired, (req, res) => {
     const groupId = createGroup()
     return sendCreated(res, { id: groupId }, `${req.baseUrl}/groups/${groupId}`)
   } catch (err) {
-    console.error('[规则] 创建失败:', err)
+    logErr('[规则] 创建失败:', err)
     return sendError(res, '创建失败', 500)
   }
 })
@@ -624,7 +627,7 @@ router.put('/groups/:id', adminLoginRequired, (req, res) => {
     updateGroup()
     return sendSuccess(res, null)
   } catch (err) {
-    console.error('[规则] 更新失败:', err)
+    logErr('[规则] 更新失败:', err)
     return sendError(res, '更新失败', 500)
   }
 })
@@ -662,7 +665,7 @@ router.delete('/groups/:id', adminLoginRequired, (req, res) => {
     removeGroup()
     return sendSuccess(res, null)
   } catch (err) {
-    console.error('[规则] 删除失败:', err)
+    logErr('[规则] 删除失败:', err)
     return sendError(res, '删除失败', 500)
   }
 })
@@ -686,7 +689,7 @@ router.post('/groups/:id/toggle', adminLoginRequired, (req, res) => {
     const after = db.prepare('SELECT enabled FROM rule_groups WHERE id = ?').get(id)
     return sendSuccess(res, { enabled: after && after.enabled === 1 })
   } catch (err) {
-    console.error('[规则] 切换状态失败:', err)
+    logErr('[规则] 切换状态失败:', err)
     return sendError(res, '操作失败', 500)
   }
 })
@@ -714,7 +717,7 @@ router.post('/preview', adminLoginRequired, (req, res) => {
 
     return sendSuccess(res, { recommendation, total })
   } catch (err) {
-    console.error('[规则] 预览失败:', err)
+    logErr('[规则] 预览失败:', err)
     return sendError(res, '预览失败', 500)
   }
 })
@@ -793,7 +796,7 @@ router.get('/browse', (req, res) => {
 
     return sendSuccess(res, { rules, total: rules.length })
   } catch (err) {
-    console.error('[规则] 浏览失败:', err)
+    logErr('[规则] 浏览失败:', err)
     return sendError(res, '获取失败', 500)
   }
 })

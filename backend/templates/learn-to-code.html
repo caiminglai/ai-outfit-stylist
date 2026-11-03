@@ -428,7 +428,7 @@ git -v</code></pre>
             </div>
             <div class="card">
               <b>「工作目录」决定一切</b>
-              同一条 <code>npm test</code>，在 <code>backend/</code> 里是后端 56 份测试，在
+              同一条 <code>npm test</code>，在 <code>backend/</code> 里是后端 67 份测试（尺子＝<code>ls backend/test/*.test.js | wc -l</code>），在
               <code>app/</code> 里根本没有这条脚本。跑命令前先 <code>pwd</code> 看一眼。
             </div>
             <div class="card">
@@ -587,7 +587,7 @@ node --test test/bmi.test.js</code></pre>
               <td>网址对上函数，函数只干三件事：验进、算、发回</td>
             </tr>
             <tr>
-              <td><span class="loc">backend/routes/weather.js:31-37</span></td>
+              <td><span class="loc">backend/routes/weather.js:34-40</span></td>
               <td>
                 <code>catch</code>：照服务层给的 <code>err.status</code> 发错误，没给才发 500
               </td>
@@ -654,7 +654,7 @@ node --test test/bmi.test.js</code></pre>
             目标：能读懂表结构，能自己写一句只读的
             <code>SELECT</code>，并且永远分得清"活库"和"副本"。教材是
             <span class="loc">backend/db/schema.sql</span>（687 行）和
-            <span class="loc">backend/routes/payment.js:44</span> 那一行查询。
+            <span class="loc">backend/routes/payment.js:47</span> 那一行查询。
           </p>
 
           <h3>三块必读</h3>
@@ -673,7 +673,7 @@ node --test test/bmi.test.js</code></pre>
           </p>
           <p>
             <b>③ 查库就一行，但那个 <code>?</code> 是命。</b>
-            <span class="loc">backend/routes/payment.js:44</span> 是：
+            <span class="loc">backend/routes/payment.js:47</span> 是：
           </p>
           <pre><button class="cp">复制</button><code>const row = db.prepare('SELECT value FROM app_settings WHERE key = ?').get(PRICE_KEY)</code></pre>
           <p>
@@ -716,13 +716,13 @@ node -e "const D=require('better-sqlite3')('E:/website/files/learn-l3/copy.db',{
           <p class="aim">
             目标：看懂前端三件事——数据怎么进来、界面怎么画、请求怎么发出去。教材是
             <span class="loc">app/src/components/ErrorBoundary.tsx</span>（90 行）和
-            <span class="loc">app/src/api.ts:235</span> 那一层。
+            <span class="loc">app/src/api/core.ts:210</span> 那一层。
           </p>
 
           <div class="tip">
-            ⛔ 别从展厅开始。<span class="loc">app/src/pages/ExhibitionHall.tsx</span> 有 1,390
-            行，里面还有 3D 模型；它是这个项目最难的文件，不是入门材料。前端一共 42 个
-            <code>.ts/.tsx</code>，从最小的那个读起。
+            ⛔ 别从展厅开始。<span class="loc">app/src/pages/ExhibitionHall.tsx</span> 拆前 1,421 行（尺子＝git show HEAD 那份
+            wc -l），11-03 拆分轮瘦到 483 行，部件在 <span class="loc">app/src/pages/exhibition/</span>；它里面还有 3D 模型，
+            仍是最难的那份、不是入门材料。前端现在 81 个 <code>.ts/.tsx</code>（不含测试），从最小的那个读起。
           </div>
 
           <h3>三句话讲完 React</h3>
@@ -754,15 +754,15 @@ node -e "const D=require('better-sqlite3')('E:/website/files/learn-l3/copy.db',{
 
           <h3>前端怎么发请求</h3>
           <p>
-            全项目发请求的手都在 <span class="loc">app/src/api.ts</span>（1,169
-            行）。核心那一行是
-            <span class="loc">app/src/api.ts:235</span>：<code>await fetch(url, { ...options,
-            signal: controller.signal })</code>。那个 <code>signal</code> 是<b>超时用的刹车</b>——
+            全项目发请求的手都在 <span class="loc">app/src/api/core.ts</span>（292 行；11-03
+            拆分轮起 <span class="loc">app/src/api.ts</span> 只剩 98 行转发名单，正文按领域分成
+            <span class="loc">app/src/api/</span> 那 12 份）。核心那一行是<!-- 11-03 拆分轮：这两条锚点原本指 app/src/api.ts 那份 1,169 行的文件；api.ts 拆成 barrel 后按内容重指到 core.ts，就地换号不增行（本页被按行引用，不在 CI 射程内，漂了不会报红）。 -->
+            <span class="loc">app/src/api/core.ts:210</span>：<code>await fetch(url, { ...options, signal: controller.signal })</code>。那个 <code>signal</code> 是<b>超时用的刹车</b>——
             不装刹车，后端一旦卡住，顾客屏幕上就永远转圈，连报错都不给。
           </p>
           <p>
             还有一条口径要你记住，它写在我给你写的那页教材旁边：
-            <span class="loc">backend/routes/weather.js:50-56</span>——上游没给体感温度就回
+            <span class="loc">backend/routes/weather.js:52-58</span>——上游没给体感温度就回
             502 说破，<b>⛔ 不许前端自己补一个档</b>。第 1 课 L42 是同一句品德的第二遍：<b>量不到就说不，前端后端都不许编。</b>
           </p>
 
@@ -921,7 +921,7 @@ test('我自己加的：18.45 的人显示成 18.5，就该按 18.5 归正常', 
             <tr>
               <td><code>npm run lint</code></td>
               <td>eslint 习惯（<span class="loc">backend/package.json:12</span>）</td>
-              <td>只有 <b>error</b> 会卡住；warning 不卡（现在 0 error／142 warning）。读规则名，别看条数吓人。</td>
+              <td>只有 <b>error</b> 会卡住；warning 不卡（11-03 04:5x 现量 0 error／58 warning；尺子＝npm run lint 末尾那行，条数每轮都会变，读数带时刻）。读规则名，别看条数吓人。</td>
             </tr>
             <tr>
               <td><code>npm test</code></td>
@@ -960,8 +960,8 @@ npm test             > E:/website/files/learn-l6-test.log  2>&1; echo "test   rc
 tail -6 E:/website/files/learn-l6-test.log</code></pre>
           <p>
             三个 <code>rc=</code> 都应是 0，最后一行给你
-            <code>tests / pass / fail</code> 的分母。<b>读数要带分母和时刻</b>——下次跑数字一定变（今天后端是 806
-            条／56 份文件），变了不代表坏，代表有人加了东西。
+            <code>tests / pass / fail</code> 的分母。<b>读数要带分母和时刻</b>——下次跑数字一定变（写这页那轮是 806
+            条／56 份，11-03 这轮现量 933 条／67 份），变了不代表坏，代表有人加了东西。
           </p>
 
           <h3>过了吗</h3>
@@ -1318,8 +1318,8 @@ ls backend/test/*.test.js | wc -l</code></pre>
             <tr><td>依赖 / node_modules</td><td>别人写好的零件，装在你项目里</td><td><code>backend/node_modules</code>、<code>app/node_modules</code>（都不进版本）</td></tr>
             <tr><td>锁文件</td><td>把零件版本钉死，谁装都一样</td><td><code>package-lock.json</code>（Dockerfile L11 那段注释讲过它救过一次构建）</td></tr>
             <tr><td>脚本 scripts</td><td>起个好记的别名代替长命令</td><td><code>backend/package.json:6-15</code></td></tr>
-            <tr><td>路由 router</td><td>网址 ↔ 函数的对照表</td><td><code>backend/routes/*.js</code>（20 个）</td></tr>
-            <tr><td>中间件 middleware</td><td>轮到业务函数之前先过的一道关卡</td><td><code>backend/middleware/</code> 四个：auth / logger / rateLimit / upload</td></tr>
+            <tr><td>路由 router</td><td>网址 ↔ 函数的对照表</td><td><code>backend/routes/*.js</code>（21 个，尺子＝ls backend/routes/*.js | wc -l）</td></tr>
+            <tr><td>中间件 middleware</td><td>轮到业务函数之前先过的一道关卡</td><td><code>backend/middleware/</code> 六个：auth / bodyGate / logger / rateLimit / upload / wardrobeLimiters</td></tr>
             <tr><td>端点 endpoint</td><td>一个能被敲的网址</td><td><code>/api/weather</code>、<code>/admin/api/tables</code></td></tr>
             <tr><td>请求头 header</td><td>随请求夹带的小纸条</td><td>顾客身份 <code>X-Session-Id</code>，后台 <code>Authorization</code></td></tr>
             <tr><td>状态码</td><td>服务器回的一句话语气：2 成／4 你的错／5 我的错</td><td>400 见 <code>weather.js:26</code>，502 见 <code>weather.js:55</code></td></tr>
@@ -1335,7 +1335,7 @@ ls backend/test/*.test.js | wc -l</code></pre>
             <tr><td>WAL</td><td>写先进日志再合回主库，读写少打架</td><td><code>schema.sql:7</code>；所以有 <code>.db-wal</code>／<code>.db-shm</code></td></tr>
             <tr><td>迁移 migration</td><td>给已存在的库改结构，且能重来能回退</td><td>加列走 <code>db/init.js</code> 的 <code>MISSING_COLUMNS</code></td></tr>
             <tr><td>事务 transaction</td><td>一组写要么全成要么全不算</td><td>付款到账＋发权益这类必须一起成</td></tr>
-            <tr><td>SQL 注入</td><td>把用户输入拼进语句，等于让他改你的问题</td><td>解法就是那个 <code>?</code> 占位（<code>payment.js:44</code>）</td></tr>
+            <tr><td>SQL 注入</td><td>把用户输入拼进语句，等于让他改你的问题</td><td>解法就是那个 <code>?</code> 占位（<code>payment.js:47</code>）</td></tr>
             <tr><td>限流 rate limit</td><td>同一人一段时间内最多敲多少次</td><td><code>/api</code> 100 次/15 分（<code>server.js:125-126</code>）；后台 600 次/60 秒</td></tr>
             <tr><td>token / 鉴权</td><td>一张有期限的通行证，来了先验它</td><td>后台 24 小时签名 token，还回库确认账号没被停</td></tr>
             <tr><td>构建 build</td><td>源码 → 能发布的产物，中间还做体检</td><td><code>app/package.json:8</code></td></tr>
@@ -1387,7 +1387,7 @@ ls backend/test/*.test.js | wc -l</code></pre>
             <tr><td>3、4</td><td><span class="ext">E:/website/files/9.html文档/Web项目结构拆解指南_A4打印版 3.0.html</span>（68,246 B）</td><td>「第三部分：后端项目拆解」——用它校准：你项目里 <code>routes/services/db</code> 三层的分工是不是通用的那种</td></tr>
             <tr><td>6、7 与附录 B</td><td><span class="ext">E:/website/files/9.html文档/Web项目问题排查与解决指南 4.0.html</span>（74,280 B）</td><td>「第三部分：后端问题排查」；本页附录 B 专收<b>你这套系统真报过的</b></td></tr>
             <tr><td>7</td><td><span class="ext">E:/website/files/9.html文档/全栈运维手册_整合版.html</span>（68,888 B）</td><td>服务器运维与故障排查；本机 Docker 那套看 <span class="ext">E:/website/compose/SERVER-OPS.md</span></td></tr>
-            <tr><td>第 9 课之后想深挖算法</td><td><span class="ext">E:/website/files/9.html文档/算法知识大全.html</span>（77,193 B）与 <span class="ext">E:/website/files/9.html文档/三个网站项目算法选择完整指南.html</span></td><td>通用算法分类；你项目里那条"规则初筛→算法重排→Top N"读 <span class="loc">backend/services/recommendEngine.js</span>（1,815 行，最后才碰它）</td></tr>
+            <tr><td>第 9 课之后想深挖算法</td><td><span class="ext">E:/website/files/9.html文档/算法知识大全.html</span>（77,193 B）与 <span class="ext">E:/website/files/9.html文档/三个网站项目算法选择完整指南.html</span></td><td>通用算法分类；你项目里那条"规则初筛→算法重排→Top N"读 <span class="loc">backend/services/recommendEngine.js</span>（687 行，11-03 拆分轮把它的四个阶段挪进 <span class="loc">backend/services/recommend/</span> 那 7 份，最后才碰它）</td></tr>
             <tr><td>规矩本身</td><td><span class="ext">E:/website/files/9.html文档/开发规则/1.全局规则/3.全局规则_融合版v4.md</span></td><td>你自己写的那 40 条硬规矩——本页第 9、10 课那三条纪律就是它的一部分投影</td></tr>
             <tr><td>三站对照</td><td><span class="ext">E:/website/files/9.html文档/三站知识库·整合超大版_A4打印版 1.0.html</span>（1,022,897 B，最大那份）</td><td>别当教材读，当字典查</td></tr>
           </table>
@@ -1405,7 +1405,7 @@ ls backend/test/*.test.js | wc -l</code></pre>
           <p class="aim">你提问的质量决定你拿回的东西的质量。四段话，照抄形状：</p>
           <ol>
             <li><b>我要什么</b>：一句话说清结果（"把后台收款金额从 99 改成 88，并且前端跟着变"）。</li>
-            <li><b>它在哪</b>：文件＋行号（<code>backend/routes/payment.js:44</code> 这种），别说"那个付款的地方"。</li>
+            <li><b>它在哪</b>：文件＋行号（<code>backend/routes/payment.js:47</code> 这种），别说"那个付款的地方"。</li>
             <li><b>我已经试过什么</b>：跑过哪条命令、回什么、我看到的现象是什么。</li>
             <li><b>不许动的边界</b>：例如"别碰活库、别动服务器、口令我不给你"。</li>
           </ol>

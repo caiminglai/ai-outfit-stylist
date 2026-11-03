@@ -31,14 +31,8 @@ const paymentRouter = require('../routes/payment')
 const wardrobeRouter = require('../routes/wardrobe')
 const recommendRouter = require('../routes/recommend')
 
-/** 按 method+path 找到 router.stack 里的 Route（Express 内部结构，够用且不碰公开 API） */
-function findRoute(router, method, routePath) {
-  for (const layer of router.stack) {
-    const r = layer.route
-    if (r && r.path === routePath && r.methods[method.toLowerCase()]) return r
-  }
-  return null
-}
+/** 按 method+path 找到 Route；子 router 也算（实现与理由见 `test/helpers/routeLookup.js`） */
+const { findRoute } = require('./helpers/routeLookup')
 
 /**
  * 这一条链上的限流闸（必须在第一位），中间除输入闸门外不许再塞别的东西；末尾是业务 handler。
