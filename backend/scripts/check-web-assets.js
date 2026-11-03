@@ -4,7 +4,8 @@
  * ============================================================
  * 为什么需要它：`backend/static/`、`backend/templates/`、`app/public/` 这三处共 54 份文件
  * 原来不在任何一道门里——prettier 的 js 通配符被 `.prettierignore:7-8` 显式排除了
- * `static/`、`templates/`；eslint 的 backend 配置 ignores 里也有它们（`eslint.config.js:12-13`）；
+ * `static/`、`templates/`；eslint 的 backend 配置 ignores 里也有它们（`backend/eslint.config.js:12-13`，
+ * 写全路径是因为 `app/` 下有一份同名配置，只写裸名会被定位符体检读成"定位不到"）；
  * app 侧 `globalIgnores(['dist','public'])`。于是后台页面与四个公开 html 改坏了、链接指向一个
  * 已经不存在的路径，五道门全绿也不会响。更麻烦的是 `app.get('*')` 那条 SPA 兜底：
  * 一个写错的 `/xxx` 链接不返 404，而是返回整份 index.html ⇒ 人看到的是"页面在，内容不对"。
