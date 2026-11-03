@@ -65,15 +65,26 @@ test('rules-aesthetic.json: 动作类型都有中文标签(否则英文键会直
 // bmi_level / body_type 两档直接从词表的唯一出处取（services/bmi.js 的 HEALTH_BANDS、
 // services/bodyTypes.js 的 BODY_TYPES），不在这里手抄一遍——10-19 的词形断裂就是
 // 因为「引擎出一套、规则库抄一套」，手抄的那份永远比真身慢一轮。
+//
+// 七维连续化改造（2026-11）：bmi / age / height 三档已从离散档改为连续区间匹配
+// （bmi between [24,28) 等），不再有固定取值集合 ⇒ 从可达值表里移除，跳过取值校验。
+// body_type 也改为连续比值（waist_hip_diff/bust_waist_diff/shoulder_hip_ratio）区间匹配；
+// skin_tone 的深度值（白皙/自然白/偏黄/小麦色/古铜色）改为 skin_lightness 区间匹配，
+// 只保留 undertone（暖皮/冷皮/自然）走离散标签。
 const REACHABLE_VALUES = {
   color_season: ['春型', '夏型', '秋型', '冬型'],
   leg_proportion: ['偏短', '标准', '偏长'],
   shoulder_frame: ['偏窄', '标准', '偏宽'],
   waist_definition: ['明显', '中等', '模糊'],
-  skin_tone: ['暖皮', '冷皮', '自然', '白皙', '自然白', '偏黄', '小麦色', '古铜色'],
-  height_range: ['150-160', '160-170', '170-180', '180+'],
-  bmi_level: HEALTH_BANDS.map((b) => b.level),
-  body_type: BODY_TYPES,
+  skin_tone: ['暖皮', '冷皮', '自然'],
+  bmi: null, // 连续值
+  age: null, // 连续值
+  height: null, // 连续值
+  body_type: null, // 连续比值：waist_hip_diff / bust_waist_diff / shoulder_hip_ratio
+  skin_lightness: null, // 连续值：肤色深浅 0~100
+  waist_hip_diff: null, // 连续值：臀−腰
+  bust_waist_diff: null, // 连续值：胸−腰
+  shoulder_hip_ratio: null, // 连续值：肩/臀
   scenario: [
     '通勤',
     '约会',
@@ -99,7 +110,9 @@ test('rules-aesthetic.json: 条件取值都算得出来(防死规则)', () => {
   for (const r of rules) {
     for (const c of r.conditions) {
       const allowed = REACHABLE_VALUES[c.field]
-      assert.ok(allowed, `测试未登记字段 ${c.field},请补进 REACHABLE_VALUES`)
+      assert.ok(allowed !== undefined, `测试未登记字段 ${c.field},请补进 REACHABLE_VALUES`)
+      // 连续值字段（bmi/age/height）用区间算子，没有固定取值集合，跳过取值校验
+      if (allowed === null) continue
       const values = Array.isArray(c.value)
         ? c.value
         : String(c.value)
@@ -213,24 +226,20 @@ function servesGender(group, gender) {
 }
 
 /**
- * 已知且暂时不补的性别漏档（10-19 逐格数出来 5 处）。
+ * 已知且暂时不补的性别漏档。
+ * 七维连续化改造（2026-11）后：skin_tone 深度值（白皙/自然白/偏黄/小麦色/古铜色）已转为
+ * skin_lightness 连续区间匹配，不再走离散分档覆盖率校验 ⇒ 对应的 5 条已知漏档已从清单移除。
  * 这是**棘轮**不是免检牌：清单里每一格测试会确认它现在确实还是空的（补上了就报"请删掉这一行"），
- * 清单外新出现的空格直接判失败。为什么先留着这 5 格：skin_tone_detail 那五档（白皙/自然白/
- * 偏黄/小麦色/古铜色）目前只有女性向的妆容组在用；男性 personal 模式这一栏不至于整栏为空
- * （「暖皮/冷皮/自然」三档各有配饰组命中），要不要给男性补五档妆容是产品决定，等他拍。
+ * 清单外新出现的空格直接判失败。
  */
-const KNOWN_GENDER_GAPS = [
-  'skin_tone=白皙 × 男',
-  'skin_tone=自然白 × 男',
-  'skin_tone=偏黄 × 男',
-  'skin_tone=小麦色 × 男',
-  'skin_tone=古铜色 × 男',
-]
+const KNOWN_GENDER_GAPS = []
 
 test('每个算得出的分档取值 × 两性各自至少被一条启用的规则命中(反向防漏档·性别感知)', () => {
   const groups = loadCoverageCorpus().filter((g) => g.enabled === 1)
   const gaps = []
   for (const [field, values] of Object.entries(REACHABLE_VALUES)) {
+    // 连续值字段（bmi/age/height）没有离散档位，覆盖率不适用
+    if (values === null) continue
     for (const value of values) {
       for (const gender of ['男', '女']) {
         // ne 是"排除"，它命中不了某个具体档位，不能拿来充覆盖

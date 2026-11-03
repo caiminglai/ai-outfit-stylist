@@ -19,7 +19,8 @@ import AlgorithmAnalysisCard from './recommend/AlgorithmAnalysis'
 import EnhancedTextCard from './recommend/EnhancedTextCard'
 import EvidenceTag from './recommend/EvidenceTag'
 import HoroscopeCard from './recommend/HoroscopeCard'
-import { FIELD_LABELS, HIDDEN_FIELDS, TAB_LABEL, TABS } from './recommend/RecommendTab'
+import { TAB_LABEL, TABS } from './recommend/RecommendTab'
+import { FIELD_LABELS, HIDDEN_FIELDS } from './recommend/reportFields'
 import TryonCard from './recommend/TryonCard'
 import TopSpecCard from './recommend/TopSpecCard'
 import WeatherCard from './recommend/WeatherCard'
@@ -450,6 +451,26 @@ export default function RecommendationReport({
               ),
           )}
         </div>
+        {/* 四大身材标准·部位级标签（椰子胸/沙漏腰/母贝臀/酒杯腿） */}
+        {profile.body_highlights && profile.body_highlights.length > 0 && (
+          <div className="mt-2">
+            <div className="text-[11px] mb-1" style={{ color: 'var(--muted)' }}>
+              身材优势部位
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {profile.body_highlights.map((h) => (
+                <span
+                  key={h}
+                  className="pill-tag"
+                  style={{ color: 'var(--accent)', borderColor: 'var(--accent)' }}
+                  title={profile.body_highlights_details?.[h]?.label}
+                >
+                  ✨ {h}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
         {/* 🔴 10-22 第十四阶段·第一步 X5（`docs/依据/22` §六）：把"这次到底算到几维"当面说清。
             改前顾客只填性别就能拿到满 8 条，可报告里到处是「没量到 ⇒ 没计入」「六格只量到 2 格」
             这类缺席说明 ⇒ 感受是"我什么都没填它说我没填"。硬规矩 2 的引申是**缺测要明说、不是拦着不出分**，
@@ -468,6 +489,114 @@ export default function RecommendationReport({
           </div>
         )}
       </div>
+
+      {/* 四季色彩季型卡（后端 seasonColor.getSeasonType 输出；冷暖+深浅两轴都拿到才出） */}
+      {profile.season_type && (
+        <div className="glass-card p-3">
+          <div className="flex items-center justify-between mb-2">
+            <h2 className="text-sm font-semibold" style={{ color: 'var(--accent)' }}>
+              色彩季型
+            </h2>
+            <span
+              className="pill-tag"
+              style={{ color: 'var(--accent)', borderColor: 'var(--accent)' }}
+            >
+              {profile.season_type.season_name}
+            </span>
+          </div>
+          <p className="text-xs mb-2" style={{ color: 'var(--text)' }}>
+            {profile.season_type.traits}
+          </p>
+          <div className="mb-2">
+            <div className="text-[11px] mb-1" style={{ color: 'var(--muted)' }}>
+              推荐配色
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {profile.season_type.palette.map((c, i) => (
+                <div key={i} className="flex items-center gap-1" title={c.name}>
+                  <span
+                    className="inline-block w-4 h-4 rounded-full border"
+                    style={{ backgroundColor: c.hex || '#ccc', borderColor: 'var(--line)' }}
+                  />
+                  <span className="text-[11px]" style={{ color: 'var(--muted)' }}>
+                    {c.name}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="mb-2">
+            <div className="text-[11px] mb-1" style={{ color: 'var(--muted)' }}>
+              尽量避开
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {profile.season_type.avoid.map((c, i) => (
+                <div key={i} className="flex items-center gap-1" title={c.name}>
+                  <span
+                    className="inline-block w-4 h-4 rounded-full border"
+                    style={{ backgroundColor: c.hex || '#ccc', borderColor: 'var(--line)' }}
+                  />
+                  <span className="text-[11px]" style={{ color: 'var(--muted)' }}>
+                    {c.name}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="text-[11px]" style={{ color: 'var(--muted)', lineHeight: 1.5 }}>
+            判据：{profile.season_type.basis}
+            {profile.season_type.confidence < 0.9 && '（部分维度来自档名兜底，仅供参考）'}
+          </div>
+        </div>
+      )}
+
+      {/* 五维肤色框架（借鉴 HBN 蓝皮书：黑/黄/红/白/青） */}
+      {profile.skin_five_dimensions && (
+        <div className="glass-card p-3">
+          <div className="flex items-center justify-between mb-2">
+            <h2 className="text-sm font-semibold" style={{ color: 'var(--accent)' }}>
+              肤色五维（HBN）
+            </h2>
+            <span
+              className="pill-tag"
+              style={{ color: 'var(--accent)', borderColor: 'var(--accent)' }}
+            >
+              主：{profile.skin_five_dimensions.primary}
+            </span>
+          </div>
+          <div className="space-y-1.5">
+            {(['black', 'white', 'yellow', 'red', 'cyan'] as const).map((dim) => {
+              const labels: Record<string, string> = {
+                black: '黑',
+                white: '白',
+                yellow: '黄',
+                red: '红',
+                cyan: '青',
+              }
+              const val = profile.skin_five_dimensions![dim]
+              return (
+                <div key={dim} className="flex items-center gap-2">
+                  <span className="text-xs w-8" style={{ color: 'var(--muted)' }}>
+                    {labels[dim]}
+                  </span>
+                  <div className="flex-1 h-2 rounded" style={{ backgroundColor: 'var(--bg-soft)' }}>
+                    <div
+                      className="h-2 rounded"
+                      style={{ width: `${val}%`, backgroundColor: 'var(--accent)' }}
+                    />
+                  </div>
+                  <span className="text-xs w-8 text-right" style={{ color: 'var(--muted)' }}>
+                    {val}
+                  </span>
+                </div>
+              )
+            })}
+          </div>
+          <div className="text-[11px] mt-2" style={{ color: 'var(--muted)' }}>
+            基于色相角与明度的五维倾向近似，非医学色度测量
+          </div>
+        </div>
+      )}
 
       {/* 天气查询卡片（🔴 §四·1：这里选的城市会随下一次生成一起送进 /engine，⛔ 不落库、⛔ 不进长期档案） */}
       <WeatherCard
@@ -500,7 +629,7 @@ export default function RecommendationReport({
           `algorithm_analysis`（`services/recommendEngine.js` 的 `opts.deep_analysis`），但这一行的判据
           还只认 `mode === 'personal'` ⇒ 门店顾客付费领到的那份细账，屏幕上没有正文那一节。
           判据换成"这一份是不是付费领取出来的"（`paid_report` 只有 `GET /api/payment/my?report=…`
-          那一路会写，见 `types/index.ts:543`），⛔ 免费屏（没有 `paid_report`）一个像素都不变。 */}
+          那一路会写，见 `types/index.ts:635`），⛔ 免费屏（没有 `paid_report`）一个像素都不变。 */}
       {(mode === 'personal' || Boolean(recommendation.paid_report)) && analysis && (
         <AlgorithmAnalysisCard analysis={analysis} />
       )}
@@ -523,6 +652,43 @@ export default function RecommendationReport({
         {/* 上衣处方卡：只按身材+肤色出规格，与规则结论、衣橱都无关，所以规则没命中时也要在 */}
         {activeTab === '穿搭' && recommendation.top_spec && (
           <TopSpecCard spec={recommendation.top_spec} skin={recommendation._computed} />
+        )}
+
+        {/* 衣橱搭配：从已有衣物中生成的搭配方案（借鉴 AI衣橱） */}
+        {activeTab === '穿搭' && recommendation.衣橱搭配 && recommendation.衣橱搭配.length > 0 && (
+          <div className="glass-card p-3">
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="text-sm font-semibold" style={{ color: 'var(--accent)' }}>
+                👗 你衣橱里能搭出的
+              </h3>
+              <span className="text-[11px]" style={{ color: 'var(--muted)' }}>
+                共 {recommendation.衣橱搭配.length} 套
+              </span>
+            </div>
+            <div className="space-y-2">
+              {recommendation.衣橱搭配.map((outfit, i) => (
+                <div key={i} className="p-2 rounded" style={{ backgroundColor: 'var(--bg-soft)' }}>
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-medium" style={{ color: 'var(--text)' }}>
+                      {outfit.items.map((it) => it.name).join(' + ')}
+                    </span>
+                    <span
+                      className="pill-tag text-[10px]"
+                      style={{ color: 'var(--accent)', borderColor: 'var(--accent)' }}
+                    >
+                      协调度 {outfit.score}
+                    </span>
+                  </div>
+                  <div className="text-[11px] mt-1" style={{ color: 'var(--muted)' }}>
+                    {outfit.reason}
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="text-[11px] mt-2" style={{ color: 'var(--muted)' }}>
+              仅基于你衣橱已有衣物的色彩与场合匹配，体型适配请看上方推荐
+            </div>
+          </div>
         )}
         {items.length === 0 ? (
           <div className="text-center py-6 text-sm" style={{ color: 'var(--muted)' }}>
@@ -676,6 +842,47 @@ export default function RecommendationReport({
                       </>
                     )}
                   </span>
+                </div>
+              )}
+              {/* 可解释穿搭评估：逐维度冲突拆解（2026-11 借鉴邂逅时尚）。
+                  只展示后端挂了 conflict_breakdown 的条目——没挂＝所有维度都贴合，没冲突可拆。
+                  数据来自 color_fit／body_fit 的已有子分，⛔ 前端不重算、不猜。 */}
+              {item.conflict_breakdown && item.conflict_breakdown.length > 0 && (
+                <div
+                  className="mt-2 space-y-1"
+                  style={{ borderTop: '1px dashed var(--line)', paddingTop: '8px' }}
+                >
+                  <div className="text-xs font-medium" style={{ color: 'var(--muted)' }}>
+                    穿搭拆解
+                  </div>
+                  {item.conflict_breakdown.map((cb, idx) => {
+                    const tone =
+                      cb.level === 'good'
+                        ? 'var(--good)'
+                        : cb.level === 'medium'
+                          ? 'var(--warning)'
+                          : 'var(--danger)'
+                    const label =
+                      cb.level === 'good' ? '贴合' : cb.level === 'medium' ? '中等' : '冲突'
+                    return (
+                      <div key={idx} className="flex gap-2 text-xs items-start">
+                        <span className="flex-shrink-0 w-16" style={{ color: 'var(--muted)' }}>
+                          {cb.dimension}
+                        </span>
+                        <span className="flex-1" style={{ lineHeight: 1.5 }}>
+                          <span style={{ color: tone }}>
+                            {Math.round(cb.score)}分 · {label}
+                          </span>
+                          {cb.detail && (
+                            <span style={{ color: 'var(--muted)' }}>（{cb.detail}）</span>
+                          )}
+                          {cb.suggestion && (
+                            <span style={{ color: 'var(--text)' }}> —— {cb.suggestion}</span>
+                          )}
+                        </span>
+                      </div>
+                    )
+                  })}
                 </div>
               )}
               {/* 综合排序分:这一条排在第几名就是它定的(10-19 第二阶段) */}

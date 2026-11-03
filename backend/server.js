@@ -144,7 +144,7 @@ const apiLimiter = rateLimit({
   // `/health`（不带 /api）本来就不在这道闸范围内，两条入口现在口径一致。
   // 判据读 originalUrl 而不是 req.path：这道闸挂在 `app.use('/api/')` 上，Express 会把
   // 挂载前缀从 req.url 里切掉 ⇒ 中间件里 req.path 只剩 '/health'（10-13 现量：写成
-  // req.path === '/api/health' 时豁免整个不生效，第 101 条照样 429）。🔴 第十四阶段追加 `/api/models/list` 进同一条豁免（取证与代价账见 docs/依据/22-…md §十二.9a 与路线 §五十三.2）：展厅待机态一开屏就 fetch 它＝"打开首页就送一次额度"，国内移动网络与门店 WiFi 普遍共用出口 IP ⇒ 桶是十几个人共享的，撞空后 429 被 showApiError 变成整屏"无法加载人物模型"；它虽有 ETag＋no-cache（routes/models.js:145-146）但闸在路由前面 ⇒ 304 照样吃额度，条件请求省字节省不到这一格；豁免代价＝零（一条 SELECT COUNT 加一遍已启用列表，无用户输入、无副作用）。
+  // req.path === '/api/health' 时豁免整个不生效，第 101 条照样 429）。🔴 第十四阶段追加 `/api/models/list` 进同一条豁免（取证与代价账见 docs/依据/22-…md §十二.9a 与路线 §五十三.2）：展厅待机态一开屏就 fetch 它＝"打开首页就送一次额度"，国内移动网络与门店 WiFi 普遍共用出口 IP ⇒ 桶是十几个人共享的，撞空后 429 被 showApiError 变成整屏"无法加载人物模型"；它虽有 ETag＋no-cache（routes/models.js:147-148）但闸在路由前面 ⇒ 304 照样吃额度，条件请求省字节省不到这一格；豁免代价＝零（一条 SELECT COUNT 加一遍已启用列表，无用户输入、无副作用）。
   skip: (req) =>
     ['/api/health', '/api/models/list'].includes(req.originalUrl.split('?')[0]) ||
     req.originalUrl.startsWith('/api/models/file/') ||

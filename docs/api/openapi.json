@@ -1508,6 +1508,123 @@
         }
       }
     },
+    "/api/analysis/style-questions": {
+      "get": {
+        "tags": [
+          "analysis"
+        ],
+        "summary": "获取风格诊断题目",
+        "operationId": "get__api_analysis_style_questions",
+        "x-fields-confidence": "heuristic",
+        "responses": {
+          "200": {
+            "description": "成功，统一信封 `{success:true,data}`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Success"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "错误 400",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "超过限流窗口",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "x-rate-limit": {
+          "window_ms": 900000,
+          "max": 100,
+          "scope": "global"
+        }
+      }
+    },
+    "/api/analysis/style-diagnose": {
+      "post": {
+        "tags": [
+          "analysis"
+        ],
+        "summary": "提交风格诊断答案，返回风格类型",
+        "operationId": "post__api_analysis_style_diagnose",
+        "x-fields-confidence": "heuristic",
+        "responses": {
+          "200": {
+            "description": "成功，统一信封 `{success:true,data}`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Success"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "错误 400",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "超过限流窗口",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "错误 500",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "answers": {}
+                }
+              }
+            }
+          }
+        },
+        "x-rate-limit": {
+          "window_ms": 900000,
+          "max": 100,
+          "scope": "global"
+        }
+      }
+    },
     "/api/recommend/engine": {
       "post": {
         "tags": [
@@ -2032,7 +2149,10 @@
             "application/json": {
               "schema": {
                 "type": "object",
-                "properties": {}
+                "properties": {
+                  "recommendation": {},
+                  "weather": {}
+                }
               }
             }
           }
@@ -2049,7 +2169,8 @@
         "tags": [
           "tryon"
         ],
-        "summary": "POST /api/tryon/direct",
+        "summary": "直接虚拟试穿（无需登录，使用 FormData） 前端 api.ts directTryon 发送： FormData { person_image: File, garment_image: File, category: string ",
+        "description": "直接虚拟试穿（无需登录，使用 FormData） 前端 api.ts directTryon 发送： FormData { person_image: File, garment_image: File, category: string } /",
         "operationId": "post__api_tryon_direct",
         "x-fields-confidence": "heuristic",
         "responses": {
@@ -3155,6 +3276,16 @@
               }
             }
           },
+          "400": {
+            "description": "错误 400",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
           "429": {
             "description": "超过限流窗口",
             "content": {
@@ -3284,6 +3415,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Success"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "错误 400",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
                 }
               }
             }
@@ -5241,7 +5382,9 @@
             "application/json": {
               "schema": {
                 "type": "object",
-                "properties": {}
+                "properties": {
+                  "profile": {}
+                }
               }
             }
           }
@@ -5324,7 +5467,10 @@
             "application/json": {
               "schema": {
                 "type": "object",
-                "properties": {}
+                "properties": {
+                  "candidate": {},
+                  "profile": {}
+                }
               }
             }
           }
@@ -5407,7 +5553,9 @@
             "application/json": {
               "schema": {
                 "type": "object",
-                "properties": {}
+                "properties": {
+                  "profile": {}
+                }
               }
             }
           }
@@ -5490,7 +5638,9 @@
             "application/json": {
               "schema": {
                 "type": "object",
-                "properties": {}
+                "properties": {
+                  "profile": {}
+                }
               }
             }
           }
@@ -5829,7 +5979,10 @@
             "application/json": {
               "schema": {
                 "type": "object",
-                "properties": {}
+                "properties": {
+                  "profile": {},
+                  "wardrobe_items": {}
+                }
               }
             }
           }
@@ -7371,7 +7524,9 @@
             "application/json": {
               "schema": {
                 "type": "object",
-                "properties": {}
+                "properties": {
+                  "profile": {}
+                }
               }
             }
           }
@@ -7525,7 +7680,10 @@
             "application/json": {
               "schema": {
                 "type": "object",
-                "properties": {}
+                "properties": {
+                  "candidate": {},
+                  "profile": {}
+                }
               }
             }
           }
@@ -7608,7 +7766,9 @@
             "application/json": {
               "schema": {
                 "type": "object",
-                "properties": {}
+                "properties": {
+                  "profile": {}
+                }
               }
             }
           }
@@ -8234,7 +8394,9 @@
             "application/json": {
               "schema": {
                 "type": "object",
-                "properties": {}
+                "properties": {
+                  "profile": {}
+                }
               }
             }
           }
@@ -8388,7 +8550,10 @@
             "application/json": {
               "schema": {
                 "type": "object",
-                "properties": {}
+                "properties": {
+                  "candidate": {},
+                  "profile": {}
+                }
               }
             }
           }
@@ -8471,7 +8636,9 @@
             "application/json": {
               "schema": {
                 "type": "object",
-                "properties": {}
+                "properties": {
+                  "profile": {}
+                }
               }
             }
           }

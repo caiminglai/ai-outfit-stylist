@@ -18,6 +18,7 @@ const path = require('node:path')
 
 const {
   estimateBodyDims,
+  estimateFromWaist,
   selectBand,
   ANCHORS,
   BUST_EXPONENT,
@@ -726,7 +727,7 @@ test('接线⑥：端到端——只填身高体重的人现在能被打上架�
   assert.strictEqual(rankTopsByBody(withoutEst(e), tops).ranked.length, 1)
 
   // 两条生产入口都必须"先 enrich 再算偏差"，否则 `p.body_est` 这格根本不在场、接线在现场失灵
-  //（`recommendationBodyDeviation` 与 `buildRecommendation` 是 routes/wardrobe.js:1417 与推荐主链路各自的那一个入口）
+  //（`recommendationBodyDeviation` 与 `buildRecommendation` 是 routes/wardrobe.js:1430 与推荐主链路各自的那一个入口）
   const eng = fs.readFileSync(path.join(__dirname, '..', 'services/recommendEngine.js'), 'utf8')
   assert.match(
     eng,
@@ -753,4 +754,120 @@ test('接线⑦（本轮现量到的挂账·等拍板）：估算净肩宽只抬
   assert.strictEqual(off.coverage_penalty, 0.59)
   assert.strictEqual(on.coverage_penalty, 0.63)
   assert.ok(on.score > off.score, `${on.score} 该高于 ${off.score}`)
+})
+
+// —— ⑧ 腰围回归方程（苏南 18~24 岁女性研究，B=0.59W+45.37／H=0.55W+53.96）——
+
+test('腰围回归：论文回代值逐格复算（W=68 ⇒ B=85.5／H=91.4）', () => {
+  // 论文用 GB/T 1335.2—2008 的 165/84A（W=68）回代：B=85.49／H=91.36
+  const r = estimateFromWaist({ gender: '女', waist: 68, age: 22 })
+  assert.strictEqual(r.bust_cm, 85.5) // r1(0.59×68+45.37)＝r1(85.49)＝85.5
+  assert.strictEqual(r.hip_cm, 91.4) // r1(0.55×68+53.96)＝r1(91.36)＝91.4
+  assert.strictEqual(r.estimated, true)
+  assert.strictEqual(r.basis.sample_size, 185)
+  assert.strictEqual(r.basis.region, '苏南')
+})
+
+test('腰围回归：样本均值回代（W=67.16 ⇒ B≈84.99／H≈90.89）', () => {
+  // 论文样本均值 W=67.16，代入方程应接近样本均值 B=85.02／H=91.13
+  const r = estimateFromWaist({ gender: '女', waist: 67.16, age: 20 })
+  assert.ok(Math.abs(r.bust_cm - 85.0) < 0.2, `bust=${r.bust_cm}`)
+  assert.ok(Math.abs(r.hip_cm - 90.9) < 0.2, `hip=${r.hip_cm}`)
+})
+
+test('腰围回归：输入不合格一律返回 null', () => {
+  const bad = [
+    {}, // 什么都没有
+    { waist: 68 }, // 缺性别
+    { gender: '男', waist: 68 }, // ⛔ 男性群体无此方程
+    { gender: '女' }, // 缺腰围
+    { gender: '女', waist: 39.9 }, // 低于框
+    { gender: '女', waist: 130.1 }, // 高于框
+    { gender: '女', waist: '细腰' }, // 非数字
+    { gender: '女', waist: null },
+    null,
+    undefined,
+  ]
+  for (const input of bad) {
+    assert.strictEqual(estimateFromWaist(input), null, JSON.stringify(input))
+  }
+  // 框的两个角本身合法（闭区间）
+  assert.ok(estimateFromWaist({ gender: '女', waist: 40 }))
+  assert.ok(estimateFromWaist({ gender: '女', waist: 130 }))
+})
+
+test('腰围回归：年龄超出 18~35 打 flag 但仍可算', () => {
+  const inRange = estimateFromWaist({ gender: '女', waist: 68, age: 22 })
+  assert.deepStrictEqual(inRange.flags, [])
+  const old = estimateFromWaist({ gender: '女', waist: 68, age: 40 })
+  assert.deepStrictEqual(old.flags, ['age_out_of_study_range'])
+  // 方程不随年龄变，数一样
+  assert.strictEqual(old.bust_cm, inRange.bust_cm)
+})
+
+test('腰围回归：输出契约——不许冒置信度／准确率', () => {
+  const r = estimateFromWaist({ gender: '女', waist: 68 })
+  assert.deepStrictEqual(Object.keys(r).sort(), [
+    'basis',
+    'bust_cm',
+    'estimated',
+    'flags',
+    'hip_cm',
+  ])
+  for (const banned of ['confidence', 'accuracy', 'score', 'stars']) {
+    assert.ok(!(banned in r), banned)
+  }
+})
+
+test('腰围回归接线①：enrichProfile 合并估算通道——胸围优先腰围回归，臀围只从腰围来', () => {
+  // 女性、填了腰围但没填胸围/臀围、有身高体重
+  const e = enrichProfile({ gender: '女', height: 165, weight: 55, waist: 68, age: 22 })
+  // bust 从腰围回归：0.59×68+45.37=85.5（不是身高体重幂律的 87.5）
+  assert.strictEqual(e.body_est.bust_cm, 85.5)
+  assert.strictEqual(e.body_est.bust_from, 'waist_regression')
+  // hip 只能从腰围回归来
+  assert.strictEqual(e.body_est.hip_cm, 91.4)
+  assert.strictEqual(e.body_est.hip_from, 'waist_regression')
+  // shoulder 只从身高体重来
+  assert.strictEqual(e.body_est.shoulder_from, 'height_weight')
+  // ⛔ 不改写档案原值
+  assert.ok(!('bust' in e) && !('hip' in e))
+})
+
+test('腰围回归接线②：topFitBody 用估算值补全 person_cm.hip，且 measure 向量不碰估算值', () => {
+  const e = enrichProfile({ gender: '女', height: 165, weight: 55, waist: 68, age: 22 })
+  const dev = bodyDeviation(e)
+  // hip 从腰围回归顶上
+  assert.strictEqual(dev.person_cm.hip, 91.4)
+  assert.strictEqual(dev.person_cm_src.hip, 'estimated')
+  // bust 从腰围回归顶上（优先级高于身高体重）
+  assert.strictEqual(dev.person_cm.bust, 85.5)
+  assert.strictEqual(dev.person_cm_src.bust, 'estimated')
+  // measure 向量的 hip_waist_diff 用的是实测值——腰围量了但臀围没量 ⇒ 仍为 null
+  // （估算值只进 person_cm，不进 measure）
+  assert.strictEqual(dev.measure.hip_waist_diff, null)
+  // notes 里必须露名"臀围是估的"
+  assert.ok(
+    dev.notes.some((s) => /净臀围没量/.test(s)),
+    JSON.stringify(dev.notes),
+  )
+})
+
+test('腰围回归接线③：有实测胸围时，腰围回归的胸围不许顶上去', () => {
+  const e = enrichProfile({ gender: '女', height: 165, weight: 55, waist: 68, bust: 90, age: 22 })
+  const dev = bodyDeviation(e)
+  // 实测胸围优先
+  assert.strictEqual(dev.person_cm.bust, 90)
+  assert.strictEqual(dev.person_cm_src.bust, 'measured')
+  // 臀围仍是估算（没量）
+  assert.strictEqual(dev.person_cm.hip, 91.4)
+})
+
+test('腰围回归接线④：男性档案不触发腰围回归', () => {
+  const e = enrichProfile({ gender: '男', height: 175, weight: 70, waist: 80, age: 30 })
+  // 男性没有 hip_cm 估算
+  assert.strictEqual(e.body_est.hip_cm, undefined)
+  assert.strictEqual(e.body_est.hip_from, undefined)
+  // bust 从身高体重幂律来
+  assert.strictEqual(e.body_est.bust_from, 'height_weight')
 })

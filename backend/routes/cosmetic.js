@@ -19,6 +19,7 @@ const {
 } = require('../utils/common')
 const { countByBucket, cosmeticGapBucket } = require('../services/categoryBuckets')
 const { rateLimit } = require('../middleware/rateLimit')
+const { gateBody } = require('../middleware/bodyGate')
 
 const router = express.Router()
 
@@ -55,7 +56,7 @@ function coerceExpiryField(key, val) {
 
 /**
  * 余量百分比入库前整形（POST 与 PUT 两条写口共用）
- * remaining 列是 INTEGER（schema.sql:451），前端 CosmeticTab.tsx:552 直接拿它拼
+ * remaining 列是 INTEGER（schema.sql:451），前端 CosmeticTab.tsx:554 直接拿它拼
  * `width: ${remaining}%`：'半瓶' 这种字符串进库 ⇒ CSS 值是 `width: 半瓶%`，进度条整条消失；
  * 150／-20 进库 ⇒ 溢出容器或倒着填。空值另说：前端按 `remaining != null` 才画条，
  * 所以 null／'' 归 NULL 是安全的"没记余量"。
@@ -635,7 +636,7 @@ router.get('/expiry', (req, res) => {
 })
 
 /** 化妆品柜缺口分析（支持 POST 和 GET） */
-router.post('/gaps', (req, res) => {
+router.post('/gaps', gateBody({ objects: ['profile'] }), (req, res) => {
   try {
     const sessionId = getSessionId(req)
     if (!sessionId) return sendError(res, '缺少 X-Session-Id', 400)
@@ -671,7 +672,7 @@ router.get('/gaps', (req, res) => {
 })
 
 /** 购物评估 */
-router.post('/evaluate', (req, res) => {
+router.post('/evaluate', gateBody({ objects: ['profile', 'candidate'] }), (req, res) => {
   try {
     const sessionId = getSessionId(req)
     if (!sessionId) return sendError(res, '缺少 X-Session-Id', 400)
@@ -694,7 +695,7 @@ router.post('/evaluate', (req, res) => {
 })
 
 /** 购物推荐（支持 POST 和 GET） */
-router.post('/suggest', (req, res) => {
+router.post('/suggest', gateBody({ objects: ['profile'] }), (req, res) => {
   try {
     const sessionId = getSessionId(req)
     if (!sessionId) return sendError(res, '缺少 X-Session-Id', 400)

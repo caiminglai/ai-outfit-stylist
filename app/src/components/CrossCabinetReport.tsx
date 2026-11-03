@@ -4,7 +4,7 @@
  * 子组件已拆分至 ui/ 和同级业务组件文件
  */
 
-import { useState, useEffect, useCallback } from 'react'
+import { useCallback, useState } from 'react'
 import type {
   CustomerProfile,
   CrossCabinetRecommendation,
@@ -90,69 +90,72 @@ export default function CrossCabinetReport({ profile, compact }: CrossCabinetRep
     fetchCrossRecommend(occ)
   }
 
-  const fetchSeasonal = useCallback(async () => {
-    setSeasonalLoading(true)
-    setSeasonalError('')
-    setSeasonalData(null)
-    try {
-      const data = await getSeasonalReminder()
-      setSeasonalData(data)
-    } catch (e: unknown) {
-      setSeasonalError(e instanceof Error ? e.message : '获取季节提醒失败')
-    } finally {
-      setSeasonalLoading(false)
-    }
-  }, [profile])
-
-  const fetchBrand = useCallback(async () => {
-    setBrandLoading(true)
-    setBrandError('')
-    setBrandData(null)
-    try {
-      const data = await getBrandPreference()
-      setBrandData(data)
-    } catch (e: unknown) {
-      setBrandError(e instanceof Error ? e.message : '获取品牌偏好失败')
-    } finally {
-      setBrandLoading(false)
-    }
+  // 🔴 11-03 第 4 项：原来这三档挂在「effect 监听 activeTab ⇒ 切过去就同步 setState 再发请求」上，
+  // 那正是 `react-hooks/set-state-in-effect` 记的写法（promise 链的成因见 `AccessoryTab.tsx` 同段注释）。
+  // 现在取数函数里三格写全在 promise 回调里，两个复位（挂起态、上一次的读数错误）留在事件处理器；
+  // 触发口从 effect 换成下面 `handleTabClick` 里的同款守卫——只有「点进这一档且从没取过」才发，逐字照旧。
+  const fetchSeasonal = useCallback(() => {
+    return getSeasonalReminder()
+      .then(setSeasonalData)
+      .catch((e: unknown) => {
+        setSeasonalError(e instanceof Error ? e.message : '获取季节提醒失败')
+      })
+      .finally(() => setSeasonalLoading(false))
   }, [])
 
-  const fetchHealth = useCallback(async () => {
-    setHealthLoading(true)
-    setHealthError('')
-    setHealthData(null)
-    try {
-      const data = await getCabinetHealth()
-      setHealthData(data)
-    } catch (e: unknown) {
-      setHealthError(e instanceof Error ? e.message : '获取健康检查失败')
-    } finally {
-      setHealthLoading(false)
-    }
+  const fetchBrand = useCallback(() => {
+    return getBrandPreference()
+      .then(setBrandData)
+      .catch((e: unknown) => {
+        setBrandError(e instanceof Error ? e.message : '获取品牌偏好失败')
+      })
+      .finally(() => setBrandLoading(false))
   }, [])
 
-  // 切换 Tab 时自动加载数据
-  useEffect(() => {
-    if (activeTab === 'seasonal' && !seasonalData && !seasonalLoading && !seasonalError)
+  const fetchHealth = useCallback(() => {
+    return getCabinetHealth()
+      .then(setHealthData)
+      .catch((e: unknown) => {
+        setHealthError(e instanceof Error ? e.message : '获取健康检查失败')
+      })
+      .finally(() => setHealthLoading(false))
+  }, [])
+
+  /** 点 Tab：换过去 + 这一档还没取过时取一次（原 effect 的守卫搬到这里，条件一字未动） */
+  const handleTabClick = (key: TabKey) => {
+    setActiveTab(key)
+    if (key === 'seasonal' && !seasonalData && !seasonalLoading && !seasonalError) {
+      setSeasonalLoading(true)
       fetchSeasonal()
-    if (activeTab === 'brand' && !brandData && !brandLoading && !brandError) fetchBrand()
-    if (activeTab === 'health' && !healthData && !healthLoading && !healthError) fetchHealth()
-  }, [
-    activeTab,
-    seasonalData,
-    seasonalLoading,
-    seasonalError,
-    brandData,
-    brandLoading,
-    brandError,
-    healthData,
-    healthLoading,
-    healthError,
-    fetchSeasonal,
-    fetchBrand,
-    fetchHealth,
-  ])
+    }
+    if (key === 'brand' && !brandData && !brandLoading && !brandError) {
+      setBrandLoading(true)
+      fetchBrand()
+    }
+    if (key === 'health' && !healthData && !healthLoading && !healthError) {
+      setHealthLoading(true)
+      fetchHealth()
+    }
+  }
+
+  /** 读数失败之后点「重试」：先把上一次的错误与挂起态复位，再取（⛔ 这两格别搬回取数函数里） */
+  const retrySeasonal = () => {
+    setSeasonalError('')
+    setSeasonalLoading(true)
+    fetchSeasonal()
+  }
+
+  const retryBrand = () => {
+    setBrandError('')
+    setBrandLoading(true)
+    fetchBrand()
+  }
+
+  const retryHealth = () => {
+    setHealthError('')
+    setHealthLoading(true)
+    fetchHealth()
+  }
 
   const paddingClass = compact ? 'p-2 space-y-2' : 'p-3 space-y-3'
 
@@ -164,7 +167,7 @@ export default function CrossCabinetReport({ profile, compact }: CrossCabinetRep
           <button
             key={tab.key}
             className={`tab-btn ${activeTab === tab.key ? 'active' : ''}`}
-            onClick={() => setActiveTab(tab.key)}
+            onClick={() => handleTabClick(tab.key)}
           >
             {tab.icon} {tab.label}
           </button>
@@ -211,7 +214,7 @@ export default function CrossCabinetReport({ profile, compact }: CrossCabinetRep
       {activeTab === 'seasonal' && (
         <div className="space-y-3 animate-fade-in">
           {seasonalLoading && <LoadingSpinner text="正在获取季节提醒..." />}
-          {seasonalError && <ErrorMessage message={seasonalError} onRetry={fetchSeasonal} />}
+          {seasonalError && <ErrorMessage message={seasonalError} onRetry={retrySeasonal} />}
           {seasonalData && typeof seasonalData === 'object' && !seasonalLoading && (
             <ErrorBoundary>
               <CrossCabinetSeasonal seasonalData={seasonalData} />
@@ -224,7 +227,7 @@ export default function CrossCabinetReport({ profile, compact }: CrossCabinetRep
       {activeTab === 'brand' && (
         <div className="space-y-3 animate-fade-in">
           {brandLoading && <LoadingSpinner text="正在分析品牌偏好..." />}
-          {brandError && <ErrorMessage message={brandError} onRetry={fetchBrand} />}
+          {brandError && <ErrorMessage message={brandError} onRetry={retryBrand} />}
           {brandData && !brandLoading && (
             <ErrorBoundary>
               <CrossCabinetBrand brandData={brandData} />
@@ -237,7 +240,7 @@ export default function CrossCabinetReport({ profile, compact }: CrossCabinetRep
       {activeTab === 'health' && (
         <div className="space-y-3 animate-fade-in">
           {healthLoading && <LoadingSpinner text="正在检查三柜健康..." />}
-          {healthError && <ErrorMessage message={healthError} onRetry={fetchHealth} />}
+          {healthError && <ErrorMessage message={healthError} onRetry={retryHealth} />}
           {healthData && !healthLoading && (
             <ErrorBoundary>
               <CrossCabinetHealth healthData={healthData} />

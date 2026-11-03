@@ -48,6 +48,37 @@ const { collabFactor } = require('../collabFilter')
 const RANK_WEIGHTS = { rule: 0.1, color: 0.45, body: 0.45 }
 
 /**
+ * 场合感知权重（2026-11 借鉴邂逅时尚"场景感知机制"）。
+ * 同一件衣服在不同场合，色彩/廓形/规则的说话分量不同：
+ *   通勤 → 廓形得体更重要（body +0.05, color −0.05）
+ *   约会 → 色彩吸睛更重要（color +0.10, body −0.05, rule −0.05）
+ *   聚会 → 最重视色彩（color +0.10, body −0.10）
+ *   运动 → 廓形功能最重要（color −0.10, body +0.10）
+ *   休闲/其它 → 基准权重不变
+ * 每组三个权重相加仍 = 1.0（归一化由 rankDims 内部完成，这里只给相对调整）。
+ * ⚠️ C 档手拍值：没有文献依据，是"不同场合看重点不同"的产品判断。
+ *    要换成回归系数需先有分场合的审美评分数据（见 docs/依据/08 §9.3 协议）。
+ */
+const OCCASION_WEIGHTS = {
+  // 通勤是默认/最常见场合 ⇒ 用基准权重，保证不传场合时行为与改前逐条相同
+  通勤: RANK_WEIGHTS,
+  约会: { rule: 0.05, color: 0.55, body: 0.4 },
+  聚会: { rule: 0.1, color: 0.55, body: 0.35 },
+  运动: { rule: 0.1, color: 0.35, body: 0.55 },
+  休闲: RANK_WEIGHTS,
+  default: RANK_WEIGHTS,
+}
+
+/** 按场合取权重表；未知场合回退到 default。同时把用了哪张表带出去供报告拆账。 */
+function weightsForOccasion(occasion) {
+  const key = occasion || 'default'
+  return {
+    weights: OCCASION_WEIGHTS[key] || OCCASION_WEIGHTS.default,
+    occasion: OCCASION_WEIGHTS[key] ? key : 'default',
+  }
+}
+
+/**
  * 借色降权（10-21 第十三阶段·第一步 §二·3，你拍的板＝"借第一色＋降权＋标出处"）。
  * 上衣那一格自己没写具体色、色彩分是**从本组配色串借来的第一个色**算出来的 ⇒
  * 色彩这一维的权重乘 0.5。判据是候选对象上的 `color_borrowed === true`（出处字段见
@@ -153,7 +184,8 @@ function normTo(v, range) {
  * @returns {null|{score:number, dims:Array, coverage:number, missing:string[]}}
  *          一维都没有 ⇒ null（不进排序，不硬给个分）
  */
-function rankDims(cand, src, prefProfile = null, collabModel = null) {
+function rankDims(cand, src, prefProfile = null, collabModel = null, occasion = null) {
+  const { weights: W, occasion: occasionUsed } = weightsForOccasion(occasion)
   const dims = []
   // 规则基础分：priority 与命中权重和各占一半（两个都是人工量，合成一维才不至于重复收钱）
   if (src.isRule) {
@@ -161,7 +193,7 @@ function rankDims(cand, src, prefProfile = null, collabModel = null) {
     const s = normTo(cand.score, RANK_RULE_REF.score)
     // 两个都是人工量，少任一个就不给这一维出分（缺测不出分），不许用 (p||0) 把"没填"折成"填了 0"
     const ruleNorm = p == null || s == null ? null : Math.round(100 * (p * 0.5 + s * 0.5))
-    dims.push({ key: 'rule', name_cn: '规则基础分', score: ruleNorm, weight: RANK_WEIGHTS.rule })
+    dims.push({ key: 'rule', name_cn: '规则基础分', score: ruleNorm, weight: W.rule })
   }
   // 色彩贴合分：上衣色 vs 肤色的 ΔE 侧（colorMetrics.colorFit），已经是一个 0~100 的分
   const colorScore = cand.color_fit && cand.color_fit.score != null ? cand.color_fit.score : null
@@ -173,29 +205,29 @@ function rankDims(cand, src, prefProfile = null, collabModel = null) {
     score: colorScore,
     weight:
       colorScore != null && cand.color_borrowed === true
-        ? Math.round(RANK_WEIGHTS.color * COLOR_BORROW_WEIGHT * 1000) / 1000
-        : RANK_WEIGHTS.color,
+        ? Math.round(W.color * COLOR_BORROW_WEIGHT * 1000) / 1000
+        : W.color,
     borrowed: cand.color_borrowed === true,
   })
   // 廓形贴合分：topFitBody 那一套实测对齐。**覆盖率惩罚只在身体层乘过一次**
   // （`topFitBody.js` 的 `COVERAGE_PENALTY`，10-19 第三阶段·模块二），这一层就不许再乘一遍
   // `bodyCoverage`——同一件事两层各折一次是本项目反复清扫的那类病灶（改前这里乘 1/6，
   // 身体层又归一出 100，量得越少反而越占便宜）。这一层只管两件事：整维缺席 ⇒ 权重退场；
-  // 在场 ⇒ 拿满 RANK_WEIGHTS.body，覆盖率只作为出账字段带出去给前端与报告看。
+  // 在场 ⇒ 拿满 W.body，覆盖率只作为出账字段带出去给前端与报告看。
   const bf = cand.body_fit
   const bodyCoverage = bf ? (bf.coverage == null ? 1 : bf.coverage) : 0
   dims.push({
     key: 'body',
     name_cn: '廓形贴合分',
     score: bf && bf.score != null ? bf.score : null,
-    weight: bf && bf.score != null ? RANK_WEIGHTS.body : 0,
+    weight: bf && bf.score != null ? W.body : 0,
     coverage: bodyCoverage,
   })
 
   const present = dims.filter((d) => d.score != null && d.weight > 0)
   if (present.length === 0) return null
   const wsum = present.reduce((s, d) => s + d.weight, 0)
-  const total = RANK_WEIGHTS.rule + RANK_WEIGHTS.color + RANK_WEIGHTS.body
+  const total = W.rule + W.color + W.body
   const raw = present.reduce((s, d) => s + d.weight * d.score, 0) / wsum
   // 覆盖率折扣：在场维的权重占满三分时不折，缺得越多折得越狠（缺测降权那条）
   const coverage = clamp01(wsum / (src.isRule ? total : total - RANK_WEIGHTS.rule))
@@ -220,6 +252,9 @@ function rankDims(cand, src, prefProfile = null, collabModel = null) {
     missing: dims.filter((d) => !(d.score != null && d.weight > 0)).map((d) => d.key),
     coverage: Math.round(coverage * 100) / 100,
     factor: Math.round(factor * 1000) / 1000,
+    // 场合感知权重出账：用了哪张权重表，供报告拆账（"为什么通勤更看重廓形"）
+    occasion_used: occasionUsed,
+    weights_used: { rule: W.rule, color: W.color, body: W.body },
     // 出账要能拆账：报告与回归脚本都要能看出"这一分是被哪一层压下来的"，别只给一个总分
     algo_missing: algoMissing,
     algo_penalty: algoPenalty,
@@ -271,20 +306,34 @@ const rankCmp = (a, b) =>
  * @param {object|null} [prefProfile] 这个人的隐性偏好画像（`wearPreference.buildPreference` 出的那份）。
  *   ⛔ 默认 null＝偏好这一层完全不参与；画像没就绪时每条乘子恰好是 1 ⇒ 名次与改前逐条相同。
  * @param {object|null} [collabModel] 协同过滤 cohort；同上，null ⇒ 每条恰好 ×1，名次与改前逐条相同。
+ * @param {string|null} [occasion] 场合（通勤/约会/聚会/运动/休闲），用于场合感知权重调整；
+ *   null 或未识别 ⇒ 用基准权重，名次与改前逐条相同。
  * @param {object} [opts] 第十二阶段·第一步（docs/依据/20 §五）的两个出账开关，⛔ 默认 {} 必须与改前逐字节相同：
  *   `keep_ranked_out` 才挂 `_dropped`（被截掉那一尾的精简投影，上限 200 条），默认连键都不写。
  *   它只给付费报告用（§三 A 节），免费路径读不到、也序列化不出去（数组上的字符串键不参与 JSON.stringify）。
  * @returns {Array} 排名次后的条目，超出 RANK_TOP_N 的被截掉（截掉的写进 _ranked_out）
  */
-function rankAndTruncate(list, wardrobeRows, prefProfile = null, collabModel = null, opts = {}) {
+function rankAndTruncate(
+  list,
+  wardrobeRows,
+  prefProfile = null,
+  collabModel = null,
+  occasion = null,
+  opts = {},
+) {
+  // 旧调用签名兼容：第五个参数是对象（opts）而非字符串时，把它当 opts，occasion 用 null
+  if (typeof occasion === 'object' && occasion !== null) {
+    opts = occasion
+    occasion = null
+  }
   const scored = []
   for (const cand of list) {
-    const rank = rankDims(cand, { isRule: true }, prefProfile, collabModel)
+    const rank = rankDims(cand, { isRule: true }, prefProfile, collabModel, occasion)
     if (rank) cand.rank = rank
     scored.push(cand)
   }
   for (const row of wardrobeRows || []) {
-    const rank = rankDims(row, { isRule: false }, prefProfile, collabModel)
+    const rank = rankDims(row, { isRule: false }, prefProfile, collabModel, occasion)
     if (rank) {
       row.rank = rank
       scored.push(row)
@@ -350,6 +399,8 @@ function rankAndTruncate(list, wardrobeRows, prefProfile = null, collabModel = n
 
 module.exports = {
   RANK_WEIGHTS,
+  OCCASION_WEIGHTS,
+  weightsForOccasion,
   COLOR_BORROW_WEIGHT,
   RANK_RULE_REF,
   RANK_COVERAGE_FLOOR,

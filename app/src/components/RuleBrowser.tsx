@@ -12,7 +12,8 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { browseRules } from '../api'
 import type { RuleBrowseItem, RuleBrowseQuery } from '../types'
-import EvidenceTag, { type EvidenceLevel } from './recommend/EvidenceTag'
+import EvidenceTag from './recommend/EvidenceTag'
+import { type EvidenceLevel } from './recommend/evidenceMeta'
 
 /** 后端下发的依据档位是 'B 学术实证' 这样的一句话标签,取首字母当档位;其余按未标注处理 */
 function levelOfLabel(text?: string): EvidenceLevel {
@@ -77,31 +78,35 @@ export default function RuleBrowser({
 
   // 数据状态
   const [rules, setRules] = useState<RuleBrowseItem[]>([])
-  const [loading, setLoading] = useState(false)
+  // 🔴 11-03 第 4 项：一挂载就取 ⇒ 初值「正在取」；⛔ 在 effect 的同步前缀里 `setLoading(true)`
+  // （`react-hooks/set-state-in-effect`）。筛选是三枚 select 的事件处理器，重取的挂起态在那里置真；
+  // `setError` 从「请求前复位」改成「读到了才复位」，读数错误不会盖在新结果上。链形成因见 `AccessoryTab.tsx` 同段注释。
+  const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
   /** 加载规则数据(筛选变化时触发) */
   // 连点筛选时两次请求会并行，先发的可能后到 ⇒ 用自增号只认最后那一次的结果
   const reqSeq = useRef(0)
-  const loadRules = useCallback(async () => {
+  const loadRules = useCallback(() => {
     const seq = ++reqSeq.current
-    setLoading(true)
-    setError(null)
-    try {
-      const query: RuleBrowseQuery = { mode: initialMode }
-      if (category) query.category = category
-      if (gender) query.gender = gender
-      if (scenario) query.scenario = scenario
-      const data = await browseRules(query)
-      if (seq !== reqSeq.current) return
-      setRules(data.rules ?? [])
-    } catch (e: unknown) {
-      if (seq !== reqSeq.current) return
-      setError(e instanceof Error ? e.message : '加载规则失败')
-      setRules([])
-    } finally {
-      if (seq === reqSeq.current) setLoading(false)
-    }
+    const query: RuleBrowseQuery = { mode: initialMode }
+    if (category) query.category = category
+    if (gender) query.gender = gender
+    if (scenario) query.scenario = scenario
+    return browseRules(query)
+      .then((data) => {
+        if (seq !== reqSeq.current) return
+        setRules(data.rules ?? [])
+        setError(null)
+      })
+      .catch((e: unknown) => {
+        if (seq !== reqSeq.current) return
+        setError(e instanceof Error ? e.message : '加载规则失败')
+        setRules([])
+      })
+      .finally(() => {
+        if (seq === reqSeq.current) setLoading(false)
+      })
   }, [initialMode, category, gender, scenario])
 
   useEffect(() => {
@@ -140,11 +145,16 @@ export default function RuleBrowser({
         </div>
       )}
 
-      {/* 筛选区 */}
+      {/* 筛选区：三枚 select 的 onChange 各顺手置一次挂起态。
+          筛选值一变，上面那个 effect 会重跑 `loadRules()`，而它现在只剩 promise 回调里的 setState，
+          同步前缀不再置真（第 4 项摘掉的就是那一格）；⛔ 别改回"由 effect 去补"，那正是这条规则记的写法。 */}
       <div className="flex flex-wrap gap-2">
         <select
           value={category}
-          onChange={(e) => setCategory(e.target.value)}
+          onChange={(e) => {
+            setLoading(true)
+            setCategory(e.target.value)
+          }}
           className="filter-select"
           aria-label="筛选类别"
         >
@@ -156,7 +166,10 @@ export default function RuleBrowser({
         </select>
         <select
           value={gender}
-          onChange={(e) => setGender(e.target.value)}
+          onChange={(e) => {
+            setLoading(true)
+            setGender(e.target.value)
+          }}
           className="filter-select"
           aria-label="筛选性别"
         >
@@ -168,7 +181,10 @@ export default function RuleBrowser({
         </select>
         <select
           value={scenario}
-          onChange={(e) => setScenario(e.target.value)}
+          onChange={(e) => {
+            setLoading(true)
+            setScenario(e.target.value)
+          }}
           className="filter-select"
           aria-label="筛选场景"
         >
@@ -196,7 +212,13 @@ export default function RuleBrowser({
       {error && !loading && (
         <div className="glass-card p-4 text-center text-sm" style={{ color: 'var(--danger)' }}>
           <div className="mb-2">⚠️ {error}</div>
-          <button onClick={loadRules} className="ghost-btn text-xs px-3 py-1">
+          <button
+            onClick={() => {
+              setLoading(true)
+              loadRules()
+            }}
+            className="ghost-btn text-xs px-3 py-1"
+          >
             重试
           </button>
         </div>

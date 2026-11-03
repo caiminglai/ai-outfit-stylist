@@ -28,6 +28,7 @@ const {
 } = require('../utils/common')
 const { countByBucket, wardrobeGapBuckets } = require('../services/categoryBuckets')
 const { rateLimit } = require('../middleware/rateLimit')
+const { gateBody } = require('../middleware/bodyGate')
 // 10-20 第八阶段·一c：日记要写 user_id（游客也有行，认不到就 NULL），星级尺子从反馈那一层引
 const { optionalUser, getCurrentUser } = require('../middleware/auth')
 const { SCORE_MIN, SCORE_MAX } = require('../services/ruleFeedback')
@@ -1143,7 +1144,7 @@ router.delete('/outfits/:outfitId', writeLimiter, (req, res) => {
 // 三、衣橱缺口分析
 // ============================================================
 
-router.post('/gaps', analysisLimiter, (req, res) => {
+router.post('/gaps', analysisLimiter, gateBody({ objects: ['profile'] }), (req, res) => {
   try {
     const sessionId = getSessionId(req)
     if (!sessionId) {
@@ -1167,33 +1168,38 @@ router.post('/gaps', analysisLimiter, (req, res) => {
 // 四、购物评估（值不值得买）
 // ============================================================
 
-router.post('/evaluate', analysisLimiter, (req, res) => {
-  try {
-    const sessionId = getSessionId(req)
-    if (!sessionId) {
-      return sendError(res, '缺少 session_id', 400)
-    }
+router.post(
+  '/evaluate',
+  analysisLimiter,
+  gateBody({ objects: ['profile', 'candidate'] }),
+  (req, res) => {
+    try {
+      const sessionId = getSessionId(req)
+      if (!sessionId) {
+        return sendError(res, '缺少 session_id', 400)
+      }
 
-    const data = req.body || {}
-    const profile = data.profile || {}
-    const candidate = data.candidate || {}
-    if (!candidate || !candidate.name) {
-      return sendError(res, '缺少 candidate 商品信息', 400)
-    }
+      const data = req.body || {}
+      const profile = data.profile || {}
+      const candidate = data.candidate || {}
+      if (!candidate || !candidate.name) {
+        return sendError(res, '缺少 candidate 商品信息', 400)
+      }
 
-    const result = evaluatePurchase(profile, sessionId, candidate)
-    return sendSuccess(res, result)
-  } catch (err) {
-    console.error('[衣橱] 购物评估失败:', err)
-    return sendError(res, '评估失败', 500)
-  }
-})
+      const result = evaluatePurchase(profile, sessionId, candidate)
+      return sendSuccess(res, result)
+    } catch (err) {
+      console.error('[衣橱] 购物评估失败:', err)
+      return sendError(res, '评估失败', 500)
+    }
+  },
+)
 
 // ============================================================
 // 五、购物推荐（下次买什么）
 // ============================================================
 
-router.post('/suggest', analysisLimiter, (req, res) => {
+router.post('/suggest', analysisLimiter, gateBody({ objects: ['profile'] }), (req, res) => {
   try {
     const sessionId = getSessionId(req)
     if (!sessionId) {
@@ -1214,7 +1220,7 @@ router.post('/suggest', analysisLimiter, (req, res) => {
 // 六、衣橱匹配（从已有衣服中筛选）
 // ============================================================
 
-router.post('/match', analysisLimiter, (req, res) => {
+router.post('/match', analysisLimiter, gateBody({ objects: ['profile'] }), (req, res) => {
   try {
     const sessionId = getSessionId(req)
     if (!sessionId) {
@@ -1341,66 +1347,73 @@ router.put('/wishlist/:wishId', writeLimiter, (req, res) => {
 // 八、个人衣橱推荐（规则引擎 personal 模式）
 // ============================================================
 
-router.post('/recommend', analysisLimiter, (req, res) => {
-  try {
-    const sessionId = getSessionId(req)
-    const data = req.body || {}
-    const profile = data.profile || {}
+router.post(
+  '/recommend',
+  analysisLimiter,
+  gateBody({ objects: ['profile'], arrays: ['wardrobe_items'] }),
+  (req, res) => {
+    try {
+      const sessionId = getSessionId(req)
+      const data = req.body || {}
+      const profile = data.profile || {}
 
-    if (!profile || Object.keys(profile).length === 0) {
-      return sendError(res, '缺少 profile 数据', 400)
-    }
-
-    // 如果传了 session_id 但没传 wardrobe_items，自动从 DB 查询
-    let wardrobeItems = data.wardrobe_items || []
-    if (sessionId && wardrobeItems.length === 0) {
-      try {
-        const items = db.prepare('SELECT * FROM user_wardrobe WHERE session_id = ?').all(sessionId)
-        // 字段清单搬到 `utils/common.js` 的 `projectWardrobeForEngine`（10-21 第九阶段·第一步）：
-        // `/api/recommend/engine` 现在也要注入衣橱行，两处各抄一份迟早打架（见 17 §五 第 2 条）。
-        wardrobeItems = items.map(normalizeItem).map(projectWardrobeForEngine)
-      } catch {
-        wardrobeItems = []
+      if (!profile || Object.keys(profile).length === 0) {
+        return sendError(res, '缺少 profile 数据', 400)
       }
-    }
 
-    const profileWithWardrobe = { ...profile, wardrobe_items: wardrobeItems }
-
-    // 调用规则引擎（personal 模式）
-    // 第四参数＝这个人的身份，只用来现算隐性偏好乘子（穿搭日记 → ±5%，日记 0 条时恰好是 1）。
-    // ⛔ 只准用 getCurrentUser（读）；optionalUser 会写一行游客 users，排序层不该顺手建档。
-    const prefWho = { sessionId, userId: (getCurrentUser(req) || {}).id || null }
-    const result = buildRecommendation(profileWithWardrobe, 'personal', true, prefWho)
-
-    // 同时生成衣橱缺口分析和购物推荐
-    let gapResult = null
-    let suggestions = null
-    if (sessionId) {
-      try {
-        gapResult = analyzeWardrobeGaps(profile, sessionId)
-        suggestions = suggestNextPurchase(profile, sessionId)
-      } catch {
-        // 不影响主流程
+      // 如果传了 session_id 但没传 wardrobe_items，自动从 DB 查询
+      let wardrobeItems = data.wardrobe_items || []
+      if (sessionId && wardrobeItems.length === 0) {
+        try {
+          const items = db
+            .prepare('SELECT * FROM user_wardrobe WHERE session_id = ?')
+            .all(sessionId)
+          // 字段清单搬到 `utils/common.js` 的 `projectWardrobeForEngine`（10-21 第九阶段·第一步）：
+          // `/api/recommend/engine` 现在也要注入衣橱行，两处各抄一份迟早打架（见 17 §五 第 2 条）。
+          wardrobeItems = items.map(normalizeItem).map(projectWardrobeForEngine)
+        } catch {
+          wardrobeItems = []
+        }
       }
-    }
 
-    return sendSuccess(
-      res,
-      {
-        recommendation: result,
-        mode: 'personal',
-        wardrobe_count: wardrobeItems.length,
-        gap_analysis: gapResult,
-        shopping_suggestions: suggestions,
-        privacy_notice: '衣橱数据仅用于生成您自己的搭配建议，保存在您的账号下，可随时删除。',
-      },
-      '个人衣橱推荐已生成',
-    )
-  } catch (err) {
-    console.error('[衣橱] 推荐失败:', err)
-    return sendError(res, '推荐失败', 500)
-  }
-})
+      const profileWithWardrobe = { ...profile, wardrobe_items: wardrobeItems }
+
+      // 调用规则引擎（personal 模式）
+      // 第四参数＝这个人的身份，只用来现算隐性偏好乘子（穿搭日记 → ±5%，日记 0 条时恰好是 1）。
+      // ⛔ 只准用 getCurrentUser（读）；optionalUser 会写一行游客 users，排序层不该顺手建档。
+      const prefWho = { sessionId, userId: (getCurrentUser(req) || {}).id || null }
+      const result = buildRecommendation(profileWithWardrobe, 'personal', true, prefWho)
+
+      // 同时生成衣橱缺口分析和购物推荐
+      let gapResult = null
+      let suggestions = null
+      if (sessionId) {
+        try {
+          gapResult = analyzeWardrobeGaps(profile, sessionId)
+          suggestions = suggestNextPurchase(profile, sessionId)
+        } catch {
+          // 不影响主流程
+        }
+      }
+
+      return sendSuccess(
+        res,
+        {
+          recommendation: result,
+          mode: 'personal',
+          wardrobe_count: wardrobeItems.length,
+          gap_analysis: gapResult,
+          shopping_suggestions: suggestions,
+          privacy_notice: '衣橱数据仅用于生成您自己的搭配建议，保存在您的账号下，可随时删除。',
+        },
+        '个人衣橱推荐已生成',
+      )
+    } catch (err) {
+      console.error('[衣橱] 推荐失败:', err)
+      return sendError(res, '推荐失败', 500)
+    }
+  },
+)
 
 // ============================================================
 // 九、衣橱上衣按身材打分（不看脸；docs/依据/08 §5 的偏差向量匹配）

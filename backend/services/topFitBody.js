@@ -301,12 +301,13 @@ function bodyDeviation(person, est) {
   else if (p.body_est && p.body_est.estimated) e = p.body_est
   const estBust = e ? meas(e.bust_cm) : 0
   const estShoulder = e ? meas(e.shoulder_cm) : 0
+  const estHip = e ? meas(e.hip_cm) : 0
   const person_cm = {
     height: height > 0 ? r1(height) : null,
     bust: bust > 0 ? r1(bust) : estBust > 0 ? r1(estBust) : null,
     shoulder: shoulder > 0 ? r1(shoulder) : estShoulder > 0 ? r1(estShoulder) : null,
     waist: waist > 0 ? r1(waist) : null,
-    hip: hip > 0 ? r1(hip) : null,
+    hip: hip > 0 ? r1(hip) : estHip > 0 ? r1(estHip) : null,
   }
   // 每格的出处（实测／估算／没量）。`describeTop` 靠它决定这一轴在覆盖率里算整格还是半格，
   // 报告与后台靠它把"估的"两个字带到用户眼前——⛔ 不许显示成"你填的胸围"（`13` §五 第 6 条）。
@@ -315,20 +316,32 @@ function bodyDeviation(person, est) {
     bust: bust > 0 ? 'measured' : estBust > 0 ? 'estimated' : null,
     shoulder: shoulder > 0 ? 'measured' : estShoulder > 0 ? 'estimated' : null,
     waist: waist > 0 ? 'measured' : null,
-    hip: hip > 0 ? 'measured' : null,
+    hip: hip > 0 ? 'measured' : estHip > 0 ? 'estimated' : null,
   }
 
   const want = { shoulder: null, waist: null, length: null, volume: null, pattern: null }
   const notes = []
 
-  // 估算顶上的那两格必须在审计里露名（`13` §五 第 6 条：⛔ 不能让人读成"你填的胸围"）。
-  if (person_cm_src.bust === 'estimated')
-    notes.push(
-      `净胸围没量 ⇒ 用身高体重按 GB/T 10000-2023 人群分布估的 ${person_cm.bust}cm（本站实测残差 ±2cm 上下）⇒ 只喂减法，这一轴按半格计`,
-    )
+  // 估算顶上的那几格必须在审计里露名（`13` §五 第 6 条：⛔ 不能让人读成"你填的胸围"）。
+  if (person_cm_src.bust === 'estimated') {
+    const from = e && e.bust_from
+    if (from === 'waist_regression') {
+      notes.push(
+        `净胸围没量 ⇒ 按苏南青年女性三围回归（B=0.59×腰围+45.37）估的 ${person_cm.bust}cm ⇒ 只喂减法，这一轴按半格计`,
+      )
+    } else {
+      notes.push(
+        `净胸围没量 ⇒ 用身高体重按 GB/T 10000-2023 人群分布估的 ${person_cm.bust}cm（本站实测残差 ±2cm 上下）⇒ 只喂减法，这一轴按半格计`,
+      )
+    }
+  }
   if (person_cm_src.shoulder === 'estimated')
     notes.push(
       `净肩宽没量 ⇒ 估的 ${person_cm.shoulder}cm（端到端残差男 ≤5.5%／女 ≤7.0%，偏瘦小个子那端会估高）⇒ 只喂减法，这一轴按半格计`,
+    )
+  if (person_cm_src.hip === 'estimated')
+    notes.push(
+      `净臀围没量 ⇒ 按苏南青年女性三围回归（H=0.55×腰围+53.96）估的 ${person_cm.hip}cm ⇒ 只喂减法，这一轴按半格计`,
     )
 
   // —— 肩线：离带就往外拉满；下身比上身宽（梨形侧）时也想让上衣把肩加出去 ——

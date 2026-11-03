@@ -31,7 +31,7 @@ const { beijingTimestamp } = require('../utils/beijingTime')
  *
  * 🔴 第十四阶段·第一步 组4 的**真钱测单**（2026-10-22 支付宝 0.01 元到账）抓到的洞：
  * 这把尺子原来**只认 `admin_note` 前缀**，而那个前缀是 `markPaid` 写进去的
- * （`routes/payment.js:224-227`），后台审核口 `POST /admin/:id/status`（`routes/payment.js:620-679`）
+ * （`routes/payment.js:226-229`），后台审核口 `POST /admin/:id/status`（`routes/payment.js:622-681`）
  * 却把整列覆盖成后台备注框里的内容——框里没字就覆盖成空串 ⇒ 判据当场失效。
  * 现量：那笔 0.01 元付完、又在后台点了一次「通过」之后，`entitlement` 回
  * `granted 2／paid_orders 1／proof_approved 1`，`claimable_proofs` 里多出 `deposit_id 1`，
@@ -160,7 +160,7 @@ function entitlement(userId) {
     // deposits.amount 是 REAL（存"元"），先乘回分再除 100，⛔ 不在服务层用浮点连加
     proof_amount_yuan: Math.round(proof.yuan * 100) / 100,
     created_orders: created.n,
-    // 🔴 第十四阶段·第一步 C1 现量到的漏项：`routes/payment.js:125` 一直在读
+    // 🔴 第十四阶段·第一步 C1 现量到的漏项：`routes/payment.js:127` 一直在读
     // `e.created_amount_yuan`，而这里从来没给过 ⇒ 「待付金额」在顾客端恒为 `undefined`（JSON 直接掉键）。
     created_amount_yuan: Math.round(created.fen) / 100,
     closed_orders: closed.n,
@@ -221,7 +221,7 @@ function findReport(userId, outTradeNo) {
  * `session_id`（= `sess_…` 这种门店会话号），**`user_id` 是 NULL**——`customer_sessions` 表根本没有
  * `user_id` 列（现量 `db/schema.sql:269-278`），写进去的 `user_id` 想有也没有。
  * 所以只按 `user_id` 找会一律 409：顾客付了钱、也填了表，系统却说"你还没生成过方案"。
- * 正解沿用本仓既有口径（`routes/recommend.js:96-109` 与日记/衣橱都是"会话 ∪ 用户"并集认人）：
+ * 正解沿用本仓既有口径（`routes/recommend.js:97-110` 与日记/衣橱都是"会话 ∪ 用户"并集认人）：
  * 给了 `basisSessionId` 就并上这一档，⛔ 不放宽到全表。
  *
  * 安全边界照原来的模型，没有新增：这条号本来就是那台浏览器的凭据（前端拿它读写这次会话），
@@ -254,8 +254,8 @@ function findBasis(userId, basisSessionId) {
  * 🔴 第十四阶段·第一步 C1（`docs/依据/22` §十）：`app/public/pay.html:52/64/70` 三处对顾客承诺（10-30 窄屏补正在这三处之前插了 7 行 CSS，原号 45/57/63；按内容回读这三行一字未动。本行**净零加行**，因为 `docs/依据/22` 正按行号引本文件）
  * 「扫备用收款码＋上传截图＋我们人工确认后，就能回展厅「我的报告」领取这份细账」，
  * 而本文件原来**只认 `payment_orders`**（`claimReport` 第一句就是 `SELECT * FROM payment_orders`），
- * 后台审核口（`routes/payment.js:620-679`）又只 `UPDATE deposits`、⛔ 一行订单都不写
- * （`INSERT INTO payment_orders` 全仓只有在线下单那两处：`payment.js:245`/`:369`）。
+ * 后台审核口（`routes/payment.js:622-681`）又只 `UPDATE deposits`、⛔ 一行订单都不写
+ * （`INSERT INTO payment_orders` 全仓只有在线下单那两处：`payment.js:247`/`:371`）。
  * ⇒ 照承诺做了的顾客**必然 404**，而钱是真到账了。这不是文案问题，是账与承诺两套。
  *
  * 两条出路里选了这条窄的：**领取口承认已审核的凭证，但⛔ 不往 `payment_orders` 补一行**。
@@ -263,7 +263,7 @@ function findBasis(userId, basisSessionId) {
  * 那属于 §十一 待裁第 2 条，归他拍。现在这样：钱能领到、账上看得清是人工确认的那笔、营收读数一个字没变。
  *
  * `ONLINE_MIRROR` 那把尺子在这里同样生效：在线支付到账时 `markPaid` 会往 `deposits` 插一条
- * `approved` 镜像（`payment.js:224-227`），那笔钱已经有订单号了，⛔ 不能再按凭证领第二遍。
+ * `approved` 镜像（`payment.js:226-229`），那笔钱已经有订单号了，⛔ 不能再按凭证领第二遍。
  *
  * @returns {{code:number, error:string, reason:string} | {grant:{key:string, amount_fen:number|null,
  *          paid_at:string|null, channel:string, source:string, deposit_id:number|null}}}
@@ -427,7 +427,7 @@ function deliver(grant, { userId, sessionId, basisSessionId }) {
     .get(userId)
 
   // 生成时刻与 `paid_at`、`created_at` 必须同一把轴（都是 SQLite `datetime('now')`＝UTC），
-  // ⛔ 不许在这里塞 `toISOString()` 或东八区串：payment.js:664-666 那条"同一列两种格式、
+  // ⛔ 不许在这里塞 `toISOString()` 或东八区串：payment.js:666-668 那条"同一列两种格式、
   // 按时间排序时 ISO 的 'T' 恒大于空格"的坑就是这么来的。给用户看的东八区由 `toBeijing` 现转。
   const grantedAt = db.prepare("SELECT datetime('now') AS t").get().t
 

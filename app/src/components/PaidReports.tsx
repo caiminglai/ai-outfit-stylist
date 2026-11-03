@@ -263,16 +263,19 @@ export default function PaidReports({ onClose }: { onClose: () => void }) {
   // 游客付的款只挂在这台浏览器的 session 上（§八 第 6 条）⇒ 顶部那条提示按登录态显示
   const account = getAccount()
 
-  const reload = useCallback(async () => {
-    setLoading(true)
-    setError('')
-    try {
-      setInfo(await getPaymentEntitlement())
-    } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : '读取失败')
-    } finally {
-      setLoading(false)
-    }
+  // 🔴 11-03 第 4 项：`loading` 的初值本就是「正在取」，所以这里把开头那格同步 `setLoading(true)` 摘掉——
+  // 它坐在 effect 的同步前缀里（`react-hooks/set-state-in-effect`）。`setError('')` 从「请求前」挪到「读到了」，
+  // 语义更准（读成功才该把上一次的读数错误收掉）。promise 链的成因见 `AccessoryTab.tsx` 同段注释。
+  const reload = useCallback(() => {
+    return getPaymentEntitlement()
+      .then((data) => {
+        setInfo(data)
+        setError('')
+      })
+      .catch((e: unknown) => {
+        setError(e instanceof Error ? e.message : '读取失败')
+      })
+      .finally(() => setLoading(false))
   }, [])
 
   useEffect(() => {

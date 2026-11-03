@@ -37,7 +37,7 @@ import {
 } from './CabinetConstants'
 import { UPLOAD_ACCEPT, checkPickedImage } from '../lib/imagePick'
 import WardrobeDiary from './WardrobeDiary'
-import { evidenceLabel } from './recommend/EvidenceTag'
+import { evidenceLabel } from './recommend/evidenceMeta'
 
 /**
  * 「只存图」这张图要不要真的让浏览器去取（10-20 第五阶段·第一步）。
@@ -186,7 +186,9 @@ function describeDeviation(dev: TopFitResult['person_deviation']): string {
 export default function WardrobeTab({ profile, compact }: WardrobeTabProps) {
   /* ---------- 状态 ---------- */
   const [items, setItems] = useState<WardrobeItem[]>([])
-  const [loading, setLoading] = useState(false)
+  // 🔴 11-03 第 4 项：挂起态初值＝「正在取」，手动重取由事件处理器置真；
+  // promise 链的成因见 `AccessoryTab.tsx` 里同一段注释。
+  const [loading, setLoading] = useState(true)
   const [showAdd, setShowAdd] = useState(false)
   const [gaps, setGaps] = useState<WardrobeGapResult | null>(null)
   const [gapsLoading, setGapsLoading] = useState(false)
@@ -214,16 +216,13 @@ export default function WardrobeTab({ profile, compact }: WardrobeTabProps) {
 
   /* ---------- 数据加载 ---------- */
 
-  const fetchItems = useCallback(async () => {
-    setLoading(true)
-    try {
-      const data = await listWardrobeItems()
-      setItems(data)
-    } catch (e: unknown) {
-      toast.error(e instanceof Error ? e.message : '加载衣橱失败')
-    } finally {
-      setLoading(false)
-    }
+  const fetchItems = useCallback(() => {
+    return listWardrobeItems()
+      .then(setItems)
+      .catch((e: unknown) => {
+        toast.error(e instanceof Error ? e.message : '加载衣橱失败')
+      })
+      .finally(() => setLoading(false))
   }, [])
 
   useEffect(() => {
@@ -360,6 +359,7 @@ export default function WardrobeTab({ profile, compact }: WardrobeTabProps) {
         toast.success('添加成功')
       }
       closeForm()
+      setLoading(true)
       await fetchItems()
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : editingId != null ? '保存失败' : '添加失败')
@@ -484,6 +484,7 @@ export default function WardrobeTab({ profile, compact }: WardrobeTabProps) {
     try {
       await deleteWardrobeItem(id)
       toast.success('已删除')
+      setLoading(true)
       await fetchItems()
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : '删除失败')
@@ -555,11 +556,30 @@ export default function WardrobeTab({ profile, compact }: WardrobeTabProps) {
 
   const stats = useMemo(() => {
     const byCategory: Record<string, number> = {}
+    const byColor: Record<string, number> = {}
+    let totalPrice = 0
+    let priceCount = 0
     items.forEach((item) => {
       const cat = item.category || '其他'
       byCategory[cat] = (byCategory[cat] || 0) + 1
+      const color = item.color || '未标注'
+      byColor[color] = (byColor[color] || 0) + 1
+      if (item.price != null && !isNaN(Number(item.price))) {
+        totalPrice += Number(item.price)
+        priceCount += 1
+      }
     })
-    return { total: items.length, byCategory }
+    // 颜色取前 5，其余归"其他"
+    const sortedColors = Object.entries(byColor).sort((a, b) => b[1] - a[1])
+    const topColors = sortedColors.slice(0, 5)
+    const otherColorCount = sortedColors.slice(5).reduce((s, [, c]) => s + c, 0)
+    if (otherColorCount > 0) topColors.push(['其他', otherColorCount])
+    return {
+      total: items.length,
+      byCategory,
+      byColor: topColors,
+      avgPrice: priceCount > 0 ? Math.round(totalPrice / priceCount) : null,
+    }
   }, [items])
 
   /* ---------- 渲染 ---------- */
@@ -581,7 +601,40 @@ export default function WardrobeTab({ profile, compact }: WardrobeTabProps) {
             {getWardrobeCategoryLabel(cat)} {count}
           </span>
         ))}
+        {stats.avgPrice != null && (
+          <span className={pillCls} style={{ marginLeft: 'auto' }}>
+            均价 ¥{stats.avgPrice}
+          </span>
+        )}
       </div>
+
+      {/* 色彩洞察（借鉴 AI衣橱：颜色比例看板） */}
+      {stats.byColor.length > 0 && (
+        <div className="glass-card p-3 mb-3">
+          <div className="text-xs font-semibold mb-2" style={{ color: 'var(--accent)' }}>
+            🎨 色彩构成
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {stats.byColor.map(([color, count]) => {
+              const pct = stats.total > 0 ? Math.round((count / stats.total) * 100) : 0
+              return (
+                <div key={color} className="flex items-center gap-1.5">
+                  <span
+                    className="inline-block w-3 h-3 rounded-full border"
+                    style={{
+                      backgroundColor: color.startsWith('#') ? color : '#ccc',
+                      borderColor: 'var(--line)',
+                    }}
+                  />
+                  <span className="text-[11px]" style={{ color: 'var(--muted)' }}>
+                    {color} {pct}%
+                  </span>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
 
       {/* 扫码录入（2026-10-20 第五阶段·第一步「门店扫码快速录入」）。
           键盘式扫码枪＝模拟键盘敲一串字符再自动按回车 ⇒ 只吃 Enter 一个动作就够，

@@ -19,6 +19,7 @@ const {
 } = require('../utils/common')
 const { countByBucket, accessoryGapBucket } = require('../services/categoryBuckets')
 const { rateLimit } = require('../middleware/rateLimit')
+const { gateBody } = require('../middleware/bodyGate')
 
 const router = express.Router()
 
@@ -471,7 +472,7 @@ router.delete('/items/:itemId', writeLimiter, (req, res) => {
 // ============================================================
 
 /** 配饰柜缺口分析（支持 POST 和 GET） */
-router.post('/gaps', (req, res) => {
+router.post('/gaps', gateBody({ objects: ['profile'] }), (req, res) => {
   try {
     const sessionId = getSessionId(req)
     if (!sessionId) return sendError(res, '缺少 X-Session-Id', 400)
@@ -510,7 +511,7 @@ router.get('/gaps', (req, res) => {
 })
 
 /** 购物评估 */
-router.post('/evaluate', (req, res) => {
+router.post('/evaluate', gateBody({ objects: ['profile', 'candidate'] }), (req, res) => {
   try {
     const sessionId = getSessionId(req)
     if (!sessionId) return sendError(res, '缺少 X-Session-Id', 400)
@@ -533,7 +534,7 @@ router.post('/evaluate', (req, res) => {
 })
 
 /** 购物推荐（支持 POST 和 GET） */
-router.post('/suggest', (req, res) => {
+router.post('/suggest', gateBody({ objects: ['profile'] }), (req, res) => {
   try {
     const sessionId = getSessionId(req)
     if (!sessionId) return sendError(res, '缺少 X-Session-Id', 400)

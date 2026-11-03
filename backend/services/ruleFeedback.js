@@ -16,7 +16,7 @@ const db = require('../db/init')
  *
  * 🔴 第八阶段·第一步（10-20）加第三档 `rated`＝"只打了两把星、没点👍/👎"。
  * 为什么加档而不是放开 `signal`：`feedback_events.signal` 是 NOT NULL（schema.sql:303），
- * 而星级原本被这一档锁死——前端 `pickStar` 只在已表态时才提交（RecommendationReport.tsx:207），
+ * 而星级原本被这一档锁死——前端 `pickStar` 只在已表态时才提交（RecommendationReport.tsx:208），
  * 只打星的用户等于什么都没留下（本机现量：推荐 37 场、用户行 48 个、反馈 0 行）。
  * ⛔ `rated` 只许进这一档，**不许进好评/差评计数**：下面 `recountRules` 的 SQL 只数
  * useful/inaccurate 两个字面值，回归侧 binary 目标也只认那两个（regress-rank-weights.js:96），
@@ -185,7 +185,7 @@ function clearFeedback(userId) {
  * 删掉某人在**某一条规则**上的反馈（第十四阶段·第一步 X4）。
  *
  * 为什么需要这一条：把最后一颗星抹掉＝整条撤销，而 POST 那一路"两把星全空又没表态"是 400
- * （`routes/recommend.js:303-305`，防的是空壳行）。原来前端遇到这种情况只能"改成别的星"、
+ * （`routes/recommend.js:304-306`，防的是空壳行）。原来前端遇到这种情况只能"改成别的星"、
  * 撤不回"没评过"，顾客点了半天没反应。撤销与写入是两种语义，⛔ 不许用 POST 硬凑。
  * 计数跟着重算（与 `clearFeedback` 同一条尺子：从 `feedback_events` 现数，⛔ 做减法）。
  *

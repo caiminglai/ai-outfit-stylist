@@ -14,16 +14,45 @@
       "enabled": 1,
       "description": "身高分档补档。150-160 这档原先只有女性的一组（组 163，db/add-rules.js 写的、无 source_key），150-159cm 的男性命中不到任何按身高分档的规则。照组 165（男/160-170/想显高）的条件形状补。",
       "conditions": [
-        { "field": "height_range", "operator": "eq", "value": "150-160" },
-        { "field": "height_wish", "operator": "eq", "value": "想显高" }
+        {
+          "field": "height",
+          "operator": "between",
+          "value": [
+            150,
+            159.9
+          ]
+        },
+        {
+          "field": "height_wish",
+          "operator": "eq",
+          "value": "想显高"
+        }
       ],
       "actions": [
-        { "type": "top_style", "content": "上衣下摆收到皮带位置上下，别盖过臀线；肩线落在自己肩头，肩宽一垮人就显得更矮" },
-        { "type": "bottom_style", "content": "腰头做到自然腰位的高腰直筒裤，裤长到鞋面留一道折；九分裤配浅口鞋也能拉长小腿" },
-        { "type": "shoe_style", "content": "鞋色跟裤子同色（黑裤黑鞋、深蓝裤深棕鞋），鞋头偏窄；常规 2~3cm 厚底够用" },
-        { "type": "color_combo", "content": "上下同色系或深浅两级，别在腰上横切一条对比强烈的撞色带" },
-        { "type": "avoid", "content": "盖臀的 oversize 长上衣、裤脚堆三四道褶、大裤脚短裤配长袜、脚踝处有粗绑带的鞋" },
-        { "type": "reason", "content": "这一段身高的视觉落差主要由三件事决定：上衣下摆到哪、裤腰到哪、裤脚堆不堆。三件都在试衣间里当场能看见，不需要靠别人评价" }
+        {
+          "type": "top_style",
+          "content": "上衣下摆收到皮带位置上下，别盖过臀线；肩线落在自己肩头，肩宽一垮人就显得更矮"
+        },
+        {
+          "type": "bottom_style",
+          "content": "腰头做到自然腰位的高腰直筒裤，裤长到鞋面留一道折；九分裤配浅口鞋也能拉长小腿"
+        },
+        {
+          "type": "shoe_style",
+          "content": "鞋色跟裤子同色（黑裤黑鞋、深蓝裤深棕鞋），鞋头偏窄；常规 2~3cm 厚底够用"
+        },
+        {
+          "type": "color_combo",
+          "content": "上下同色系或深浅两级，别在腰上横切一条对比强烈的撞色带"
+        },
+        {
+          "type": "avoid",
+          "content": "盖臀的 oversize 长上衣、裤脚堆三四道褶、大裤脚短裤配长袜、脚踝处有粗绑带的鞋"
+        },
+        {
+          "type": "reason",
+          "content": "这一段身高的视觉落差主要由三件事决定：上衣下摆到哪、裤腰到哪、裤脚堆不堆。三件都在试衣间里当场能看见，不需要靠别人评价"
+        }
       ]
     },
     {
@@ -37,16 +66,45 @@
       "enabled": 1,
       "description": "身高分档补档。160-170 这档原先只有男性的一组（组 165），160-169cm 的女性命中不到——她既进不了 150-160 那组也进不了 170-180 那组（引擎按 profileEnricher 算出的整数档严格 eq）。照组 163（女/150-160/想显高）的条件形状补。",
       "conditions": [
-        { "field": "height_range", "operator": "eq", "value": "160-170" },
-        { "field": "height_wish", "operator": "eq", "value": "想显高" }
+        {
+          "field": "height",
+          "operator": "between",
+          "value": [
+            160,
+            169.9
+          ]
+        },
+        {
+          "field": "height_wish",
+          "operator": "eq",
+          "value": "想显高"
+        }
       ],
       "actions": [
-        { "type": "top_style", "content": "短款上衣或把前襟塞一半，把腰位显出来；袖长到手腕骨，袖子过长会把上身拉沉" },
-        { "type": "bottom_style", "content": "高腰直筒裤、高腰 A 字裙、裙长在膝盖上下或开衩露小腿；裤装选九分露脚踝" },
-        { "type": "shoe_style", "content": "裸色或与裤同色的尖头中跟；脚背露得越多小腿显得越长" },
-        { "type": "color_combo", "content": "上下同色系或深浅两级，把最深的一色放在下半身之外的那一侧都行，只要别在腰上横向断成三段" },
-        { "type": "avoid", "content": "及踝长裙配平底、腰位低于自然腰线的低腰款、脚踝粗绑带凉鞋、上衣下摆正好卡在胯最宽处" },
-        { "type": "reason", "content": "160-169cm 这一段的落差在腰位和露出的脚踝上，这两处镜子里就能比：把腰线上提、脚踝露出来，同一个人换一套衣服能明显看出差别" }
+        {
+          "type": "top_style",
+          "content": "短款上衣或把前襟塞一半，把腰位显出来；袖长到手腕骨，袖子过长会把上身拉沉"
+        },
+        {
+          "type": "bottom_style",
+          "content": "高腰直筒裤、高腰 A 字裙、裙长在膝盖上下或开衩露小腿；裤装选九分露脚踝"
+        },
+        {
+          "type": "shoe_style",
+          "content": "裸色或与裤同色的尖头中跟；脚背露得越多小腿显得越长"
+        },
+        {
+          "type": "color_combo",
+          "content": "上下同色系或深浅两级，把最深的一色放在下半身之外的那一侧都行，只要别在腰上横向断成三段"
+        },
+        {
+          "type": "avoid",
+          "content": "及踝长裙配平底、腰位低于自然腰线的低腰款、脚踝粗绑带凉鞋、上衣下摆正好卡在胯最宽处"
+        },
+        {
+          "type": "reason",
+          "content": "160-169cm 这一段的落差在腰位和露出的脚踝上，这两处镜子里就能比：把腰线上提、脚踝露出来，同一个人换一套衣服能明显看出差别"
+        }
       ]
     },
     {
@@ -59,14 +117,38 @@
       "priority": 15,
       "enabled": 1,
       "description": "身高分档补档。180+ 这档原先只有女性的一组（组 164），180cm 以上的男性没有任何按身高分档的规则——他实际遇到的问题是买不到够长袖长的成衣，而不是比例。照组 164 的条件形状补（不带 height_wish）。",
-      "conditions": [{ "field": "height_range", "operator": "eq", "value": "180+" }],
+      "conditions": [
+        {
+          "field": "height",
+          "operator": "gte",
+          "value": 180
+        }
+      ],
       "actions": [
-        { "type": "top_style", "content": "先按肩宽和袖长选码，再看衣长；外套选到大腿中部比到膝盖更利落，长款压个子这件事在 180+ 身上不成立" },
-        { "type": "bottom_style", "content": "裤长按内长选，直接挑加长档或买回来改到刚好一道折；腰围靠实测，别按身高档位凑" },
-        { "type": "shoe_style", "content": "皮鞋运动鞋常规厚度即可；这一档不需要增高，选鞋看的是鞋底宽窄与裤脚的衔接" },
-        { "type": "color_combo", "content": "上下同深色会显得更修长；想让身高没那么压迫，用浅色上装加深色下装把视觉截回中段" },
-        { "type": "avoid", "content": "短到腰上方的上衣（上身显得局促）、窄版紧身套装、袖长差一截的成衣硬穿" },
-        { "type": "reason", "content": "180cm 以上买成衣的第一失败点是衣长袖长不够，不是比例失衡；这一组讲的是选码顺序，不含美丑判据" }
+        {
+          "type": "top_style",
+          "content": "先按肩宽和袖长选码，再看衣长；外套选到大腿中部比到膝盖更利落，长款压个子这件事在 180+ 身上不成立"
+        },
+        {
+          "type": "bottom_style",
+          "content": "裤长按内长选，直接挑加长档或买回来改到刚好一道折；腰围靠实测，别按身高档位凑"
+        },
+        {
+          "type": "shoe_style",
+          "content": "皮鞋运动鞋常规厚度即可；这一档不需要增高，选鞋看的是鞋底宽窄与裤脚的衔接"
+        },
+        {
+          "type": "color_combo",
+          "content": "上下同深色会显得更修长；想让身高没那么压迫，用浅色上装加深色下装把视觉截回中段"
+        },
+        {
+          "type": "avoid",
+          "content": "短到腰上方的上衣（上身显得局促）、窄版紧身套装、袖长差一截的成衣硬穿"
+        },
+        {
+          "type": "reason",
+          "content": "180cm 以上买成衣的第一失败点是衣长袖长不够，不是比例失衡；这一组讲的是选码顺序，不含美丑判据"
+        }
       ]
     },
     {
@@ -80,16 +162,45 @@
       "enabled": 1,
       "description": "BMI 分档补档。bmi_level 四档里「正常」只有女性一组（组 155，条件就是 gender 女 + bmi_level 正常），男性偏瘦/偏胖/肥胖三档各有组，独缺正常这一档。补法照组 155 镜像，只换性别。",
       "conditions": [
-        { "field": "gender", "operator": "eq", "value": "男" },
-        { "field": "bmi_level", "operator": "eq", "value": "正常" }
+        {
+          "field": "gender",
+          "operator": "eq",
+          "value": "男"
+        },
+        {
+          "field": "bmi",
+          "operator": "between",
+          "value": [
+            18.5,
+            23.99
+          ]
+        }
       ],
       "actions": [
-        { "type": "top_style", "content": "合身剪裁的衬衫、针织、小西装，肩线到位；面料带点挺度，贴身薄针织会把腰腹轮廓全画出来" },
-        { "type": "bottom_style", "content": "直筒西裤、原色牛仔裤、锥形裤；腰头按实测腰围选码，BMI 正常不等于腰细" },
-        { "type": "shoe_style", "content": "乐福鞋、德比鞋、线条干净的运动鞋都能穿，这一档不受身高体重限制" },
-        { "type": "color_combo", "content": "中性色打底加一个点缀色，上下深浅两级分色；想显得精神就把亮一点的那件放在上半身" },
-        { "type": "avoid", "content": "全身宽松（BMI 正常的人穿 oversize 只会显得比实际重）、弹力贴身面料、腰线以下堆料的款" },
-        { "type": "reason", "content": "BMI 落在正常档只说明身高体重的比值在区间内（分档口径见 services/bmi.js 的 HEALTH_BANDS），肩背和腰腹的实际轮廓仍要看围度；所以这一组给的是剪裁方向，不是尺码" }
+        {
+          "type": "top_style",
+          "content": "合身剪裁的衬衫、针织、小西装，肩线到位；面料带点挺度，贴身薄针织会把腰腹轮廓全画出来"
+        },
+        {
+          "type": "bottom_style",
+          "content": "直筒西裤、原色牛仔裤、锥形裤；腰头按实测腰围选码，BMI 正常不等于腰细"
+        },
+        {
+          "type": "shoe_style",
+          "content": "乐福鞋、德比鞋、线条干净的运动鞋都能穿，这一档不受身高体重限制"
+        },
+        {
+          "type": "color_combo",
+          "content": "中性色打底加一个点缀色，上下深浅两级分色；想显得精神就把亮一点的那件放在上半身"
+        },
+        {
+          "type": "avoid",
+          "content": "全身宽松（BMI 正常的人穿 oversize 只会显得比实际重）、弹力贴身面料、腰线以下堆料的款"
+        },
+        {
+          "type": "reason",
+          "content": "BMI 落在正常档只说明身高体重的比值在区间内（分档口径见 services/bmi.js 的 HEALTH_BANDS），肩背和腰腹的实际轮廓仍要看围度；所以这一组给的是剪裁方向，不是尺码"
+        }
       ]
     }
   ]

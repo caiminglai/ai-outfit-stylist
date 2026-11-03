@@ -105,6 +105,37 @@ function checkSingleCondition(condition, profile) {
   if (profileVal === null || profileVal === undefined) return false
   if (typeof profileVal === 'string' && profileVal.trim() === '') return false
 
+  // 区间算子（连续值匹配）：profileVal 和 condVal 都转成数字再比
+  if (operator === 'gt' || operator === 'lt' || operator === 'gte' || operator === 'lte') {
+    const pv = Number(profileVal)
+    const cv = Number(condVal)
+    if (!Number.isFinite(pv) || !Number.isFinite(cv)) return false
+    if (operator === 'gt') return pv > cv
+    if (operator === 'lt') return pv < cv
+    if (operator === 'gte') return pv >= cv
+    return pv <= cv
+  }
+  if (operator === 'between') {
+    const pv = Number(profileVal)
+    if (!Number.isFinite(pv)) return false
+    let lo, hi
+    if (Array.isArray(condVal)) {
+      ;[lo, hi] = condVal
+    } else if (condVal && typeof condVal === 'object') {
+      lo = ownValue(condVal, 'min')
+      hi = ownValue(condVal, 'max')
+    } else if (typeof condVal === 'string') {
+      // 兼容 "18.5,24" 写法
+      const parts = condVal.split(/[,，~]/).map((s) => s.trim())
+      lo = parts[0]
+      hi = parts[1]
+    }
+    const loN = Number(lo)
+    const hiN = Number(hi)
+    if (!Number.isFinite(loN) || !Number.isFinite(hiN)) return false
+    return pv >= loN && pv <= hiN
+  }
+
   if (operator === 'eq') {
     return String(profileVal) === String(condVal)
   } else if (operator === 'in') {

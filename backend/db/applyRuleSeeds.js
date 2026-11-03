@@ -24,7 +24,7 @@ const { ownValue } = require('../utils/common')
 
 const SEED_DIR = path.join(__dirname, 'seed')
 const SEED_FILE_RE = /^rules-.*\.json$/
-const VALID_OPERATORS = ['eq', 'in', 'ne']
+const VALID_OPERATORS = ['eq', 'in', 'ne', 'gt', 'lt', 'gte', 'lte', 'between']
 const CATEGORY_CN = ['穿搭', '妆容', '发型', '配饰', '姿势']
 const VALID_MODES = ['all', 'store', 'personal']
 
@@ -69,12 +69,28 @@ function normalizeCondition(cond) {
   const stored =
     operator === 'in'
       ? { [field]: Array.isArray(value) ? value : splitList(value) }
-      : { [field]: Array.isArray(value) ? value.join('、') : String(value).trim() }
+      : operator === 'between'
+        ? { [field]: Array.isArray(value) ? value.map(Number) : [Number(value)] }
+        : operator === 'gt' || operator === 'lt' || operator === 'gte' || operator === 'lte'
+          ? { [field]: Number(value) }
+          : { [field]: Array.isArray(value) ? value.join('、') : String(value).trim() }
   if (operator === 'in' && stored[field].length === 0) {
     return { error: `条件「属于」缺少候选值: ${field}` }
   }
+  if (operator === 'between') {
+    if (
+      !Array.isArray(stored[field]) ||
+      stored[field].length !== 2 ||
+      stored[field].some((n) => !Number.isFinite(n))
+    ) {
+      return { error: `条件「区间」需要 [min, max] 两个数: ${field}` }
+    }
+  }
+  if (['gt', 'lt', 'gte', 'lte'].includes(operator) && !Number.isFinite(stored[field])) {
+    return { error: `条件「比较」需要数值: ${field}` }
+  }
   // 没声明权重的种子条件按 1 存。原来这里填 3，而后台新增条件(routes/rules.js:89)、
-  // 后台编辑器初值(admin-rules.js:432)、引擎取不到权重时(recommendEngine.js:358 兜底的 `: 1`)
+  // 后台编辑器初值(admin-rules.js:432)、引擎取不到权重时(recommendEngine.js:369 兜底的 `: 1`)
   // 三处都是 1 ⇒ 同一句"这条条件没说权重"在两条路径下意思相反，
   // 走种子进来的规则天生比手写的重 3 倍。
   const weight = Number(cond.weight) > 0 ? Number(cond.weight) : 1

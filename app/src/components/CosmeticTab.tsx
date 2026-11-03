@@ -137,7 +137,10 @@ function normalizeExpiryItems(raw: unknown): ExpiryItem[] {
 export default function CosmeticTab({ profile, compact }: CosmeticTabProps) {
   /* ---------- 状态 ---------- */
   const [items, setItems] = useState<CosmeticItem[]>([])
-  const [loading, setLoading] = useState(false)
+  // 🔴 11-03 第 4 项：挂载即发请求 ⇒ 挂起态初值直接给「正在取」，⛔ 回到 effect 的同步前缀里 `setLoading(true)`
+  // （`react-hooks/set-state-in-effect`）；改完／删完之后那次手动重取由事件处理器自己置真，行为不变。
+  // promise 链而不是 `try/await/catch` 的成因见 `AccessoryTab.tsx` 里同一段注释。
+  const [loading, setLoading] = useState(true)
   const [showAdd, setShowAdd] = useState(false)
   const [gaps, setGaps] = useState<CosmeticGapResult | null>(null)
   const [gapsLoading, setGapsLoading] = useState(false)
@@ -153,16 +156,13 @@ export default function CosmeticTab({ profile, compact }: CosmeticTabProps) {
 
   /* ---------- 数据加载 ---------- */
 
-  const fetchItems = useCallback(async () => {
-    setLoading(true)
-    try {
-      const data = await listCosmetics()
-      setItems(data)
-    } catch (e: unknown) {
-      toast.error(e instanceof Error ? e.message : '加载化妆品失败')
-    } finally {
-      setLoading(false)
-    }
+  const fetchItems = useCallback(() => {
+    return listCosmetics()
+      .then(setItems)
+      .catch((e: unknown) => {
+        toast.error(e instanceof Error ? e.message : '加载化妆品失败')
+      })
+      .finally(() => setLoading(false))
   }, [])
 
   useEffect(() => {
@@ -228,6 +228,7 @@ export default function CosmeticTab({ profile, compact }: CosmeticTabProps) {
         toast.success('添加成功')
       }
       closeForm()
+      setLoading(true)
       await fetchItems()
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : editingId != null ? '保存失败' : '添加失败')
@@ -243,6 +244,7 @@ export default function CosmeticTab({ profile, compact }: CosmeticTabProps) {
     try {
       await deleteCosmetic(id)
       toast.success('已删除')
+      setLoading(true)
       await fetchItems()
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : '删除失败')

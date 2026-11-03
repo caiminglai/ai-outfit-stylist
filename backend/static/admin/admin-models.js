@@ -87,7 +87,7 @@ function rescanModels() {
 }
 
 /* ── 批量启用全部模型 ── */
-// toggle 是"翻转"语义(models.js:299,10-12 起翻转在 SQL 里一次算完:CASE WHEN enabled=1
+// toggle 是"翻转"语义(models.js:301,10-12 起翻转在 SQL 里一次算完:CASE WHEN enabled=1
 // THEN 0 ELSE 1 END)而非"置为启用"。原来后端先 SELECT 再写回,连点会双翻;现在不会了,
 // 但每个模型仍以接口回显的 res.data.enabled 为准,不能写死 true。
 // 下面这个在途闸保留:它挡的是同一批重复提交,省一轮往返和一次整页重绘。

@@ -23,6 +23,7 @@ const {
 } = require('./colorMetrics')
 const { asText, ownValue } = require('../utils/common')
 const { topFitBody, bodyDeviation, isTopCategory, FIT_TYPE_VALUES } = require('./topFitBody')
+const { generateWardrobeOutfits } = require('./wardrobeOutfitGenerator')
 // 第十三阶段·第一步 §三：款式词／面料词 → 版型档的推断层（⛔ 值域与松量映射都在 topFitBody 那边，这里只认档）
 const { inferFitType, inferFabricWeight } = require('./fitInference')
 const { topSpec } = require('./topFromBody')
@@ -48,6 +49,7 @@ const {
 // 库里 `item_feedback` 0 行 / 没身份 / 没体型 / `COLLAB_FILTER_ENABLED=0` ⇒ 每条恰好 ×1，名次一个字不变。
 // ⛔ 它不进三维出账、不进回归自变量，只在总分末尾乘一刀（退出机制与措辞红线都在 §4.3/§4.4）。
 const { buildCohortModel, COLLAB_CONFIG } = require('./collabFilter')
+const { buildBreakdown } = require('./conflictBreakdown')
 // 只取"库里这几行有没有"这个数，进 `_computed.ranking.collab.signals_in_db` 给报告与台账看
 // （⛔ 它不参与任何决策：这一层读的是同组别人的分，不是"库里有多少行"）
 const { countItemFeedback } = require('./itemFeedback')
@@ -64,6 +66,7 @@ const {
 const { CATEGORIES, matchRules, _flushHitCounts } = require('./recommend/ruleMatcher')
 const {
   RANK_WEIGHTS,
+  OCCASION_WEIGHTS,
   COLOR_BORROW_WEIGHT,
   RANK_RULE_REF,
   RANK_COVERAGE_FLOOR,
@@ -281,8 +284,15 @@ function _skinForColor(enriched, profile) {
 
   const rawHue = profile.skin_hue !== undefined ? profile.skin_hue : enriched.skin_hue
   const hue = Number(rawHue)
+  // 用户自选深浅（0~100）→ 0~1；没有则 undefined，synthesizeSkinLab 自动回退到锚点 L
+  const rawLightness =
+    profile.skin_lightness !== undefined ? profile.skin_lightness : enriched.skin_lightness
+  const lightness01 =
+    rawLightness !== undefined && rawLightness !== null && rawLightness !== ''
+      ? Math.max(0, Math.min(1, Number(rawLightness) / 100))
+      : undefined
   // 闸门全在 synthesizeSkinLab 里（非有限数／越过 h 闸／档名认不出 ⇒ null），这里不再自己拼条件。
-  const synth = synthesizeSkinLab(toneText, hue)
+  const synth = synthesizeSkinLab(toneText, hue, lightness01)
   if (synth)
     return { lab: synth.lab, source: 'photo_sample', hue: synth.lab.h, undertone: synth.undertone }
 
@@ -331,6 +341,7 @@ function buildRecommendation(
     发型: [],
     配饰: [],
     姿势: [],
+    衣橱搭配: [],
     _mode: mode,
     _computed: {},
     algorithm_analysis: null,
@@ -612,8 +623,8 @@ function buildRecommendation(
   }
 
   // 5. 兜底:规则引擎未命中时用旧版硬编码推荐
+  const scenario = enriched.scenario || profile.scenario || '通勤'
   if (result['穿搭'].length === 0) {
-    const scenario = enriched.scenario || profile.scenario || '通勤'
     const fallback = getRecommendations(
       enriched.skin_tone || profile.skin_tone,
       enriched.face_shape || profile.face_shape,
@@ -734,7 +745,7 @@ function buildRecommendation(
           ? raw.occasion_tags.map((t) => asText(t)).filter(Boolean)
           : [],
         // 厚薄有两个来源：投影带的那一格，或 `topFitBody` 算完挂在 `body_fit.top` 上的那一格
-        // （`topFitBody.js:703`，没填是 null）。两个都认，⛔ 只认薄/中/厚三个词——判词的事在 `candAxisValue`。
+        // （`topFitBody.js:716`，没填是 null）。两个都认，⛔ 只认薄/中/厚三个词——判词的事在 `candAxisValue`。
         fabric_weight: asText(raw.fabric_weight) || bf.top.fabric_weight || null,
       }
       // 衣橱这一处的颜色有两个来源：顾客填的「颜色」栏（raw.color，可以直接写 hex）
@@ -785,9 +796,27 @@ function buildRecommendation(
     // 没带 ⇒ 那一整路缺席（乘子恰好 1），⛔ 不替用户猜一档；星级那一路不受这一格影响。
     requestWeatherLevel,
   )
-  result['穿搭'] = rankAndTruncate(result['穿搭'], wardrobeTops, pref, collabModel, opts)
+  result['穿搭'] = rankAndTruncate(result['穿搭'], wardrobeTops, pref, collabModel, scenario, opts)
+  // 可解释穿搭评估：给前 N 条每条挂一个逐维度冲突拆解（色彩 + 廓形），
+  // 不重新算分，只从 color_fit / body_fit 的子分里归因。⛔ 不影响名次。
+  for (const rec of result['穿搭']) {
+    const breakdown = buildBreakdown(rec)
+    if (breakdown.length > 0) rec.conflict_breakdown = breakdown
+  }
+
+  // 衣橱搭配生成：从用户已有衣物中组合搭配方案（借鉴 AI衣橱）
+  // ⛔ 不影响穿搭排序，只作为"你衣橱里能搭出什么"的补充输出
+  if (Array.isArray(profile.wardrobe_items) && profile.wardrobe_items.length > 0) {
+    result['衣橱搭配'] = generateWardrobeOutfits({
+      wardrobe_items: profile.wardrobe_items,
+      occasion: profile.occasion || profile.scenario,
+      limit: 5,
+    })
+  }
   result._computed.ranking = {
     weights: RANK_WEIGHTS,
+    occasion: scenario,
+    occasion_weights: OCCASION_WEIGHTS[scenario] || null,
     rule_ref: RANK_RULE_REF,
     coverage_floor: RANK_COVERAGE_FLOOR,
     algo_absence_penalty: RANK_ALGO_ABSENCE_PENALTY,

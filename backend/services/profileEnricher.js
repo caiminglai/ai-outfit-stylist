@@ -15,7 +15,8 @@ const { ownValue } = require('../utils/common')
 const { beijingDateStr, beijingParts } = require('../utils/beijingTime')
 const { bmiValue, healthBand } = require('./bmi')
 const { BODY_TYPE_BY_KEY, normalizeBodyType } = require('./bodyTypes')
-const { estimateBodyDims } = require('./bodyDimEstimator')
+const { estimateBodyDims, estimateFromWaist } = require('./bodyDimEstimator')
+const { getSeasonType, getSkinFiveDimensions } = require('./seasonColor')
 
 // 简易内存缓存（避免重复计算相同 profile）
 const _enrichCache = new Map()
@@ -87,11 +88,19 @@ function computeBodyShape(bust, waist, hip, shoulder) {
   const bwDiff = b - w
   const whDiff = h - w
 
+  // 连续比值输出（供区间算子匹配，替代离散 5 分类）
+  const continuous = {
+    bust_waist_diff: bwDiff,
+    waist_hip_diff: whDiff,
+    shoulder_hip_ratio: shoulder && h > 0 ? shoulder / h : null,
+  }
+
   if (Math.abs(bwDiff - whDiff) < 5 && bwDiff > 10) {
     return {
       body_shape: BODY_TYPE_BY_KEY.hourglass,
       body_shape_key: 'hourglass',
       body_shape_status: 'good',
+      ...continuous,
     }
   }
   if (whDiff > bwDiff + 5) {
@@ -99,36 +108,95 @@ function computeBodyShape(bust, waist, hip, shoulder) {
       body_shape: BODY_TYPE_BY_KEY.pear,
       body_shape_key: 'pear',
       body_shape_status: 'normal',
+      ...continuous,
     }
   }
   if (bwDiff > whDiff + 5) {
     const s = _safeFloat(shoulder)
     // "上身占优"有两种成因：肩真的宽（倒三角）还是腰腹粗（苹果）。这根轴只有量了肩宽才分得开。
     // 原来这里靠 shoulder||38 编一个 38 出来判成苹果型，给客户贴一个没测过的体型标签。
-    if (s <= 0) return { body_shape_status: 'unmeasured' }
+    if (s <= 0) return { body_shape_status: 'unmeasured', ...continuous }
     if (s > h * 0.45) {
       return {
         body_shape: BODY_TYPE_BY_KEY.inverted_triangle,
         body_shape_key: 'inverted_triangle',
         body_shape_status: 'normal',
+        ...continuous,
       }
     }
     return {
       body_shape: BODY_TYPE_BY_KEY.apple,
       body_shape_key: 'apple',
       body_shape_status: 'warning',
+      ...continuous,
     }
   }
   return {
     body_shape: BODY_TYPE_BY_KEY.rectangle,
     body_shape_key: 'rectangle',
     body_shape_status: 'normal',
+    ...continuous,
   }
 }
 
-// ============================================================
-// 3. 腰臀比
-// ============================================================
+/**
+ * 四大身材标准·部位级标签（借鉴美沁雅「椰子胸/沙漏腰/母贝臀/酒杯腿」命名体系）
+ * ============================================================
+ * 与整体体型（沙漏/梨/苹果...）互补——整体标签说"你是什么形"，部位标签说"你哪个部位
+ * 有优势"。阈值基于苏南青年女性样本均值（胸腰差 17.86、腰臀差 23.97）与常见审美线。
+ *
+ * ⚠️ 档位诚实：
+ *  - 这是**审美标签**不是健康指标，阈值是产品参考线（C 档），不是医学结论。
+ *  - 没量到对应围度/腿长 ⇒ 该部位不出标签，⛔ 不编。
+ *
+ * @param {{bust_waist_diff?:number, waist_hip_diff?:number, leg_ratio?:number}} dims
+ * @returns {{highlights:string[], details:Object<string,{value:number, label:string}>}}
+ */
+function computeBodyHighlights(dims) {
+  const d = dims || {}
+  const highlights = []
+  const details = {}
+
+  // 椰子胸：胸腰差 ≥ 18（苏南样本均值 17.86，达到或超过算"胸线优势"）
+  if (typeof d.bust_waist_diff === 'number' && d.bust_waist_diff >= 18) {
+    highlights.push('椰子胸')
+    details['椰子胸'] = {
+      value: d.bust_waist_diff,
+      label: `胸腰差 ${d.bust_waist_diff}cm，胸线优势`,
+    }
+  }
+
+  // 沙漏腰：胸腰差 ≥ 15 且腰臀差 ≥ 18（上下都分得开，腰细）
+  if (
+    typeof d.bust_waist_diff === 'number' &&
+    typeof d.waist_hip_diff === 'number' &&
+    d.bust_waist_diff >= 15 &&
+    d.waist_hip_diff >= 18
+  ) {
+    highlights.push('沙漏腰')
+    details['沙漏腰'] = {
+      value: d.bust_waist_diff + d.waist_hip_diff,
+      label: `胸腰差 ${d.bust_waist_diff}cm、腰臀差 ${d.waist_hip_diff}cm，腰线分明`,
+    }
+  }
+
+  // 母贝臀：腰臀差 ≥ 20（苏南样本均值 23.97，达到或超过算"臀线优势"）
+  if (typeof d.waist_hip_diff === 'number' && d.waist_hip_diff >= 20) {
+    highlights.push('母贝臀')
+    details['母贝臀'] = { value: d.waist_hip_diff, label: `腰臀差 ${d.waist_hip_diff}cm，臀线优势` }
+  }
+
+  // 酒杯腿：腿身比 ≥ 0.56（腿长）
+  if (typeof d.leg_ratio === 'number' && d.leg_ratio >= 0.56) {
+    highlights.push('酒杯腿')
+    details['酒杯腿'] = {
+      value: d.leg_ratio,
+      label: `腿身比 ${(d.leg_ratio * 100).toFixed(1)}%，腿部优势`,
+    }
+  }
+
+  return { highlights, details }
+}
 
 /**
  * @param {number} waist
@@ -401,6 +469,26 @@ const FRAME_LEVEL = { 小巧: '小', 适中: '中', 大气: '大' }
 
 /** 身体线条倾向:表单值 → 轴位 */
 const LINE_LEVEL = { 偏直线: '直', 均衡: '衡', 偏曲线: '曲' }
+
+/**
+ * 连续值 → 离散档名（风格型两轴的连续↔离散互转）。
+ * frame_size_value / line_quality_value 都是 0~100。
+ * 切点 33/67 是三等分（C 档手拍，后续可回归）。
+ */
+function frameSizeFromValue(v) {
+  const n = Number(v)
+  if (!Number.isFinite(n)) return null
+  if (n < 33.33) return '小巧'
+  if (n > 66.67) return '大气'
+  return '适中'
+}
+function lineQualityFromValue(v) {
+  const n = Number(v)
+  if (!Number.isFinite(n)) return null
+  if (n < 33.33) return '偏直线'
+  if (n > 66.67) return '偏曲线'
+  return '均衡'
+}
 
 /**
  * 骨架 × 线条 → 五型方向。取的是 Kibbe 里最好自报的两维(量感大小、曲直),
@@ -796,6 +884,33 @@ function enrichProfile(profile) {
   if (!p.skin_tone && p.skin_tone_detail) {
     p.skin_tone = p.skin_tone_detail
   }
+  // skin_lightness 兜底：用户没拖深浅滑块时，从深浅档名推导一个连续值，
+  // 保证肤色深度规则（skin_lightness 区间匹配）总有值可吃，⛔ 不编"没填=50"。
+  // 映射：白皙→85, 自然白→65, 偏黄→45, 小麦色→30, 古铜色→15（C 档手拍，对应 L* P5~P95 的 0~100）
+  if (
+    (p.skin_lightness === undefined || p.skin_lightness === null || p.skin_lightness === '') &&
+    p.skin_tone_detail
+  ) {
+    const depthMap = { 白皙: 85, 自然白: 65, 偏黄: 45, 小麦色: 30, 古铜色: 15 }
+    p.skin_lightness = depthMap[p.skin_tone_detail]
+  }
+  // 0.45 四季色彩体系：冷暖轴（色相角/冷暖档）+ 深浅轴（明度/深浅档）⇒ 春/夏/秋/冬
+  //       ⛔ 不喂规则匹配——这只是给用户看的"季型"标签和推荐色卡，不影响推荐排序。
+  const season = getSeasonType({
+    skin_hue: p.skin_hue,
+    skin_lightness: p.skin_lightness,
+    skin_tone: p.skin_tone,
+    skin_tone_detail: p.skin_tone_detail,
+  })
+  if (season) p.season_type = season
+  // 0.46 五维肤色框架（借鉴 HBN 蓝皮书：黑/黄/红/白/青）
+  const fiveDims = getSkinFiveDimensions({
+    skin_hue: p.skin_hue,
+    skin_lightness: p.skin_lightness,
+    skin_tone: p.skin_tone,
+    skin_tone_detail: p.skin_tone_detail,
+  })
+  if (fiveDims) p.skin_five_dimensions = fiveDims
   if (!p.scenario && p.occasion) {
     p.scenario = ownValue(OCCASION_TO_SCENARIO, p.occasion) || p.occasion
   }
@@ -854,6 +969,18 @@ function enrichProfile(profile) {
     Object.assign(p, computeLegRatio(leg_length, height))
   }
 
+  // 4.5 四大身材标准·部位级标签（椰子胸/沙漏腰/母贝臀/酒杯腿）
+  //     只在量到对应围度/腿长时出，⛔ 不编标签
+  const bodyHighlights = computeBodyHighlights({
+    bust_waist_diff: p.bust_waist_diff,
+    waist_hip_diff: p.waist_hip_diff,
+    leg_ratio: p.leg_ratio,
+  })
+  if (bodyHighlights.highlights.length > 0) {
+    p.body_highlights = bodyHighlights.highlights
+    p.body_highlights_details = bodyHighlights.details
+  }
+
   // 5. 肩宽比
   if (shoulder && height) {
     Object.assign(p, computeShoulderRatio(shoulder, height))
@@ -871,6 +998,22 @@ function enrichProfile(profile) {
   // 6.6 色彩十二型(四季×纯度第三轴;没选纯度就停在四季,四季那批规则照常命中)
   Object.assign(p, computeColorSeason12(p.color_season, p.color_chroma))
   // 6.7 风格型(骨架量感×线条倾向,两轴都选了才算)
+  //    连续值优先：用户拖了滑块(frame_size_value/line_quality_value)就从连续值推导离散档名，
+  //    保证既有规则(frame_size eq '大气')照常命中，同时把连续值也挂到 profile 上供区间算子匹配。
+  if (
+    p.frame_size_value !== undefined &&
+    p.frame_size_value !== null &&
+    p.frame_size_value !== ''
+  ) {
+    p.frame_size = frameSizeFromValue(p.frame_size_value)
+  }
+  if (
+    p.line_quality_value !== undefined &&
+    p.line_quality_value !== null &&
+    p.line_quality_value !== ''
+  ) {
+    p.line_quality = lineQualityFromValue(p.line_quality_value)
+  }
   Object.assign(p, computeKibbeType(p.frame_size, p.line_quality))
   // 6.75 周岁与年龄段(生日填了就以生日算,盖掉表单上手选的档位)
   Object.assign(p, deriveAgeFields(p.birth_date))
@@ -890,6 +1033,41 @@ function enrichProfile(profile) {
     weight: p.weight,
     age: p.age,
   })
+  // 6.9.1 腰围回归估算胸围/臀围（苏南 18~24 岁女性研究，B=0.59W+45.37／H=0.55W+53.96）。
+  //       与上面身高体重估算合并到同一通道：
+  //         · bust_cm 优先用腰围回归（同一人的腰围推导比人群幂律更准）
+  //         · shoulder_cm 只用身高体重（回归方程给不出肩宽）
+  //         · hip_cm 只用腰围回归（身高体重幂律给不出臀围）
+  //       同样 ⛔ 不改写 p.bust／p.hip、⛔ 不喂 computeBodyShape／规则匹配。
+  const waistEst = estimateFromWaist({
+    gender: p.gender,
+    waist: p.waist,
+    age: p.age,
+  })
+  if (waistEst) {
+    if (!p.body_est) p.body_est = { estimated: true }
+    // bust：腰围回归优先于身高体重幂律
+    if (waistEst.bust_cm != null) {
+      p.body_est.bust_cm = waistEst.bust_cm
+      p.body_est.bust_from = 'waist_regression'
+    } else if (p.body_est.bust_cm != null) {
+      p.body_est.bust_from = 'height_weight'
+    }
+    // hip：只能从腰围回归来
+    if (waistEst.hip_cm != null) {
+      p.body_est.hip_cm = waistEst.hip_cm
+      p.body_est.hip_from = 'waist_regression'
+    }
+    if (p.body_est.shoulder_cm != null) p.body_est.shoulder_from = 'height_weight'
+    // 把腰围回归的 basis 与 flags 带出去（topFitBody 的 notes 要用）
+    p.body_est.waist_basis = waistEst.basis
+    if (waistEst.flags && waistEst.flags.length) {
+      p.body_est.waist_flags = waistEst.flags
+    }
+  } else if (p.body_est) {
+    if (p.body_est.bust_cm != null) p.body_est.bust_from = 'height_weight'
+    if (p.body_est.shoulder_cm != null) p.body_est.shoulder_from = 'height_weight'
+  }
 
   // 7. 脸型-全维度建议
   if (face_shape) {
@@ -927,6 +1105,7 @@ module.exports = {
   enrichProfile,
   computeBmi,
   computeBodyShape,
+  computeBodyHighlights,
   computeWhRatio,
   computeLegRatio,
   computeShoulderRatio,

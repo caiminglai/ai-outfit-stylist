@@ -4725,9 +4725,9 @@
     {
       "id": 105,
       "group_id": 30,
-      "field": "body_type",
-      "operator": "eq",
-      "value": "{\"body_type\": \"沙漏型\"}",
+      "field": "bust_waist_diff",
+      "operator": "gt",
+      "value": "{\"bust_waist_diff\":10}",
       "weight": 3
     },
     {
@@ -4749,9 +4749,9 @@
     {
       "id": 108,
       "group_id": 31,
-      "field": "body_type",
-      "operator": "eq",
-      "value": "{\"body_type\": \"梨形\"}",
+      "field": "waist_hip_diff",
+      "operator": "gt",
+      "value": "{\"waist_hip_diff\":5}",
       "weight": 3
     },
     {
@@ -4773,9 +4773,9 @@
     {
       "id": 111,
       "group_id": 32,
-      "field": "body_type",
-      "operator": "eq",
-      "value": "{\"body_type\": \"苹果型\"}",
+      "field": "waist_hip_diff",
+      "operator": "lt",
+      "value": "{\"waist_hip_diff\":5}",
       "weight": 3
     },
     {
@@ -4797,9 +4797,9 @@
     {
       "id": 114,
       "group_id": 33,
-      "field": "body_type",
-      "operator": "eq",
-      "value": "{\"body_type\": \"直筒型\"}",
+      "field": "bust_waist_diff",
+      "operator": "lt",
+      "value": "{\"bust_waist_diff\":10}",
       "weight": 3
     },
     {
@@ -4821,9 +4821,9 @@
     {
       "id": 117,
       "group_id": 34,
-      "field": "body_type",
-      "operator": "eq",
-      "value": "{\"body_type\": \"倒三角型\"}",
+      "field": "shoulder_hip_ratio",
+      "operator": "gt",
+      "value": "{\"shoulder_hip_ratio\":0.45}",
       "weight": 3
     },
     {
@@ -4845,9 +4845,9 @@
     {
       "id": 120,
       "group_id": 35,
-      "field": "bmi_level",
-      "operator": "eq",
-      "value": "{\"bmi_level\": \"偏瘦\"}",
+      "field": "bmi",
+      "operator": "between",
+      "value": "{\"bmi\":[0,18.49]}",
       "weight": 3
     },
     {
@@ -4869,9 +4869,9 @@
     {
       "id": 123,
       "group_id": 36,
-      "field": "bmi_level",
-      "operator": "eq",
-      "value": "{\"bmi_level\": \"偏胖\"}",
+      "field": "bmi",
+      "operator": "between",
+      "value": "{\"bmi\":[24,27.99]}",
       "weight": 3
     },
     {
@@ -4893,9 +4893,9 @@
     {
       "id": 126,
       "group_id": 37,
-      "field": "bmi_level",
-      "operator": "eq",
-      "value": "{\"bmi_level\": \"肥胖\"}",
+      "field": "bmi",
+      "operator": "gte",
+      "value": "{\"bmi\":28}",
       "weight": 3
     },
     {
@@ -4917,9 +4917,9 @@
     {
       "id": 129,
       "group_id": 38,
-      "field": "skin_tone",
-      "operator": "eq",
-      "value": "{\"skin_tone\": \"白皙\"}",
+      "field": "skin_lightness",
+      "operator": "gte",
+      "value": "{\"skin_lightness\":75}",
       "weight": 3
     },
     {
@@ -4941,9 +4941,9 @@
     {
       "id": 132,
       "group_id": 39,
-      "field": "skin_tone",
-      "operator": "eq",
-      "value": "{\"skin_tone\": \"自然白\"}",
+      "field": "skin_lightness",
+      "operator": "between",
+      "value": "{\"skin_lightness\":[55,74]}",
       "weight": 3
     },
     {
@@ -4965,9 +4965,9 @@
     {
       "id": 135,
       "group_id": 40,
-      "field": "skin_tone",
-      "operator": "eq",
-      "value": "{\"skin_tone\": \"偏黄\"}",
+      "field": "skin_lightness",
+      "operator": "between",
+      "value": "{\"skin_lightness\":[40,54]}",
       "weight": 3
     },
     {
@@ -4989,9 +4989,9 @@
     {
       "id": 138,
       "group_id": 41,
-      "field": "skin_tone",
-      "operator": "eq",
-      "value": "{\"skin_tone\": \"小麦色\"}",
+      "field": "skin_lightness",
+      "operator": "between",
+      "value": "{\"skin_lightness\":[20,39]}",
       "weight": 3
     },
     {
@@ -5013,9 +5013,9 @@
     {
       "id": 141,
       "group_id": 42,
-      "field": "skin_tone",
-      "operator": "eq",
-      "value": "{\"skin_tone\": \"古铜色\"}",
+      "field": "skin_lightness",
+      "operator": "lt",
+      "value": "{\"skin_lightness\":20}",
       "weight": 3
     },
     {
@@ -5813,9 +5813,9 @@
     {
       "id": 241,
       "group_id": 76,
-      "field": "body_type",
-      "operator": "eq",
-      "value": "{\"body_type\": \"倒三角型\"}",
+      "field": "shoulder_hip_ratio",
+      "operator": "gt",
+      "value": "{\"shoulder_hip_ratio\":0.45}",
       "weight": 3
     },
     {
@@ -6373,9 +6373,9 @@
     {
       "id": 319,
       "group_id": 102,
-      "field": "body_type",
-      "operator": "eq",
-      "value": "{\"body_type\": \"直筒型\"}",
+      "field": "bust_waist_diff",
+      "operator": "lt",
+      "value": "{\"bust_waist_diff\":10}",
       "weight": 3
     },
     {
@@ -6397,9 +6397,9 @@
     {
       "id": 322,
       "group_id": 103,
-      "field": "body_type",
-      "operator": "eq",
-      "value": "{\"body_type\": \"梨形\"}",
+      "field": "waist_hip_diff",
+      "operator": "gt",
+      "value": "{\"waist_hip_diff\":5}",
       "weight": 3
     },
     {
@@ -6421,9 +6421,9 @@
     {
       "id": 325,
       "group_id": 104,
-      "field": "body_type",
-      "operator": "eq",
-      "value": "{\"body_type\": \"苹果型\"}",
+      "field": "waist_hip_diff",
+      "operator": "lt",
+      "value": "{\"waist_hip_diff\":5}",
       "weight": 3
     },
     {
@@ -6445,9 +6445,9 @@
     {
       "id": 328,
       "group_id": 105,
-      "field": "body_type",
-      "operator": "eq",
-      "value": "{\"body_type\": \"沙漏型\"}",
+      "field": "bust_waist_diff",
+      "operator": "gt",
+      "value": "{\"bust_waist_diff\":10}",
       "weight": 3
     },
     {
@@ -6709,9 +6709,9 @@
     {
       "id": 361,
       "group_id": 116,
-      "field": "bmi_level",
-      "operator": "eq",
-      "value": "{\"bmi_level\": \"偏瘦\"}",
+      "field": "bmi",
+      "operator": "between",
+      "value": "{\"bmi\":[0,18.49]}",
       "weight": 3
     },
     {
@@ -6733,9 +6733,9 @@
     {
       "id": 364,
       "group_id": 117,
-      "field": "bmi_level",
-      "operator": "eq",
-      "value": "{\"bmi_level\": \"偏胖\"}",
+      "field": "bmi",
+      "operator": "between",
+      "value": "{\"bmi\":[24,27.99]}",
       "weight": 3
     },
     {
@@ -6757,9 +6757,9 @@
     {
       "id": 367,
       "group_id": 118,
-      "field": "bmi_level",
-      "operator": "eq",
-      "value": "{\"bmi_level\": \"肥胖\"}",
+      "field": "bmi",
+      "operator": "gte",
+      "value": "{\"bmi\":28}",
       "weight": 3
     },
     {
@@ -6877,9 +6877,9 @@
     {
       "id": 382,
       "group_id": 123,
-      "field": "age_range",
-      "operator": "eq",
-      "value": "{\"age_range\": \"18-25\"}",
+      "field": "age",
+      "operator": "between",
+      "value": "{\"age\":[18,25]}",
       "weight": 3
     },
     {
@@ -6901,9 +6901,9 @@
     {
       "id": 385,
       "group_id": 124,
-      "field": "age_range",
-      "operator": "eq",
-      "value": "{\"age_range\": \"26-35\"}",
+      "field": "age",
+      "operator": "between",
+      "value": "{\"age\":[26,35]}",
       "weight": 3
     },
     {
@@ -6925,9 +6925,9 @@
     {
       "id": 388,
       "group_id": 125,
-      "field": "age_range",
-      "operator": "eq",
-      "value": "{\"age_range\": \"36-45\"}",
+      "field": "age",
+      "operator": "between",
+      "value": "{\"age\":[36,45]}",
       "weight": 3
     },
     {
@@ -6949,9 +6949,9 @@
     {
       "id": 391,
       "group_id": 126,
-      "field": "age_range",
-      "operator": "eq",
-      "value": "{\"age_range\": \"46+\"}",
+      "field": "age",
+      "operator": "gte",
+      "value": "{\"age\":46}",
       "weight": 3
     },
     {
@@ -6973,9 +6973,9 @@
     {
       "id": 394,
       "group_id": 127,
-      "field": "age_range",
-      "operator": "eq",
-      "value": "{\"age_range\": \"18-25\"}",
+      "field": "age",
+      "operator": "between",
+      "value": "{\"age\":[18,25]}",
       "weight": 3
     },
     {
@@ -6997,9 +6997,9 @@
     {
       "id": 397,
       "group_id": 128,
-      "field": "age_range",
-      "operator": "eq",
-      "value": "{\"age_range\": \"26-35\"}",
+      "field": "age",
+      "operator": "between",
+      "value": "{\"age\":[26,35]}",
       "weight": 3
     },
     {
@@ -7021,9 +7021,9 @@
     {
       "id": 400,
       "group_id": 129,
-      "field": "age_range",
-      "operator": "eq",
-      "value": "{\"age_range\": \"36-45\"}",
+      "field": "age",
+      "operator": "between",
+      "value": "{\"age\":[36,45]}",
       "weight": 3
     },
     {
@@ -7045,9 +7045,9 @@
     {
       "id": 403,
       "group_id": 130,
-      "field": "age_range",
-      "operator": "eq",
-      "value": "{\"age_range\": \"46+\"}",
+      "field": "age",
+      "operator": "gte",
+      "value": "{\"age\":46}",
       "weight": 3
     },
     {
@@ -7525,9 +7525,9 @@
     {
       "id": 465,
       "group_id": 154,
-      "field": "bmi_level",
-      "operator": "eq",
-      "value": "\"偏瘦\"",
+      "field": "bmi",
+      "operator": "between",
+      "value": "{\"bmi\":[0,18.49]}",
       "weight": 1
     },
     {
@@ -7541,9 +7541,9 @@
     {
       "id": 467,
       "group_id": 155,
-      "field": "bmi_level",
-      "operator": "eq",
-      "value": "\"正常\"",
+      "field": "bmi",
+      "operator": "between",
+      "value": "{\"bmi\":[18.5,23.99]}",
       "weight": 1
     },
     {
@@ -7557,9 +7557,9 @@
     {
       "id": 469,
       "group_id": 156,
-      "field": "bmi_level",
-      "operator": "eq",
-      "value": "\"偏胖\"",
+      "field": "bmi",
+      "operator": "between",
+      "value": "{\"bmi\":[24,27.99]}",
       "weight": 1
     },
     {
@@ -7573,9 +7573,9 @@
     {
       "id": 471,
       "group_id": 157,
-      "field": "bmi_level",
-      "operator": "eq",
-      "value": "\"偏瘦\"",
+      "field": "bmi",
+      "operator": "between",
+      "value": "{\"bmi\":[0,18.49]}",
       "weight": 1
     },
     {
@@ -7589,9 +7589,9 @@
     {
       "id": 473,
       "group_id": 158,
-      "field": "bmi_level",
-      "operator": "eq",
-      "value": "\"偏胖\"",
+      "field": "bmi",
+      "operator": "between",
+      "value": "{\"bmi\":[24,27.99]}",
       "weight": 1
     },
     {
@@ -7669,9 +7669,9 @@
     {
       "id": 483,
       "group_id": 163,
-      "field": "height_range",
-      "operator": "eq",
-      "value": "\"150-160\"",
+      "field": "height",
+      "operator": "between",
+      "value": "{\"height\":[150,159.9]}",
       "weight": 1
     },
     {
@@ -7693,9 +7693,9 @@
     {
       "id": 486,
       "group_id": 164,
-      "field": "height_range",
-      "operator": "eq",
-      "value": "\"180+\"",
+      "field": "height",
+      "operator": "gte",
+      "value": "{\"height\":180}",
       "weight": 1
     },
     {
@@ -7709,9 +7709,9 @@
     {
       "id": 488,
       "group_id": 165,
-      "field": "height_range",
-      "operator": "eq",
-      "value": "\"160-170\"",
+      "field": "height",
+      "operator": "between",
+      "value": "{\"height\":[160,169.9]}",
       "weight": 1
     },
     {
@@ -7781,9 +7781,9 @@
     {
       "id": 497,
       "group_id": 169,
-      "field": "age_range",
-      "operator": "eq",
-      "value": "\"18-25\"",
+      "field": "age",
+      "operator": "between",
+      "value": "{\"age\":[18,25]}",
       "weight": 1
     },
     {
@@ -7797,9 +7797,9 @@
     {
       "id": 499,
       "group_id": 170,
-      "field": "age_range",
-      "operator": "eq",
-      "value": "\"26-35\"",
+      "field": "age",
+      "operator": "between",
+      "value": "{\"age\":[26,35]}",
       "weight": 1
     },
     {
@@ -7813,9 +7813,9 @@
     {
       "id": 501,
       "group_id": 171,
-      "field": "age_range",
-      "operator": "eq",
-      "value": "\"18-25\"",
+      "field": "age",
+      "operator": "between",
+      "value": "{\"age\":[18,25]}",
       "weight": 1
     },
     {
@@ -7829,9 +7829,9 @@
     {
       "id": 503,
       "group_id": 172,
-      "field": "age_range",
-      "operator": "eq",
-      "value": "\"26-35\"",
+      "field": "age",
+      "operator": "between",
+      "value": "{\"age\":[26,35]}",
       "weight": 1
     },
     {
@@ -7901,9 +7901,9 @@
     {
       "id": 512,
       "group_id": 175,
-      "field": "skin_tone_detail",
-      "operator": "eq",
-      "value": "\"白皙\"",
+      "field": "skin_lightness",
+      "operator": "gte",
+      "value": "{\"skin_lightness\":75}",
       "weight": 1
     },
     {
@@ -7925,9 +7925,9 @@
     {
       "id": 515,
       "group_id": 176,
-      "field": "skin_tone_detail",
-      "operator": "eq",
-      "value": "\"偏黄\"",
+      "field": "skin_lightness",
+      "operator": "between",
+      "value": "{\"skin_lightness\":[40,54]}",
       "weight": 1
     },
     {
@@ -7949,9 +7949,9 @@
     {
       "id": 518,
       "group_id": 177,
-      "field": "skin_tone_detail",
-      "operator": "eq",
-      "value": "\"白皙\"",
+      "field": "skin_lightness",
+      "operator": "gte",
+      "value": "{\"skin_lightness\":75}",
       "weight": 1
     },
     {
@@ -8277,9 +8277,9 @@
     {
       "id": 559,
       "group_id": 196,
-      "field": "body_type",
-      "operator": "eq",
-      "value": "{\"body_type\":\"梨形\"}",
+      "field": "waist_hip_diff",
+      "operator": "gt",
+      "value": "{\"waist_hip_diff\":5}",
       "weight": 3
     },
     {
@@ -8309,9 +8309,9 @@
     {
       "id": 563,
       "group_id": 197,
-      "field": "body_type",
-      "operator": "eq",
-      "value": "{\"body_type\":\"梨形\"}",
+      "field": "waist_hip_diff",
+      "operator": "gt",
+      "value": "{\"waist_hip_diff\":5}",
       "weight": 3
     },
     {
@@ -8341,9 +8341,9 @@
     {
       "id": 567,
       "group_id": 198,
-      "field": "body_type",
-      "operator": "eq",
-      "value": "{\"body_type\":\"梨形\"}",
+      "field": "waist_hip_diff",
+      "operator": "gt",
+      "value": "{\"waist_hip_diff\":5}",
       "weight": 3
     },
     {
@@ -8373,9 +8373,9 @@
     {
       "id": 571,
       "group_id": 199,
-      "field": "body_type",
-      "operator": "eq",
-      "value": "{\"body_type\":\"苹果型\"}",
+      "field": "waist_hip_diff",
+      "operator": "lt",
+      "value": "{\"waist_hip_diff\":5}",
       "weight": 3
     },
     {
@@ -8405,9 +8405,9 @@
     {
       "id": 575,
       "group_id": 200,
-      "field": "body_type",
-      "operator": "eq",
-      "value": "{\"body_type\":\"苹果型\"}",
+      "field": "waist_hip_diff",
+      "operator": "lt",
+      "value": "{\"waist_hip_diff\":5}",
       "weight": 3
     },
     {
@@ -8437,9 +8437,9 @@
     {
       "id": 579,
       "group_id": 201,
-      "field": "bmi_level",
-      "operator": "eq",
-      "value": "{\"bmi_level\":\"偏胖\"}",
+      "field": "bmi",
+      "operator": "between",
+      "value": "{\"bmi\":[24,27.99]}",
       "weight": 3
     },
     {
@@ -8469,9 +8469,9 @@
     {
       "id": 583,
       "group_id": 202,
-      "field": "bmi_level",
-      "operator": "eq",
-      "value": "{\"bmi_level\":\"偏胖\"}",
+      "field": "bmi",
+      "operator": "between",
+      "value": "{\"bmi\":[24,27.99]}",
       "weight": 3
     },
     {
@@ -8501,9 +8501,9 @@
     {
       "id": 587,
       "group_id": 203,
-      "field": "bmi_level",
-      "operator": "eq",
-      "value": "{\"bmi_level\":\"偏瘦\"}",
+      "field": "bmi",
+      "operator": "between",
+      "value": "{\"bmi\":[0,18.49]}",
       "weight": 3
     },
     {
@@ -8533,9 +8533,9 @@
     {
       "id": 591,
       "group_id": 204,
-      "field": "bmi_level",
-      "operator": "eq",
-      "value": "{\"bmi_level\":\"偏瘦\"}",
+      "field": "bmi",
+      "operator": "between",
+      "value": "{\"bmi\":[0,18.49]}",
       "weight": 3
     },
     {
@@ -8565,9 +8565,9 @@
     {
       "id": 595,
       "group_id": 205,
-      "field": "body_type",
-      "operator": "eq",
-      "value": "{\"body_type\":\"梨形\"}",
+      "field": "waist_hip_diff",
+      "operator": "gt",
+      "value": "{\"waist_hip_diff\":5}",
       "weight": 3
     },
     {
@@ -8597,9 +8597,9 @@
     {
       "id": 599,
       "group_id": 206,
-      "field": "body_type",
-      "operator": "eq",
-      "value": "{\"body_type\":\"苹果型\"}",
+      "field": "waist_hip_diff",
+      "operator": "lt",
+      "value": "{\"waist_hip_diff\":5}",
       "weight": 3
     },
     {
@@ -8629,9 +8629,9 @@
     {
       "id": 603,
       "group_id": 207,
-      "field": "body_type",
-      "operator": "eq",
-      "value": "{\"body_type\":\"苹果型\"}",
+      "field": "waist_hip_diff",
+      "operator": "lt",
+      "value": "{\"waist_hip_diff\":5}",
       "weight": 3
     },
     {
@@ -8661,9 +8661,9 @@
     {
       "id": 607,
       "group_id": 208,
-      "field": "bmi_level",
-      "operator": "eq",
-      "value": "{\"bmi_level\":\"偏胖\"}",
+      "field": "bmi",
+      "operator": "between",
+      "value": "{\"bmi\":[24,27.99]}",
       "weight": 3
     },
     {
@@ -8693,9 +8693,9 @@
     {
       "id": 611,
       "group_id": 209,
-      "field": "bmi_level",
-      "operator": "eq",
-      "value": "{\"bmi_level\":\"偏胖\"}",
+      "field": "bmi",
+      "operator": "between",
+      "value": "{\"bmi\":[24,27.99]}",
       "weight": 3
     },
     {
@@ -8725,9 +8725,9 @@
     {
       "id": 615,
       "group_id": 210,
-      "field": "bmi_level",
-      "operator": "eq",
-      "value": "{\"bmi_level\":\"偏瘦\"}",
+      "field": "bmi",
+      "operator": "between",
+      "value": "{\"bmi\":[0,18.49]}",
       "weight": 3
     },
     {
@@ -8757,9 +8757,9 @@
     {
       "id": 619,
       "group_id": 211,
-      "field": "bmi_level",
-      "operator": "eq",
-      "value": "{\"bmi_level\":\"偏瘦\"}",
+      "field": "bmi",
+      "operator": "between",
+      "value": "{\"bmi\":[0,18.49]}",
       "weight": 3
     },
     {
@@ -8789,9 +8789,9 @@
     {
       "id": 623,
       "group_id": 212,
-      "field": "bmi_level",
-      "operator": "eq",
-      "value": "{\"bmi_level\":\"偏胖\"}",
+      "field": "bmi",
+      "operator": "between",
+      "value": "{\"bmi\":[24,27.99]}",
       "weight": 3
     },
     {
@@ -8821,9 +8821,9 @@
     {
       "id": 627,
       "group_id": 213,
-      "field": "bmi_level",
-      "operator": "eq",
-      "value": "{\"bmi_level\":\"偏瘦\"}",
+      "field": "bmi",
+      "operator": "between",
+      "value": "{\"bmi\":[0,18.49]}",
       "weight": 3
     },
     {

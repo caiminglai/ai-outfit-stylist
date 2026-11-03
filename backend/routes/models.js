@@ -16,6 +16,8 @@ const fs = require('fs')
 const db = require('../db/init')
 const { sendSuccess, sendError } = require('../utils/response')
 const { firstBadScalar, asId } = require('../utils/common')
+// 日志走 utils/logger：console.log 只落 stdout，容器里查不到（别名与 server.js:42 保持一致）
+const { log: logMsg } = require('../utils/logger')
 const { adminLoginRequired } = require('../middleware/auth')
 const {
   ICON_MAP,
@@ -259,7 +261,7 @@ function cleanupMissingRecords() {
     )
     del.run(...brokenRows.map((r) => r.id))
     removedBroken = brokenRows.length
-    console.log(`[模型清理] 已删除 ${removedBroken} 条残缺模型记录`)
+    logMsg(`[模型清理] 已删除 ${removedBroken} 条残缺模型记录`)
   }
 
   // 2. 删除 .pmx 文件实际不存在的记录
@@ -277,7 +279,7 @@ function cleanupMissingRecords() {
     )
     del.run(...missingIds)
     removedMissing = missingIds.length
-    console.log(`[模型清理] 已删除 ${removedMissing} 条文件缺失记录`)
+    logMsg(`[模型清理] 已删除 ${removedMissing} 条文件缺失记录`)
   }
 
   return { removedBroken, removedMissing }

@@ -16,6 +16,7 @@ const crypto = require('crypto')
 const db = require('../db/init')
 const { sendSuccess, sendCreated, sendError } = require('../utils/response')
 const { stripIdentityFields } = require('../utils/common')
+const { capJson, FORM_BLOB_LIMITS } = require('../middleware/bodyGate')
 const { buildRecommendation } = require('../services/recommendEngine')
 const { writeRecommendationLog } = require('../services/profileArchive')
 
@@ -116,7 +117,11 @@ router.get('/privacy-notice', (_req, res) => {
 router.post('/session', (req, res) => {
   try {
     const sessionId = generateSessionId()
-    const profileData = JSON.stringify(req.body?.profile_data || req.body || {})
+    const blob = req.body?.profile_data || req.body || {}
+    // 整坨进 profile_data 前收一次体积（上限的现量依据在 bodyGate 的 FORM_BLOB_LIMITS 注释里）
+    const fit = capJson(blob, FORM_BLOB_LIMITS)
+    if (!fit.ok) return sendError(res, `profile_data 存不下：${fit.reason}`, 400)
+    const profileData = JSON.stringify(blob)
     const storeId = resolveStoreId(req.body?.store)
     const expiresAt = new Date(Date.now() + CUSTOMER_DATA_TTL * 1000).toISOString()
 
@@ -200,7 +205,11 @@ router.put('/session/:sessionId', (req, res) => {
       return sendError(res, '会话已过期', 404)
     }
 
-    const profileData = JSON.stringify(req.body?.profile_data || req.body || {})
+    const blob = req.body?.profile_data || req.body || {}
+    // 整坨进 profile_data 前收一次体积（上限的现量依据在 bodyGate 的 FORM_BLOB_LIMITS 注释里）
+    const fit = capJson(blob, FORM_BLOB_LIMITS)
+    if (!fit.ok) return sendError(res, `profile_data 存不下：${fit.reason}`, 400)
+    const profileData = JSON.stringify(blob)
     const expiresAt = new Date(Date.now() + CUSTOMER_DATA_TTL * 1000).toISOString()
 
     db.prepare(

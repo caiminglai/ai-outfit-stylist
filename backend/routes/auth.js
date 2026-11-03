@@ -14,6 +14,8 @@ const {
   getSessionId,
 } = require('../middleware/auth')
 const { rateLimit } = require('../middleware/rateLimit')
+// 日志走 utils/logger：console.log 只落 stdout，容器里查不到（别名与 server.js:42 保持一致）
+const { log: logMsg } = require('../utils/logger')
 
 const router = express.Router()
 
@@ -357,7 +359,7 @@ router.post('/admin/reset-password', adminLoginRequired, (req, res) => {
       bcrypt.hashSync(newPassword, 10),
       phone,
     )
-    console.log(`[认证] 管理员已重置手机号 ${phone.slice(0, 3)}****${phone.slice(-4)} 的密码`)
+    logMsg(`[认证] 管理员已重置手机号 ${phone.slice(0, 3)}****${phone.slice(-4)} 的密码`)
     return sendSuccess(res, { phone }, '密码已重置，请把新密码交给本人')
   } catch (err) {
     console.error('[认证] 重置密码失败:', err)

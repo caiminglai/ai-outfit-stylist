@@ -354,8 +354,79 @@ function estimateBodyDims(input) {
   }
 }
 
+/**
+ * 苏南回归方程：腰围 ⇒ 胸围、臀围
+ * ============================================================
+ * 出处：王萍、张秀《基于三维人体测量的苏南地区青年女性体型特征》（2012），
+ *   样本＝苏南地区 18~24 岁女性 185 人（三维扫描），回归方程见论文 §2.6：
+ *     胸围 B ＝ 0.59 × 腰围 W ＋ 45.37（cm）
+ *     臀围 H ＝ 0.55 × 腰围 W ＋ 53.96（cm）
+ *   论文用 GB/T 1335.2—2008 的 165/84A（W=68）回代：B=85.49／H=91.36，
+ *   与样本均值（B=85.02／H=91.13）误差 <0.5cm ⇒ 方程精度在该群体内较高。
+ *
+ * ⚠️ 档位诚实：
+ *  - 方程的适用群体是**苏南 18~24 岁青年女性**；对其他地区／年龄段，
+ *    围度间的线性关系仍然成立（都是软组织围度，不像身高体重幂律那样吃年龄），
+ *    但截距会有偏移 ⇒ 超出 18~35 岁时打 `age_out_of_study_range`，
+ *    对外 ✅ 说"按江浙青年女性三围回归估"，⛔ 不说"按你的腰围精准推算"。
+ *  - 这一层的数同样 ⛔ 不许喂 computeBodyShape／规则匹配／顾客端实测展示，
+ *    唯一出口是 topFitBody.person_cm.bust／hip（合身层做减法的原值）。
+ */
+const WAIST_BUST_SLOPE = 0.59
+const WAIST_BUST_INTERCEPT = 45.37
+const WAIST_HIP_SLOPE = 0.55
+const WAIST_HIP_INTERCEPT = 53.96
+/** 腰围合格框（cm）：苏南样本 55.4~93.0，放宽到 40~130 覆盖偏瘦／偏胖端点 */
+const WAIST_RANGE = [40, 130]
+/** 回归方程的研究适用年龄段（岁），超出打 flag 但仍可算 */
+const WAIST_STUDY_AGE_RANGE = [18, 35]
+
+/**
+ * 用腰围回归方程估算净胸围与净臀围
+ * @param {{gender?:string, waist?:number|string, age?:number|string}} input
+ *        gender 必须逐字 '女'（男性群体无此方程，⛔ 不跨性别套用）；
+ *        waist 单位 cm；年龄选填（只用于打 flag，不改变方程）
+ * @returns {{bust_cm:number, hip_cm:number, estimated:true,
+ *            basis:{study:string, equation_bust:string, equation_hip:string,
+ *                   sample_size:number, region:string, age_range:string},
+ *            flags:string[]} | null}
+ *          gender 不是 '女' 或 waist 不合格 ⇒ null
+ */
+function estimateFromWaist(input) {
+  const p = input || {}
+  if (p.gender !== '女') return null
+  const waist = num(p.waist)
+  if (waist === null) return null
+  if (waist < WAIST_RANGE[0] || waist > WAIST_RANGE[1]) return null
+
+  const flags = []
+  const age = num(p.age)
+  if (age !== null && (age < WAIST_STUDY_AGE_RANGE[0] || age > WAIST_STUDY_AGE_RANGE[1])) {
+    flags.push('age_out_of_study_range')
+  }
+
+  const bust = WAIST_BUST_SLOPE * waist + WAIST_BUST_INTERCEPT
+  const hip = WAIST_HIP_SLOPE * waist + WAIST_HIP_INTERCEPT
+
+  return {
+    bust_cm: r1(bust),
+    hip_cm: r1(hip),
+    estimated: true,
+    basis: {
+      study: '王萍、张秀《基于三维人体测量的苏南地区青年女性体型特征》(2012)',
+      equation_bust: 'B = 0.59 × W + 45.37',
+      equation_hip: 'H = 0.55 × W + 53.96',
+      sample_size: 185,
+      region: '苏南',
+      age_range: '18~24',
+    },
+    flags,
+  }
+}
+
 module.exports = {
   estimateBodyDims,
+  estimateFromWaist,
   selectBand,
   ANCHORS,
   PERCENTILE_ORDER,
@@ -365,6 +436,11 @@ module.exports = {
   SHOULDER_HEIGHT_RATIO,
   HEIGHT_RANGE,
   WEIGHT_RANGE,
+  WAIST_RANGE,
+  WAIST_BUST_SLOPE,
+  WAIST_BUST_INTERCEPT,
+  WAIST_HIP_SLOPE,
+  WAIST_HIP_INTERCEPT,
   P1,
   P50,
   P90,

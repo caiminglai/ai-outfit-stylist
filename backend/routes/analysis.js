@@ -9,6 +9,7 @@ const db = require('../db/init')
 const { sendSuccess, sendError } = require('../utils/response')
 const { loginRequired } = require('../middleware/auth')
 const { rateLimit } = require('../middleware/rateLimit')
+const { gateBody, capJson, FORM_BLOB_LIMITS } = require('../middleware/bodyGate')
 const {
   loadPrefill,
   describeProfile,
@@ -20,6 +21,7 @@ const {
 const { clearFeedback } = require('../services/ruleFeedback')
 const { BODY_COLUMN_ORDER, strictNum, crossCheckErrors } = require('../services/bodyLimits')
 const { UPLOAD_DIR, asId } = require('../utils/common')
+const { DIAGNOSIS_QUESTIONS, diagnoseStyle } = require('../services/styleDiagnosis')
 
 const router = express.Router()
 
@@ -183,6 +185,13 @@ router.put('/archive', loginRequired, draftLimiter, (req, res) => {
     if (typeof form !== 'object' || Array.isArray(form)) {
       return sendError(res, '参数格式不对', 400)
     }
+    // 整份表单最后会经 profileArchive.saveDraft 的 Object.entries(form) 序列化进
+    // profile_drafts.form_json——那一格原来只被 server.js 的 `express.json({limit:'10mb'})`
+    // 挡着，一条请求能塞 10 MB 进运行库。收口到 bodyGate 那份共用上限（现量依据在它的注释里）。
+    // ⚠️ 这里只量体积，⛔ 不改字段：数值格越界走的是 saveArchive 的"不写 + 点名"（rejected 清单），
+    // 那是自动保存的路，回 400 会把顾客已经填的东西一起卡住。
+    const fit = capJson(form, FORM_BLOB_LIMITS)
+    if (!fit.ok) return sendError(res, `这份表单存不下：${fit.reason}`, 400)
     const saved = saveArchive(req.user.id, form)
     const draft = saveDraft(req.user.id, form)
     return sendSuccess(res, saved, draft ? '已保存' : '没有新内容要保存')
@@ -312,5 +321,35 @@ router.delete('/archive', loginRequired, (req, res) => {
     return sendError(res, '删除失败', 500)
   }
 })
+
+// ==================== 风格诊断测试（借鉴邂逅时尚） ====================
+
+/** 获取风格诊断题目 */
+router.get('/style-questions', (_req, res) => {
+  return sendSuccess(res, { questions: DIAGNOSIS_QUESTIONS })
+})
+
+/** 提交风格诊断答案，返回风格类型 */
+router.post(
+  '/style-diagnose',
+  // services/styleDiagnosis.js:85 那句 `!answers || typeof answers !== 'object'` 挡得住字符串与数字，
+  // 但数组照样过（typeof [] === 'object'）：answers 传成 [] 时每道题都取不到值、
+  // 五项得分全 0，一路走到 200 回一份凭空挑出来的风格。数组在这一格同样是"传来的不是对象"，
+  // 前置挡掉，话术与别的入口统一。
+  gateBody({ objects: ['answers'] }),
+  (req, res) => {
+    try {
+      const { answers } = req.body || {}
+      const result = diagnoseStyle(answers)
+      if (!result) {
+        return sendError(res, '请至少回答一道题', 400)
+      }
+      return sendSuccess(res, result)
+    } catch (err) {
+      console.error('[风格诊断] 失败:', err)
+      return sendError(res, '诊断失败', 500)
+    }
+  },
+)
 
 module.exports = router

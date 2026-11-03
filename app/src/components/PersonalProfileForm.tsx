@@ -266,12 +266,15 @@ function fromInitial(initial?: Partial<CustomerProfile>): CustomerProfile {
     leg_length: initial?.leg_length,
     skin_tone: initial?.skin_tone,
     skin_tone_detail: initial?.skin_tone_detail,
+    skin_lightness: initial?.skin_lightness,
     color_chroma: initial?.color_chroma,
     face_shape: initial?.face_shape,
     body_type_detail: initial?.body_type_detail,
     shoulder_type: initial?.shoulder_type,
     frame_size: initial?.frame_size,
+    frame_size_value: initial?.frame_size_value,
     line_quality: initial?.line_quality,
+    line_quality_value: initial?.line_quality_value,
     neck_length: initial?.neck_length,
     eye_size: initial?.eye_size,
     eye_shape: initial?.eye_shape,
@@ -603,6 +606,31 @@ export default function PersonalProfileForm({
         </div>
         {renderOptBtns(SKIN_TONE_DETAIL_OPTIONS, 'skin_tone_detail', 'grid-cols-5')}
 
+        {/* 肤色深浅连续滑块：用户照镜子自评 0~100，后端映射到华裔 L* P5(51)~P95(66) */}
+        <div className="mt-4">
+          <div className="flex items-center justify-between mb-1.5">
+            <span className="text-xs" style={{ color: 'var(--muted)' }}>
+              肤色深浅（选填，连续值）
+            </span>
+            <span className="q-slider-val">{profile.skin_lightness ?? 50}</span>
+          </div>
+          <input
+            type="range"
+            min={0}
+            max={100}
+            value={profile.skin_lightness ?? 50}
+            onChange={(e) => update('skin_lightness', Number(e.target.value))}
+            className="q-slider"
+            style={{
+              background: `linear-gradient(to right, var(--accent) ${((profile.skin_lightness ?? 50) / 100) * 100}%, var(--line) ${((profile.skin_lightness ?? 50) / 100) * 100}%)`,
+            }}
+          />
+          <div className="flex justify-between text-[10px] mt-1" style={{ color: 'var(--muted)' }}>
+            <span>古铜</span>
+            <span>白皙</span>
+          </div>
+        </div>
+
         {/* 取色（选填）：浏览器本机算，照片不出设备。口径见 docs/依据/18 §2.1/§2.4 */}
         <SkinSampler
           compact={compact}
@@ -678,6 +706,30 @@ export default function PersonalProfileForm({
           看手腕与肩：骨点细窄＝小巧，匀称＝适中，宽厚＝大气
         </div>
         {renderOptBtns(FRAME_SIZE_OPTIONS, 'frame_size')}
+        {/* 骨架量感连续滑块：0=小巧 100=大气，离散 label 由后端从该值推导 */}
+        <div className="mt-2.5">
+          <div className="flex items-center justify-between mb-1.5">
+            <span className="text-[10px]" style={{ color: 'var(--muted)' }}>
+              量感连续值
+            </span>
+            <span className="q-slider-val">{profile.frame_size_value ?? 50}</span>
+          </div>
+          <input
+            type="range"
+            min={0}
+            max={100}
+            value={profile.frame_size_value ?? 50}
+            onChange={(e) => update('frame_size_value', Number(e.target.value))}
+            className="q-slider"
+            style={{
+              background: `linear-gradient(to right, var(--accent) ${((profile.frame_size_value ?? 50) / 100) * 100}%, var(--line) ${((profile.frame_size_value ?? 50) / 100) * 100}%)`,
+            }}
+          />
+          <div className="flex justify-between text-[10px] mt-1" style={{ color: 'var(--muted)' }}>
+            <span>小巧</span>
+            <span>大气</span>
+          </div>
+        </div>
 
         <div className="text-xs mb-2 mt-4" style={{ color: 'var(--muted)' }}>
           身体线条（选填）
@@ -686,6 +738,30 @@ export default function PersonalProfileForm({
           肩平腰线直＝偏直线，有明显腰臀差＝偏曲线，两者都不突出＝均衡
         </div>
         {renderOptBtns(LINE_QUALITY_OPTIONS, 'line_quality')}
+        {/* 线条曲直连续滑块：0=偏直线 100=偏曲线 */}
+        <div className="mt-2.5">
+          <div className="flex items-center justify-between mb-1.5">
+            <span className="text-[10px]" style={{ color: 'var(--muted)' }}>
+              曲直连续值
+            </span>
+            <span className="q-slider-val">{profile.line_quality_value ?? 50}</span>
+          </div>
+          <input
+            type="range"
+            min={0}
+            max={100}
+            value={profile.line_quality_value ?? 50}
+            onChange={(e) => update('line_quality_value', Number(e.target.value))}
+            className="q-slider"
+            style={{
+              background: `linear-gradient(to right, var(--accent) ${((profile.line_quality_value ?? 50) / 100) * 100}%, var(--line) ${((profile.line_quality_value ?? 50) / 100) * 100}%)`,
+            }}
+          />
+          <div className="flex justify-between text-[10px] mt-1" style={{ color: 'var(--muted)' }}>
+            <span>偏直线</span>
+            <span>偏曲线</span>
+          </div>
+        </div>
 
         <div className="text-xs mb-2 mt-4" style={{ color: 'var(--muted)' }}>
           颈长

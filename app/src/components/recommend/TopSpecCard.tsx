@@ -14,7 +14,7 @@
 import type { TopSpec, TopSpecAxis, TopSpecFit, TopSpecFitCheck } from '../../types'
 // 10-22 第十四阶段·第一步 X6：档位一律说成"凭什么"（有国标原文／有实证文献／…），
 // ⛔ 再把内部字母档 A/B/C/D 直接印给顾客。真身映射仍在这一份里（evidenceLevels.js 出字母）。
-import { evidenceLabel } from './EvidenceTag'
+import { evidenceLabel } from './evidenceMeta'
 
 /** 方向标记：松量那一轴给的是区间，不谈加减 */
 function sideChip(axis: TopSpecAxis): string {

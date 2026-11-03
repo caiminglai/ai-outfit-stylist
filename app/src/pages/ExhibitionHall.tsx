@@ -58,7 +58,12 @@ export default function ExhibitionHall() {
   // 唯一真身是 useResponsive.ts 的 DESKTOP_MIN_WIDTH，两处各写一份迟早打架。
   const { mode: layoutMode, isMobile } = responsive
 
-  const [stage, setStage] = useState<Stage>('standby')
+  // 🔴 11-03 第 4 项：`?start=1` 是「这一屏开在哪个阶段」的输入，⛔ 由 effect 替顾客按下按钮
+  // （那是 `react-hooks/set-state-in-effect` 记的同步 setState），现在直接在初值里读出来。
+  // 地址栏上撤掉那一个查询参数仍留在下面的 effect 里——它只动浏览器历史，不动 state。
+  const [stage, setStage] = useState<Stage>(() =>
+    new URLSearchParams(window.location.search).get('start') === '1' ? 'mode-select' : 'standby',
+  )
   const [mobilePanel, setMobilePanel] = useState<Panel>('service')
   const [serviceMode, setServiceMode] = useState<ServiceMode>('store')
 
@@ -267,16 +272,16 @@ export default function ExhibitionHall() {
     return () => window.removeEventListener('message', handler)
   }, [startService])
 
-  // 🔴 第十四阶段·第一步 X1：从 `/gallery` 独立页跳过来时带 `?start=1`，这里替顾客点开服务流程，
-  // 并把这一个查询参数从地址栏撤掉（⛔ 让它留着：刷新一次就重开一次服务态，等于地址栏在替用户做主）。
+  // 🔴 第十四阶段·第一步 X1：从 `/gallery` 独立页跳过来时带 `?start=1`。服务态这一半现在由 `stage`
+  // 的初值直接读出（见上面 `useState<Stage>` 那三行注释），这里只剩另一半：把这一个查询参数从地址栏撤掉
+  // （⛔ 让它留着：刷新一次就重开一次服务态，等于地址栏在替用户做主）。
   useEffect(() => {
     const q = new URLSearchParams(window.location.search)
     if (q.get('start') !== '1') return
-    startService()
     q.delete('start')
     const rest = q.toString()
     window.history.replaceState({}, '', window.location.pathname + (rest ? '?' + rest : ''))
-  }, [startService])
+  }, [])
 
   // 注册全局网络错误处理器
   useEffect(() => {

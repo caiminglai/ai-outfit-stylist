@@ -110,7 +110,11 @@ function normalizeSuggestions(raw: unknown): ShoppingWishlistItem[] {
 export default function AccessoryTab({ profile, compact }: AccessoryTabProps) {
   /* ---------- 状态 ---------- */
   const [items, setItems] = useState<AccessoryItem[]>([])
-  const [loading, setLoading] = useState(false)
+  // 🔴 11-03 挂起态复位：本组件一挂载就发请求，所以初值直接是「正在取」，
+  // ⛔ 再在 `fetchItems` 开头同步 `setLoading(true)`——那条同步 setState 坐在 effect 的调用链上
+  // （effect → fetchItems → setLoading），React 的 `react-hooks/set-state-in-effect` 判它是多余的一次重渲染。
+  // 手动重取（改完/删完之后的 `fetchItems()`）改由事件处理器自己置真，行为与从前逐字一致。
+  const [loading, setLoading] = useState(true)
   const [showAdd, setShowAdd] = useState(false)
   const [gaps, setGaps] = useState<AccessoryGapResult | null>(null)
   const [gapsLoading, setGapsLoading] = useState(false)
@@ -124,16 +128,18 @@ export default function AccessoryTab({ profile, compact }: AccessoryTabProps) {
 
   /* ---------- 数据加载 ---------- */
 
-  const fetchItems = useCallback(async () => {
-    setLoading(true)
-    try {
-      const data = await listAccessories()
-      setItems(data)
-    } catch (e: unknown) {
-      toast.error(e instanceof Error ? e.message : '加载配饰失败')
-    } finally {
-      setLoading(false)
-    }
+  // 🔴 11-03 第 4 项：写成 promise 链而不是 `try { await } catch { } finally { }`。
+  // 两把尺量的都是"effect 的同步前缀里不许有 setState"，但 React 的编译器规则看不见 `await` 会挂起
+  // （只要函数里挂着 catch，它就把整段当同步可达），async 版每一处都要压一行 disable；
+  // promise 链里三格写全在 `.then/.catch/.finally` 的回调里 ⇒ 天然不在同步前缀，⛔ 不用豁免。
+  // 行为逐字不变：成功填列表、失败弹同一条吐司、无论成败都收掉挂起态。
+  const fetchItems = useCallback(() => {
+    return listAccessories()
+      .then(setItems)
+      .catch((e: unknown) => {
+        toast.error(e instanceof Error ? e.message : '加载配饰失败')
+      })
+      .finally(() => setLoading(false))
   }, [])
 
   useEffect(() => {
@@ -193,6 +199,7 @@ export default function AccessoryTab({ profile, compact }: AccessoryTabProps) {
         toast.success('添加成功')
       }
       closeForm()
+      setLoading(true)
       await fetchItems()
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : editingId != null ? '保存失败' : '添加失败')
@@ -208,6 +215,7 @@ export default function AccessoryTab({ profile, compact }: AccessoryTabProps) {
     try {
       await deleteAccessory(id)
       toast.success('已删除')
+      setLoading(true)
       await fetchItems()
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : '删除失败')

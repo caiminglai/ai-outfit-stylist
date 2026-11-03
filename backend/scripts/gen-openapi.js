@@ -122,35 +122,42 @@ function commentText(raw) {
  *   `/** xxx *\/`        单行 JSDoc
  *   `/**` … `*\/`        多行 JSDoc（逐行剥 `*`）
  * 撞到空行接着往上，撞到代码就停。
+ * ⚠️ 注册语句要**整份源码**里找，不能一行一行试：prettier 的 printWidth 是 100，
+ *    一条 `router.post('/evaluate', analysisLimiter, gateBody({...}), (req, res) => {`
+ *    超宽就会被折成 `router.post(` ＋参数各一行的形状（11-03 第 2 项挂闸门时实测：
+ *    逐行匹配的旧写法把这两条的摘要打回 `POST /api/wardrobe/evaluate`，
+ *    而 `openapi:check` 比的是"重生成的 == 盘上的"，内容退化了它照样绿）。
  */
 function commentAbove(file, method, routePath) {
   if (!file) return null
-  const lines = sourceOf(file).split('\n')
+  const src = sourceOf(file)
+  const lines = src.split('\n')
   const esc = routePath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
   // 顶层路由写在 server.js 里是 `app.get('/health'…`，router 文件里是 `router.post('…'`
   const re = new RegExp(
     `\\b(?:router|app)\\s*\\.\\s*${method.toLowerCase()}\\s*\\(\\s*['"\`]${esc}['"\`]`,
   )
-  for (let i = 0; i < lines.length; i++) {
-    if (!re.test(lines[i])) continue
-    const block = []
-    for (let j = i - 1; j >= 0 && block.length < 6; j--) {
-      const raw = lines[j]
-      if (!raw.trim()) continue
-      const text = commentText(raw)
-      if (text === null) {
-        // 空注释行（只有隔线/只有 * ）跳过；真代码行就到此为止
-        const t = raw.trim()
-        const stillComment =
-          t.startsWith('//') || t.startsWith('/*') || t.startsWith('*') || /^@/.test(t)
-        if (stillComment) continue
-        break
-      }
-      block.unshift(text)
+  // `\s` 连换行一起吃，所以一次 search 就覆盖了单行与折行两种注册形状；
+  // 匹配点之前有多少根 `\n`，这条注册语句就在第几行（0 起）
+  const at = src.search(re)
+  if (at < 0) return null
+  const i = src.slice(0, at).split('\n').length - 1
+  const block = []
+  for (let j = i - 1; j >= 0 && block.length < 6; j--) {
+    const raw = lines[j]
+    if (!raw.trim()) continue
+    const text = commentText(raw)
+    if (text === null) {
+      // 空注释行（只有隔线/只有 * ）跳过；真代码行就到此为止
+      const t = raw.trim()
+      const stillComment =
+        t.startsWith('//') || t.startsWith('/*') || t.startsWith('*') || /^@/.test(t)
+      if (stillComment) continue
+      break
     }
-    return block.length ? block.join(' ').replace(/\s+/g, ' ').trim().slice(0, 200) : null
+    block.unshift(text)
   }
-  return null
+  return block.length ? block.join(' ').replace(/\s+/g, ' ').trim().slice(0, 200) : null
 }
 
 // ── 4. 走栈 ────────────────────────────────────────────────────────────────────────
@@ -173,7 +180,19 @@ function collectFromStack(routeStack) {
   // loginLimiter, …)`）只出现在这一层，不在顶层栈 ⇒ 从 route.stack 上取 profile。
   // 多条闸同挂一条路由时取第一条（本仓没有这种路由，真出现要改的是代码不是这里）。
   const profiles = routeStack.map((h) => h.handle && h.handle.rateLimitProfile).filter(Boolean)
-  return { names, srcs, security, profile: profiles[0] || null }
+  // 输入闸门 `middleware/bodyGate.js` 的 gateBody({scalars/numbers/objects/arrays}) 把这条路由
+  // 声明的顶层字段名写在**中间件的参数**里，不在 handler 源码里 ⇒ 扫 `req.body.x` 扫不到。
+  // 它自带 `handle.bodyGateSpec` 记号，这里顺手收进说明书，字段清单只写一处的承诺才闭环：
+  // 改了 gateBody 的声明，`npm run openapi` 重生成的 body 属性跟着变。
+  const gated = new Set()
+  for (const h of routeStack) {
+    const spec = h.handle && h.handle.bodyGateSpec
+    if (!spec) continue
+    for (const key of ['scalars', 'numbers', 'objects', 'arrays']) {
+      for (const f of spec[key] || []) gated.add(f)
+    }
+  }
+  return { names, srcs, security, profile: profiles[0] || null, gated: [...gated].sort() }
 }
 
 /** 一条栈里"整段前缀级"的闸：`router.use('/api', adminApiLimiter)`（routes/admin.js:31）这种
@@ -192,7 +211,7 @@ function walk(stack, prefix, inherited) {
       const route = layer.route
       const paths = Array.isArray(route.path) ? route.path : [route.path]
       const methods = Object.keys(route.methods).filter((m) => m !== '_all')
-      const { names, srcs, security, profile } = collectFromStack(route.stack)
+      const { names, srcs, security, profile, gated } = collectFromStack(route.stack)
       const paramNames = (layer.keys || []).map((k) => k.name)
       for (const p of paths) {
         for (const m of methods) {
@@ -203,6 +222,7 @@ function walk(stack, prefix, inherited) {
             security: security.concat(inherited.security),
             srcs,
             names,
+            gated,
             prefix,
             routeLimiter: profile,
             limiters,
@@ -382,6 +402,8 @@ for (const e of entries) {
   const inherited = own ? null : commentByPath.get(e.rawPath + '#*')
   const comment = own || inherited
   const fields = grabFields(e.srcs)
+  for (const f of e.gated || []) fields.body.push(f)
+  fields.body = [...new Set(fields.body)].sort()
   const statuses = grabStatuses(e.srcs, e.security)
   // 一条路由可能同时被两道闸管（路由自带的 10 次/分 ＋ 顶层 /api 总闸 100 次/15 分）。
   // 这里记**最贴身的那一道**（最紧的通常就是自带的那条），并标 `x-rate-limit-scope`

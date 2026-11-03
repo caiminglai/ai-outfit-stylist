@@ -12,6 +12,7 @@ const { sendSuccess, sendError } = require('../utils/response')
 const { asText, normalizeItem, projectWardrobeForEngine } = require('../utils/common')
 const { optionalUser, getCurrentUser, getSessionId } = require('../middleware/auth')
 const { rateLimit } = require('../middleware/rateLimit')
+const { gateBody } = require('../middleware/bodyGate')
 const { buildRecommendation } = require('../services/recommendEngine')
 const {
   loadArchive,
@@ -61,7 +62,7 @@ const router = express.Router()
  * 推荐模式取值表。
  * 库里 rule_groups.mode 实测只有 store／personal 两种（seed 264 组：store 102／personal 162），
  * 后台标签表也是这两档（static/admin/admin-utils.js:75），前端类型同样锁死
- * （app/src/api.ts:364 `'store' | 'personal'`）。原来这里是 `asText(data.mode) || 'store'`：
+ * （app/src/api.ts:366 `'store' | 'personal'`）。原来这里是 `asText(data.mode) || 'store'`：
  * 任意长串都能一路写进 recommendation_logs.mode，再由 routes/history.js:27 当作
  * `scenario` 原样回吐到"我的历史"里 ⇒ 一条脏数据就是一个用户看得见的假场景名。
  * 认不到就当没填的两档之一，不再往库里写第三种值。
@@ -152,7 +153,7 @@ router.post('/engine', recommendLimiter, async (req, res) => {
       return sendError(res, '缺少 profile 数据', 400)
     }
     // mode 认不到就 400，不再原样往库里写（见上面 RECOMMEND_MODES 的说明）。
-    // 前端 api.ts:364 把这两档写死在类型里，本仓没有第三种调用方。
+    // 前端 api.ts:366 把这两档写死在类型里，本仓没有第三种调用方。
     const normalizedMode = normalizeMode(data.mode, 'store')
     if (!normalizedMode.ok) return sendError(res, normalizedMode.error, 400)
     const mode = normalizedMode.mode
@@ -472,36 +473,44 @@ router.delete('/feedback/item', feedbackLimiter, (req, res) => {
 })
 
 /** LLM 文案增强（降级为规则版结构化文本） */
-router.post('/enhance', enhanceLimiter, (req, res) => {
-  try {
-    const data = req.body || {}
-    const recommendation = data.recommendation || {}
-    const weather = data.weather || null
-    // 同一个 mode，这条口以前是 `data.mode || 'personal'` 直接进文案生成：
-    // 前端传进来的东西越长，越容易把整段模板拼歪。收敛到同一张取值表。
-    const normalizedMode = normalizeMode(data.mode, 'personal')
-    if (!normalizedMode.ok) return sendError(res, normalizedMode.error, 400)
-    const mode = normalizedMode.mode
+router.post(
+  '/enhance',
+  enhanceLimiter,
+  // recommendation/weather 的形状原来靠 catch 里 `err instanceof TypeError` 那一段兜（见本 handler 末尾的注释），
+  // 兜得住但话术只有"recommendation 结构不正确"一句。挂上前置闸门，脏形状当场 400 点名是哪一格，
+  // 与 /engine 的 profile 那条（本文件里"profile 必须是对象"那段注释）同一把尺子。
+  gateBody({ objects: ['recommendation', 'weather'] }),
+  (req, res) => {
+    try {
+      const data = req.body || {}
+      const recommendation = data.recommendation || {}
+      const weather = data.weather || null
+      // 同一个 mode，这条口以前是 `data.mode || 'personal'` 直接进文案生成：
+      // 前端传进来的东西越长，越容易把整段模板拼歪。收敛到同一张取值表。
+      const normalizedMode = normalizeMode(data.mode, 'personal')
+      if (!normalizedMode.ok) return sendError(res, normalizedMode.error, 400)
+      const mode = normalizedMode.mode
 
-    if (!recommendation || Object.keys(recommendation).length === 0) {
-      return sendError(res, '缺少 recommendation 数据', 400)
+      if (!recommendation || Object.keys(recommendation).length === 0) {
+        return sendError(res, '缺少 recommendation 数据', 400)
+      }
+
+      // 生成结构化文本（未配置 LLM 时降级）
+      const text = generateStructuredText(recommendation, weather, mode)
+
+      return sendSuccess(res, { text })
+    } catch (err) {
+      // generateStructuredText 会逐层解引用 recommendation 的嵌套块(top_spec.fit.present 等)。
+      // 调用方把某块传成非对象(如 {"top_spec":1})时那是 TypeError,本质是"入参结构不对",该 400,
+      // 而不是被外层一律算成服务器故障 500。真正的内部异常仍归 500。
+      if (err instanceof TypeError) {
+        console.warn('[推荐] 文案生成入参结构不对:', err.message)
+        return sendError(res, 'recommendation 结构不正确', 400)
+      }
+      console.error('[推荐] 文案生成失败:', err)
+      return sendError(res, '文案生成失败', 500)
     }
-
-    // 生成结构化文本（未配置 LLM 时降级）
-    const text = generateStructuredText(recommendation, weather, mode)
-
-    return sendSuccess(res, { text })
-  } catch (err) {
-    // generateStructuredText 会逐层解引用 recommendation 的嵌套块(top_spec.fit.present 等)。
-    // 调用方把某块传成非对象(如 {"top_spec":1})时那是 TypeError,本质是"入参结构不对",该 400,
-    // 而不是被外层一律算成服务器故障 500。真正的内部异常仍归 500。
-    if (err instanceof TypeError) {
-      console.warn('[推荐] 文案生成入参结构不对:', err.message)
-      return sendError(res, 'recommendation 结构不正确', 400)
-    }
-    console.error('[推荐] 文案生成失败:', err)
-    return sendError(res, '文案生成失败', 500)
-  }
-})
+  },
+)
 
 module.exports = router

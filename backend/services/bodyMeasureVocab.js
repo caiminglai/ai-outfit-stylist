@@ -94,7 +94,7 @@ const MEASURE_POINTS = [
     group: 'Neck',
     mhMod: 'measure/measure-neck-height-decr|incr',
     column: null,
-    note: '站内档案有 `neck_length`（10-23 现量＝文本三档 `短`/`中`/`长`，`app/src/types/index.ts:97`），与这一格的厘米数不是一回事',
+    note: '站内档案有 `neck_length`（10-23 现量＝文本三档 `短`/`中`/`长`，`app/src/types/index.ts:102`），与这一格的厘米数不是一回事',
   },
   {
     key: 'upper_arm_circumference_cm',

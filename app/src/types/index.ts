@@ -66,6 +66,11 @@ export interface CustomerProfile {
    * ⛔ 这里刻意没有 skin_lab 这一格——客户端递不进连续明度，否则等于让曝光冒充肤色（18 §2.2 反例）。
    */
   skin_hue?: number
+  /**
+   * 用户自选肤色深浅 0~100（连续值）。映射到华裔人群 L* P5(51)~P95(66)。
+   * ⛔ 这是用户照镜子自选，不是照片明度，不违反"深浅只认档名锚点"那条硬规矩。
+   */
+  skin_lightness?: number
   /** 取样那块皮肤色的 '#rrggbb'，只为拆账与复现，⛔ 参与不了计算 */
   skin_hex?: string
   face_shape?: '圆脸' | '方脸' | '心形脸' | '椭圆脸' | '长脸'
@@ -98,8 +103,12 @@ export interface CustomerProfile {
   shoulder_type?: '窄肩' | '标准肩' | '宽肩'
   /** 骨架量感(选填):风格型第一轴;值与后端 FRAME_LEVEL 键一致 */
   frame_size?: '小巧' | '适中' | '大气'
+  /** 骨架量感连续值 0~100（0＝小巧，100＝大气），离散 label 由后端从该值推导 */
+  frame_size_value?: number
   /** 线条倾向(选填):风格型第二轴;值与后端 LINE_LEVEL 键一致 */
   line_quality?: '偏直线' | '均衡' | '偏曲线'
+  /** 线条曲直连续值 0~100（0＝偏直线，100＝偏曲线），离散 label 由后端从该值推导 */
+  line_quality_value?: number
 
   // 五官细节
   eye_size?: '大' | '中' | '小'
@@ -113,11 +122,47 @@ export interface CustomerProfile {
 
   // 偏好
   season?: '春' | '夏' | '秋' | '冬'
+  /** 四季色彩体系计算结果（后端 seasonColor.getSeasonType 输出） */
+  season_type?: SeasonType
+  /** 五维肤色框架（HBN：黑/黄/红/白/青） */
+  skin_five_dimensions?: SkinFiveDimensions
   budget?: '平价' | '中档' | '高端'
   allergy_metal?: string
   skin_type?: '干皮' | '油皮' | '混合' | '敏感'
 
+  /** 四大身材标准·部位级标签（椰子胸/沙漏腰/母贝臀/酒杯腿），仅在量到对应围度时出 */
+  body_highlights?: string[]
+  body_highlights_details?: Record<string, { value: number; label: string }>
+
   [key: string]: unknown
+}
+
+/** 四季色彩季型（后端 seasonColor.js 输出） */
+export interface SeasonColor {
+  name: string
+  hex: string | null
+}
+
+/** 五维肤色框架（HBN 蓝皮书：黑/黄/红/白/青） */
+export interface SkinFiveDimensions {
+  black: number
+  white: number
+  yellow: number
+  red: number
+  cyan: number
+  primary: string
+}
+
+export interface SeasonType {
+  season: string
+  season_name: string
+  warmth: 'warm' | 'cool' | 'neutral'
+  depth: 'light' | 'deep'
+  traits: string
+  palette: SeasonColor[]
+  avoid: SeasonColor[]
+  confidence: number
+  basis: string
 }
 
 /** 顾客临时会话 */
@@ -337,7 +382,24 @@ export interface RuleRecommendationItem {
   /** §三·4：从文案认出的版型档／面料档（null＝这一句认不出，那一维继续缺席） */
   fit_type_inferred?: string | null
   fabric_weight_inferred?: string | null
+  /** 可解释穿搭评估：逐维度冲突拆解（只在有非 good 维度时挂载）。
+   *  从 color_fit／body_fit 的已有子分里归因，⛔ 不重新算分、不影响名次。 */
+  conflict_breakdown?: ConflictBreakdownItem[]
   [key: string]: unknown
+}
+
+/** 可解释穿搭评估的单个维度条目 */
+export interface ConflictBreakdownItem {
+  /** 维度中文名，如「肤色对比」「松量」「腰线」 */
+  dimension: string
+  /** 0~100 分；body_fit 的轴分由 0~1 归一而来 */
+  score: number
+  /** good=贴合(≥70) / medium=中等(40~69) / conflict=冲突(<40) */
+  level: 'good' | 'medium' | 'conflict'
+  /** 改进建议（good 档为 null） */
+  suggestion: string | null
+  /** 可选的补充细节，如「色相差 12°」 */
+  detail?: string | null
 }
 
 /**
@@ -494,7 +556,7 @@ export interface TopSpec {
  * 付费那份「深度细账」的回执（第十二阶段·第一步，`docs/依据/20` §三 E 节）。
  * 只有付费重放那一路会有这一块；免费路径的响应里这个键根本不出现。
  * 🔴 第十四阶段·第一步 C2：这里原来把价格写死成"99 元那份"——真价在 `app_settings.payment_amount_fen`
- * （`routes/payment.js:43-47` 现算），文案里那个数改一次价就变假话。⛔ 注释也不再写数。
+ * （`routes/payment.js:45-49` 现算），文案里那个数改一次价就变假话。⛔ 注释也不再写数。
  * ⛔ 前端不许据此"推算"任何没给的数——回执说什么就显示什么。
  */
 export interface PaidReportReceipt {
@@ -533,12 +595,42 @@ export interface BeyondTopN {
   }>
 }
 
+export interface WardrobeOutfit {
+  items: WardrobeItem[]
+  score: number
+  color_score: number
+  occasion_score: number
+  reason: string
+}
+
+/** 风格诊断题目 */
+export interface StyleOption {
+  text: string
+  scores: Record<string, number>
+}
+
+export interface StyleQuestion {
+  id: string
+  question: string
+  options: StyleOption[]
+}
+
+export interface StyleDiagnosisResult {
+  primary: string
+  primary_name: string
+  secondary: string | null
+  secondary_name: string | null
+  scores: Record<string, number>
+  desc: string
+}
+
 export interface EngineRecommendation {
   穿搭: RuleRecommendationItem[]
   妆容: RuleRecommendationItem[]
   发型: RuleRecommendationItem[]
   配饰: RuleRecommendationItem[]
   姿势: RuleRecommendationItem[]
+  衣橱搭配?: WardrobeOutfit[]
   inventory?: {
     穿搭?: InventoryProduct[]
     妆容?: InventoryProduct[]
@@ -559,7 +651,7 @@ export interface EngineRecommendation {
      * `manual`＝只有档名／`null`＝肤色整格空着（色彩维必然缺席）。
      * ⛔ 只拆账，不是置信度、不进任何公式。
      * 🔴 落地实录订正：规范原写还有一种 `'archive'`，但路由在进引擎前已把档案并进 profile
-     *（routes/recommend.js:151 mergeWithArchive），引擎内部分不出这一格是本次填的还是档案来的
+     *（routes/recommend.js:152 mergeWithArchive），引擎内部分不出这一格是本次填的还是档案来的
      * ⇒ 这一档不实现，档案来的也记 `'manual'`。
      */
     skin_source?: 'photo_sample' | 'manual' | null

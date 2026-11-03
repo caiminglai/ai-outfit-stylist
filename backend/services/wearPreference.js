@@ -404,7 +404,7 @@ function candAxisValue(cand, axis, dim) {
     return tags.slice().sort((a, b) => a.localeCompare(b))[0]
   }
   if (axis === 'warmth') {
-    // 衣橱那一路的厚薄在 `body_fit.top.fabric_weight`（`topFitBody.js:703`，没填就是 null）；
+    // 衣橱那一路的厚薄在 `body_fit.top.fabric_weight`（`topFitBody.js:716`，没填就是 null）；
     // 直接投进来的行也可能只带 `fabric_weight` 这一格，两个来源都认，⛔ 只认那三个词。
     const v =
       asText(cand.fabric_weight) ||

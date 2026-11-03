@@ -40,6 +40,26 @@ function findRoute(router, method, routePath) {
   return null
 }
 
+/**
+ * 这一条链上的限流闸（必须在第一位），中间除输入闸门外不许再塞别的东西；末尾是业务 handler。
+ *
+ * ⚠️ 这里原来直接钉 `route.stack.length === 2`，那是"限流＋handler"年代的**代理判据**：
+ *    11-03 第 2 项给分析口挂了 `middleware/bodyGate.js` 的 gateBody（放在限流之后、handler 之前），
+ *    长度变 3，代理判据就把"闸还在"报成"POST /gaps 缺少 analysisLimiter"——
+ *    断言没错在闸没了，错在我多挂了一层。改成按身份认层：第一位得是限流工厂出来的闸
+ *    （带 rateLimitProfile），中间夹的只许是带 bodyGateSpec 记号的输入闸门。
+ */
+function limiterOf(route) {
+  const layers = route && route.stack
+  if (!layers || layers.length < 2) return null
+  const limiter = layers[0].handle
+  if (!limiter || limiter.rateLimitProfile === undefined) return null
+  for (const l of layers.slice(1, -1)) {
+    if (!l.handle || !l.handle.bodyGateSpec) return null
+  }
+  return limiter
+}
+
 /** 只驱动限流中间件本身：假 req/res + next 计数，绝不落到真业务 handler
  *  必须 await：11-02 起工厂内核是 express-rate-limit，它先 `await store.increment(key)`
  *  再决定放行/拦，同步读 res 只会读到 null（手写桶是同步的，所以改造前不用等）。*/
@@ -149,9 +169,13 @@ test('wardrobe 六个分析口共用 analysisLimiter，且不与 writeLimiter �
   for (const [method, p] of analysisRoutes) {
     const route = findRoute(wardrobeRouter, method, p)
     assert.ok(route, `${method.toUpperCase()} ${p} 必须存在`)
-    assert.strictEqual(route.stack.length, 2, `${method.toUpperCase()} ${p} 缺少 analysisLimiter`)
-    if (shared === null) shared = route.stack[0].handle
-    else assert.strictEqual(route.stack[0].handle, shared, `${p} 用的必须是同一个 analysisLimiter`)
+    const limiter = limiterOf(route)
+    assert.ok(
+      limiter,
+      `${method.toUpperCase()} ${p} 缺少 analysisLimiter（或链上混了闸门之外的层）`,
+    )
+    if (shared === null) shared = limiter
+    else assert.strictEqual(limiter, shared, `${p} 用的必须是同一个 analysisLimiter`)
   }
   const writeRoute = findRoute(wardrobeRouter, 'post', '/items')
   assert.notStrictEqual(
@@ -178,7 +202,7 @@ test('recommend 的 /feedback 与 /enhance 各挂上自己的桶，不吃 /engin
     ['enhance', enhance],
   ]) {
     assert.ok(route, `POST /${name} 必须存在`)
-    assert.strictEqual(route.stack.length, 2, `POST /${name} 缺少限流`)
+    assert.ok(limiterOf(route), `POST /${name} 缺少限流（或链上混了闸门之外的层）`)
   }
   const handles = [engine, feedback, enhance].map((r) => r.stack[0].handle)
   assert.strictEqual(new Set(handles).size, 3, '三条口各自一个桶，谁也不该吃掉谁的额度')

@@ -37,6 +37,8 @@ import type {
   WardrobeOutfit,
   WeatherData,
   WeatherProfile,
+  StyleQuestion,
+  StyleDiagnosisResult,
 } from './types'
 
 const BASE = '/api'
@@ -1166,4 +1168,22 @@ export async function claimPaidReport(
   const query = key + (basis ? `&session=${encodeURIComponent(basis)}` : '')
   const res = await fetchWithTimeout(`${BASE}/payment/my?${query}`, { headers: headers() }, 30000)
   return unwrap<PaidReportPayload>(res)
+}
+
+// ============ 风格诊断测试 ============
+
+export async function getStyleQuestions(): Promise<{ questions: StyleQuestion[] }> {
+  const res = await fetchWithTimeout(`${BASE}/analysis/style-questions`, { headers: headers() })
+  return unwrap(res)
+}
+
+export async function diagnoseStyle(
+  answers: Record<string, number>,
+): Promise<StyleDiagnosisResult> {
+  const res = await fetchWithTimeout(`${BASE}/analysis/style-diagnose`, {
+    method: 'POST',
+    headers: headers(),
+    body: JSON.stringify({ answers }),
+  })
+  return unwrap(res)
 }

@@ -25,7 +25,7 @@
  *     ⛔ 不碰 `feedback_events`、⛔ 不回滚 `rule_groups` 的好评差评数。
  *
  * 天气不打外网：`getWeather` 在 require 路由**之前**换成可控替身
- * （`routes/recommend.js:35` 是解构导入，晚一步就换不掉）。城市名单与五档折算
+ * （`routes/recommend.js:36` 是解构导入，晚一步就换不掉）。城市名单与五档折算
  * 仍用 `weatherService` 那一份真相源，替身只顶掉"上网取数"这一步。
  *
  * 活库隔离：`db/init` 用内存库替身顶掉（与 test/itemFeedback.test.js 同一套路），

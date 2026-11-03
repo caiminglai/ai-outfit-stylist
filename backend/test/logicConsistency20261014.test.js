@@ -10,7 +10,7 @@
  *   · `colorMetrics.js` 的 NaN 分支、`dashscopeService.js` 的 mock 分支：全仓无生产调用方
  *     （analyzeFace 只有导出处）⇒ 不可达代码，按"先跑通"线不补。
  *   · `recommendEngine.js` 无条件组恒命中：种子端 applyRuleSeeds.js 已挡，写入口在 routes ⇒ 超本轮范围。
- *   · `auth.js:172` password_changed_at：只有 db/init.js:246 写过 ⇒ 改密路径在 routes，超本轮范围。
+ *   · `auth.js:174` password_changed_at：只有 db/init.js:246 写过 ⇒ 改密路径在 routes，超本轮范围。
  *
  * 采纳的 6 条（每条都是"两处不是同一个数/两个结论相反"，不是新功能）：
  *   1 解释层取值顺了原型链，判定层不顺（recommendEngine.js 用 ownValue）

@@ -43,7 +43,7 @@ interface WardrobeDiaryProps {
   compact?: boolean
 }
 
-/** 季节四档：值与档案偏好那一列同形（types/index.ts:107 `season?: '春'|'夏'|'秋'|'冬'`） */
+/** 季节四档：值与档案偏好那一列同形（types/index.ts:116 `season?: '春'|'夏'|'秋'|'冬'`） */
 const SEASON_VALUES = ['春', '夏', '秋', '冬'] as const
 
 /**
@@ -152,7 +152,7 @@ export default function WardrobeDiary({ items, compact }: WardrobeDiaryProps) {
   const [occasions, setOccasions] = useState<string[]>([])
   // 五档词表与闸门同源（`GET /outfits` 的 `weather_levels`），⛔ 不在这里抄第二份
   const [weatherLevels, setWeatherLevels] = useState<string[]>([])
-  const [loading, setLoading] = useState(false)
+  const [loading, setLoading] = useState(true)
   const [open, setOpen] = useState(false)
   const [editingId, setEditingId] = useState<number | null>(null)
   const [draft, setDraft] = useState<RowDraft>(() => toRowDraft(DRAFT_DEFAULT()))
@@ -167,18 +167,20 @@ export default function WardrobeDiary({ items, compact }: WardrobeDiaryProps) {
     return m
   }, [items])
 
-  const load = useCallback(async () => {
-    setLoading(true)
-    try {
-      const r = await listWardrobeOutfits()
-      setRows(r.outfits ?? [])
-      setOccasions(r.occasions ?? [])
-      setWeatherLevels(r.weather_levels ?? [])
-    } catch (e: unknown) {
-      toast.error(e instanceof Error ? e.message : '日记读取失败')
-    } finally {
-      setLoading(false)
-    }
+  // 🔴 11-03 第 4 项：挂起态初值＝「正在取」，⛔ 回到 effect 的同步前缀里 `setLoading(true)`；
+  // 四处的「存完／删完再取一次」由各自的事件处理器置真，读到的画面与从前一致。
+  // promise 链而不是 `try/await/catch` 的成因见 `AccessoryTab.tsx` 里同一段注释。
+  const load = useCallback(() => {
+    return listWardrobeOutfits()
+      .then((r) => {
+        setRows(r.outfits ?? [])
+        setOccasions(r.occasions ?? [])
+        setWeatherLevels(r.weather_levels ?? [])
+      })
+      .catch((e: unknown) => {
+        toast.error(e instanceof Error ? e.message : '日记读取失败')
+      })
+      .finally(() => setLoading(false))
   }, [])
 
   useEffect(() => {
@@ -285,6 +287,7 @@ export default function WardrobeDiary({ items, compact }: WardrobeDiaryProps) {
       toast.success(editingId ? '这一笔改好了' : '记下了')
       setOpen(false)
       setEditingId(null)
+      setLoading(true)
       await load()
     } catch (e: unknown) {
       // 后端的 400 话术（场合表外词／星级越界／衣物不属于本人）原样递出去，不吞成"保存失败"
@@ -299,6 +302,7 @@ export default function WardrobeDiary({ items, compact }: WardrobeDiaryProps) {
     try {
       await deleteWardrobeOutfit(id)
       toast.success('这一笔删了（衣柜里的衣服没动）')
+      setLoading(true)
       await load()
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : '删除失败')
@@ -309,6 +313,7 @@ export default function WardrobeDiary({ items, compact }: WardrobeDiaryProps) {
     if (!row.id) return
     try {
       await updateWardrobeOutfit(row.id, { is_favorite: !row.is_favorite })
+      setLoading(true)
       await load()
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : '更新失败')
@@ -594,6 +599,7 @@ export default function WardrobeDiary({ items, compact }: WardrobeDiaryProps) {
                     if (!row.id) return
                     try {
                       await updateWardrobeOutfit(row.id, { rating: v })
+                      setLoading(true)
                       await load()
                     } catch (e: unknown) {
                       toast.error(e instanceof Error ? e.message : '更新失败')

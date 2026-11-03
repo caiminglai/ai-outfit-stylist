@@ -656,7 +656,7 @@ const LIGHTNESS_TOKENS = {
 //       · 「腮红」造出 20 个 hex／19 行，全是句内扫描在「腮红」肚子上取到单字键 `红 #DD5563`；
 //       · 「肉色」0 行（库里没这种写法）；「肤调」0 行 ⇒ 不进名单，名单只放语料里真有的词。
 //     🔴 影响面与我上一版的判断相反，账记在 `21` §十二：色彩分**只吃** `top_style`／`outfit_top`
-//     那一格（`recommendEngine.js:541` 认出上衣那一格、`recommend/colorSlots.js:194` 才真喂 `colorFit`（🔴 10-30 按内容重指：原写 1142；10-29 引擎拆成 961 行后 1142 越界） → `colorFit`），上面那些行全在 `reason`／`blush`／
+//     那一格（`recommendEngine.js:552` 认出上衣那一格、`recommend/colorSlots.js:194` 才真喂 `colorFit`（🔴 10-30 按内容重指：原写 1142；10-29 引擎拆成 961 行后 1142 越界） → `colorFit`），上面那些行全在 `reason`／`blush`／
 //     `foundation`／`technique` 这些**不进分**的槽位里 ⇒ 这道闸修的是**报告与后台印出来的假出处**，
 //     一个分数也不动。四个进分槽位里元词命中只有 4 处，其中 3 处是括号里真写了颜色的
 //     （「基础色上衣（白/黑/灰/藏蓝/米色）」⇒ 白），那三条本轮不动（它们确实写了色）。
@@ -707,7 +707,7 @@ function _maskMetaWords(text) {
  * 现量这条分支不是摆设：`extractColors` 的切分符含「、」，所以 id=302 那句切出来的
  * 那一段正好是「肤色」两个字——**逐段解析的入口也是自由文本来路**，不是手选色名。
  * ⚠️ 手选那条路在本仓没有调用方：前端的肤色那一格给的是冷暖／深浅档（`CustomerForm.tsx:20`
- * ／`PersonalProfileForm.tsx:572`），`COLOR_SYNONYMS` 的键从来不是选择项 ⇒ 这道闸零可用性损失。
+ * ／`PersonalProfileForm.tsx:575`），`COLOR_SYNONYMS` 的键从来不是选择项 ⇒ 这道闸零可用性损失。
  */
 function _isMetaWordOnly(s) {
   if (COLOR_META_WORDS.includes(s)) return true
@@ -1047,7 +1047,7 @@ function extractColors(text) {
         band,
         // 🔴 §二·1：句内扫出来的工艺词（牛仔裤／水洗布／迷彩服）记 `is_specific:false`——
         // 这个字提的是做法不是颜色（白丹宁也叫牛仔裤），拿它算 ΔE00 就是喂假数。
-        // 与明度档同一级：`recommendEngine.js:72` 那个 `is_specific && hex` 的 filter 自动把它挡在呼应外。
+        // 与明度档同一级：`recommendEngine.js:75` 那个 `is_specific && hex` 的 filter 自动把它挡在呼应外。
         is_specific: !d.craft,
         craft_word: !!d.craft,
         basis: d.basis,
@@ -1184,8 +1184,11 @@ function skinUndertoneFromHue(hue) {
   return '自然'
 }
 
+/** 华裔人群 L* 实测范围（docs/依据/04 §1.4：族群列＝CN 的 P5/P95），用于把用户深浅滑块映射到连续 L* */
+const SKIN_L_RANGE = { p5: 51, p95: 66 }
+
 /**
- * 深浅档名 + 取色角度 → 进 `colorFit` 的那个 Lab（18 §2.5 那条合成的**唯一实现处**）。
+ * 深浅档名 + 取色角度 + 用户自选深浅 → 进 `colorFit` 的那个 Lab（18 §2.5 那条合成的**唯一实现处**）。
  *
  * 🔴 为什么放在 `colorMetrics.js` 而不是引擎里：规范 §2.5 原写"收成 `recommendEngine.js` 的一个
  * helper"，但 10-21 写码时现量到**第五处取值点**在 `services/topFromBody.js:379`（上衣处方第 2 层
@@ -1196,22 +1199,31 @@ function skinUndertoneFromHue(hue) {
  *
  * @param {string|null} toneText 深浅/冷暖档名（按 enriched.skin_tone_detail || skin_tone 的既有优先级传进来）
  * @param {number|string|null|undefined} hue 照片取色的色相角（度）；⛔ 客户端递不进 Lab
+ * @param {number|string|null|undefined} [lightness01] 用户自选深浅 0~1（0＝最暗，1＝最亮）；
+ *        来自 `skin_lightness` 滑块（0~100）。提供时 L 从华裔 P5~P95 线性映射，不再用锚点的 L。
+ *        ⛔ 这仍然是用户照镜子自选，不是照片明度，不违反"深浅只认档名锚点"那条硬规矩。
  * @returns {{lab:{L:number,a:number,b:number,C:number,h:number}, undertone:'冷皮'|'自然'|'暖皮'}|null}
  *          档名认不出 或 角度过不了闸 ⇒ null（调用方回退到档名锚点，⛔ 不编值）
  */
-function synthesizeSkinLab(toneText, hue) {
+function synthesizeSkinLab(toneText, hue, lightness01) {
   const anchor = skinToneToLab(toneText)
   if (!anchor) return null
   const undertone = skinUndertoneFromHue(hue)
   if (!undertone) return null
   const h = Number(hue)
   if (h < SKIN_HUE.min || h > SKIN_HUE.max) return null
-  // ⚠️ L 与 C 一律取自锚点（C 档手拍表），照片**只贡献角度**。
+  // ⚠️ C 一律取自锚点（C 档手拍表），照片**只贡献角度**。
   // ⛔ 不许把 C 写回 SKIN_TONE_ANCHORS：那是模块级共享常量，写一次污染之后每一次取色。
   const C = Math.hypot(anchor.a, anchor.b)
+  // L：用户自选深浅优先（连续值），否则用锚点 L（离散档）
+  const ln = Number(lightness01)
+  let L = anchor.L
+  if (Number.isFinite(ln) && ln >= 0 && ln <= 1) {
+    L = SKIN_L_RANGE.p5 + ln * (SKIN_L_RANGE.p95 - SKIN_L_RANGE.p5)
+  }
   const rad = (h * Math.PI) / 180
   return {
-    lab: { L: anchor.L, a: C * Math.cos(rad), b: C * Math.sin(rad), C, h },
+    lab: { L, a: C * Math.cos(rad), b: C * Math.sin(rad), C, h },
     undertone,
   }
 }

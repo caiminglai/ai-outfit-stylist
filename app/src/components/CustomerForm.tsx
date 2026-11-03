@@ -115,11 +115,14 @@ function fromInitial(initial?: Partial<CustomerProfile>): CustomerProfile {
     shoulder: initial?.shoulder,
     skin_tone: initial?.skin_tone,
     skin_tone_detail: initial?.skin_tone_detail,
+    skin_lightness: initial?.skin_lightness,
     color_chroma: initial?.color_chroma,
     face_shape: initial?.face_shape,
     body_type: initial?.body_type,
     frame_size: initial?.frame_size,
+    frame_size_value: initial?.frame_size_value,
     line_quality: initial?.line_quality,
+    line_quality_value: initial?.line_quality_value,
     scenario: initial?.scenario || '通勤',
   }
 }
@@ -327,6 +330,30 @@ export default function CustomerForm({
             </button>
           ))}
         </div>
+        {/* 肤色深浅连续滑块：0~100 映射到华裔 L* P5(51)~P95(66) */}
+        <div className="mt-3">
+          <div className="flex items-center justify-between mb-1.5">
+            <span className="text-[10px]" style={{ opacity: 0.7 }}>
+              肤色深浅（连续值）
+            </span>
+            <span className="q-slider-val">{profile.skin_lightness ?? 50}</span>
+          </div>
+          <input
+            type="range"
+            min={0}
+            max={100}
+            value={profile.skin_lightness ?? 50}
+            onChange={(e) => update('skin_lightness', Number(e.target.value))}
+            className="q-slider"
+            style={{
+              background: `linear-gradient(to right, var(--accent) ${((profile.skin_lightness ?? 50) / 100) * 100}%, var(--line) ${((profile.skin_lightness ?? 50) / 100) * 100}%)`,
+            }}
+          />
+          <div className="flex justify-between text-[10px] mt-1" style={{ opacity: 0.6 }}>
+            <span>古铜</span>
+            <span>白皙</span>
+          </div>
+        </div>
         {/* 取色（选填）：浏览器本机算，照片不出设备。口径见 docs/依据/18 §2.1/§2.4 */}
         <SkinSampler
           compact={compact}
@@ -412,6 +439,23 @@ export default function CustomerForm({
           profile.frame_size,
           (v) => update('frame_size', v as CustomerProfile['frame_size']),
         )}
+        <div className="mt-1.5">
+          <input
+            type="range"
+            min={0}
+            max={100}
+            value={profile.frame_size_value ?? 50}
+            onChange={(e) => update('frame_size_value', Number(e.target.value))}
+            className="q-slider"
+            style={{
+              background: `linear-gradient(to right, var(--accent) ${((profile.frame_size_value ?? 50) / 100) * 100}%, var(--line) ${((profile.frame_size_value ?? 50) / 100) * 100}%)`,
+            }}
+          />
+          <div className="flex justify-between text-[10px] mt-1" style={{ opacity: 0.6 }}>
+            <span>小巧</span>
+            <span>大气</span>
+          </div>
+        </div>
         {renderTriRow(
           '身体线条（选填）',
           '肩平腰线直＝偏直线，有明显腰臀差＝偏曲线，两者都不突出＝均衡',
@@ -419,6 +463,23 @@ export default function CustomerForm({
           profile.line_quality,
           (v) => update('line_quality', v as CustomerProfile['line_quality']),
         )}
+        <div className="mt-1.5">
+          <input
+            type="range"
+            min={0}
+            max={100}
+            value={profile.line_quality_value ?? 50}
+            onChange={(e) => update('line_quality_value', Number(e.target.value))}
+            className="q-slider"
+            style={{
+              background: `linear-gradient(to right, var(--accent) ${((profile.line_quality_value ?? 50) / 100) * 100}%, var(--line) ${((profile.line_quality_value ?? 50) / 100) * 100}%)`,
+            }}
+          />
+          <div className="flex justify-between text-[10px] mt-1" style={{ opacity: 0.6 }}>
+            <span>偏直线</span>
+            <span>偏曲线</span>
+          </div>
+        </div>
       </section>
 
       {/* 身高体重与围度(选填,填了才有 BMI/体型数字与合身层) */}

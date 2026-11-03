@@ -16,6 +16,8 @@ const { generateUUID, UPLOAD_DIR, asId, getSessionId } = require('../utils/commo
 const { loginRequired, adminLoginRequired } = require('../middleware/auth')
 const { upload, validateImage } = require('../middleware/upload')
 const { rateLimit } = require('../middleware/rateLimit')
+// 日志走 utils/logger：console.log 只落 stdout，容器里查不到（别名与 server.js:42 保持一致）
+const { log: logMsg } = require('../utils/logger')
 const wxpay = require('../services/wechatPay')
 const alipay = require('../services/alipay')
 const paidReport = require('../services/paidReport')
@@ -93,7 +95,7 @@ function closeStaleOrders(userId) {
            AND created_at < datetime('now', '-' || ? || ' minutes')`,
       )
       .run(userId, ORDER_TTL_MINUTES)
-    if (r.changes > 0) console.log('[收款] 关闭超时未付单:', userId, r.changes, '笔')
+    if (r.changes > 0) logMsg('[收款] 关闭超时未付单:', userId, r.changes, '笔')
     return r.changes
   } catch (err) {
     // 关单失败不该挡住下单或读数：那是清理动作，不是交易动作
@@ -228,7 +230,7 @@ function markPaid(outTradeNo, transactionId, notifyRaw, channel = 'wechat') {
     return true
   })
   const ok = apply()
-  if (ok) console.log('[收款] 到账:', outTradeNo, 'from_status=' + fromStatus)
+  if (ok) logMsg('[收款] 到账:', outTradeNo, 'from_status=' + fromStatus)
   return ok
 }
 
@@ -724,7 +726,7 @@ router.put('/admin/price', adminLoginRequired, (req, res) => {
 
     const before = currentPriceFen()
     savePriceFen(fen)
-    console.log('[收款] 标价变更:', before / 100, '->', fen / 100)
+    logMsg('[收款] 标价变更:', before / 100, '->', fen / 100)
     return sendSuccess(res, { amount: fen / 100, amount_fen: fen }, '收款金额已更新')
   } catch (err) {
     console.error('[收款] 改价失败:', err)

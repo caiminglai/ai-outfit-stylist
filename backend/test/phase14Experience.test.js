@@ -28,7 +28,7 @@
  *   ⑪ 同一笔凭证领两次 ⇒ 同一行 `log_id`、日志表不增行；
  *   ⑫ **两份账不互相吃额度**：领掉一份凭证报告后，`entitlement.left`（只数平台单号那一路）不许跟着减 1，
  *      `claimable` 里那笔订单还在；`claimable_proofs` 领完就消失；
- *   ⑬ `created_amount_yuan` 必须在场（第十二阶段起 `routes/payment.js:125` 一直在读它，
+ *   ⑬ `created_amount_yuan` 必须在场（第十二阶段起 `routes/payment.js:127` 一直在读它，
  *      服务层没给过 ⇒ 顾客端「待付金额」恒为 undefined，这一条钉住那个 bug 不再回来）；
  *   ⑭ 路由分发：`?proof=` 数字才走凭证支；`?proof=abc` 当没带 ⇒ 落只读支（⛔ 拿它去拼一次领取）；
  *      只读支继续零写库。
@@ -147,7 +147,7 @@ async function call(method, route, session = SESS_A, body) {
   return { status: res.status, body: json || {} }
 }
 
-/** POST /feedback 的入参在 body 里（`routes/recommend.js:298`），⛔ 不是 query */
+/** POST /feedback 的入参在 body 里（`routes/recommend.js:299`），⛔ 不是 query */
 const postFeedback = (groupId, extra, session = SESS_A) =>
   call('POST', '/feedback', session, { group_id: groupId, ...extra })
 
@@ -391,7 +391,7 @@ test('C1⑫ 两份账不互相吃额度：领掉一份凭证报告，订单那�
   assert.strictEqual(done.claimed_orders, 1)
 })
 
-test('C1⑬ created_amount_yuan 必须在场（payment.js:125 一直在读它）', () => {
+test('C1⑬ created_amount_yuan 必须在场（payment.js:127 一直在读它）', () => {
   const uid = ensureUser('sess-p14-created', '待付读数')
   addOrder('S3P1400002', uid, 'created', 19900)
   const e = PR.entitlement(uid)
@@ -415,7 +415,7 @@ function findRoute(method, routePath) {
 
 /** 只调最后一个 handler＝业务本体；`loginRequired` 与 `reportLimiter` 都在这层之外
  *  ⚠️ 必须 await：`/my` 的凭证支在 handler **内部**直接调 `reportLimiter(req, res, () => {...})`
- *  （routes/payment.js:493），而 11-02 起限流工厂的内核是 express-rate-limit，它的中间件是
+ *  （routes/payment.js:495），而 11-02 起限流工厂的内核是 express-rate-limit，它的中间件是
  *  async 的（要先 `await store.increment`）⇒ 那个内层回调落在微任务里，同步读 res 只会读到 null。
  *  生产不受影响：Express 不等返回值，响应照样发出去；受影响的只有"当场读 res"的这种测法。 */
 async function callMy(userId, query = {}) {
