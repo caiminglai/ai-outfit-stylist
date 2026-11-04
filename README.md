@@ -50,7 +50,7 @@
 │   │   ├── App.tsx / main.tsx        # 入口
 │   ├── public/                       # 独立静态页(vite 原样拷进 dist,后端 static 直发):model-gallery.html=3D 展厅 / pay.html=付款 / creator.html=投稿 / how-it-works.html=10-22 新建「这套系统是怎么造的」,展厅「选择模式」页第三张卡一键跳
 │   ├── build-esbuild.cjs             # 生产构建脚本(esbuild)
-│   ├── vite.config.ts                # 开发配置(HMR + API 代理到 :5000)
+│   ├── vite.config.ts                # 开发配置(HMR + API 代理到 5000 端口)
 │   └── package.json
 ├── backend/                     # 后端
 │   ├── routes/                       # 路由(20 个模块)

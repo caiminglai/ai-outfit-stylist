@@ -27,7 +27,7 @@ const uploadLimiter = rateLimit({
 })
 
 /**
- * photos.type 的已知取值（admin-utils.js:85 的中文标签表与 schema 默认值对齐）
+ * photos.type 的已知取值（admin-utils.js:87 的中文标签表与 schema 默认值对齐）
  * 只收这几个：库里此前只有 'tryon'，前端没有任何地方调本接口，
  * 所以按枚举收紧不会打到现存客户端，却能挡住「把一个对象绑进 SQLite ⇒ 500」。
  */

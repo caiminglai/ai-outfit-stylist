@@ -46,11 +46,11 @@ var VALUE_LABELS = {
   },
   // rule_groups.category
   'rule_groups.category': { '穿搭': '穿搭', '妆容': '美妆', '发型': '发型', '配饰': '配饰', '姿势': '姿势' },
-  // rule_groups.enabled / inventory_products.enabled / model_configs.enabled 等
-  'rule_groups.enabled': { '1': '启用', '0': '禁用', 1: '启用', 0: '禁用' },
-  'inventory_products.enabled': { '1': '上架', '0': '下架', 1: '上架', 0: '下架' },
-  'model_configs.enabled': { '1': '启用', '0': '禁用', 1: '启用', 0: '禁用' },
-  'admin_users.is_active': { '1': '启用', '0': '禁用', 1: '启用', 0: '禁用' },
+  // rule_groups.enabled / inventory_products.enabled / model_configs.enabled 等。键只写字符串形态：对象属性名最终都是字符串，引号包起来的 1 与裸写的 1 是同一个键——原来两种各写一遍（值完全相同，行为从来没变过），eslint 报 no-dupe-keys 12 条，11-04 规范轮把冗余那半收掉。
+  'rule_groups.enabled': { '1': '启用', '0': '禁用' },
+  'inventory_products.enabled': { '1': '上架', '0': '下架' },
+  'model_configs.enabled': { '1': '启用', '0': '禁用' },
+  'admin_users.is_active': { '1': '启用', '0': '禁用' },
   // face_features.status
   'face_features.status': { 'pending': '待处理', 'done': '完成', 'error': '错误' },
   // tryon_results.status
@@ -69,9 +69,9 @@ var VALUE_LABELS = {
   // creator_works 创作者作品
   'creator_works.type': { 'outfit': '搭配', 'makeup': '化妆', 'rule': '推荐规则', 'model': '模型' },
   'creator_works.status': { 'pending': '待审核', 'approved': '已上架', 'rejected': '未通过' },
-  'creator_works.featured': { '1': '精选', '0': '普通', 1: '精选', 0: '普通' },
+  'creator_works.featured': { '1': '精选', '0': '普通' },
   // customer_sessions.synced
-  'customer_sessions.synced': { '1': '已同步', '0': '未同步', 1: '已同步', 0: '未同步' },
+  'customer_sessions.synced': { '1': '已同步', '0': '未同步' },
   // recommendation_logs.mode
   'recommendation_logs.mode': { 'store': '门店', 'personal': '个人' },
   // profile_tags.tag_key —— 与后端 services/profileArchive.js 的 TAG_DEFS 一字一样,改那边要改这里

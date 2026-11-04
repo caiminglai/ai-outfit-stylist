@@ -247,13 +247,17 @@ export async function unwrap<T>(res: Response): Promise<T> {
     else if (res.status === 404) fallback = '请求的资源不存在,请检查 API 路径是否正确'
     else if (res.status === 429) {
       const retryAfter = Number(res.headers.get('Retry-After'))
+      // 「请」后面那个空格只在跟数字时才要（`请 2 分钟后再试`）。
+      // 原来这三行是 `请 ${wait}后再试`，兜底那一档 wait='稍后' ⇒ 顾客看到的是
+      // 「请 稍后后再试」：多一个空格、还重复一个「后」。11-04 第一份前端请求核心测试抓到并改掉，
+      // 数字两档的字面输出与改前逐字相同（空格挪进 wait 里了）。
       const wait =
         Number.isFinite(retryAfter) && retryAfter > 0
           ? retryAfter >= 60
-            ? `${Math.ceil(retryAfter / 60)} 分钟`
-            : `${retryAfter} 秒`
+            ? ` ${Math.ceil(retryAfter / 60)} 分钟后`
+            : ` ${retryAfter} 秒后`
           : '稍后'
-      fallback = `请求过于频繁,请 ${wait}后再试`
+      fallback = `请求过于频繁,请${wait}再试`
     } else if (res.status >= 500) {
       fallback = _isDev
         ? `后端服务内部错误 (HTTP ${res.status}),请查看终端日志`

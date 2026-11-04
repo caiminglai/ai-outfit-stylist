@@ -114,8 +114,8 @@ app.use(
 )
 
 // 后台自带的请求都挂在公开前缀 /api 下（10-13 现量 admin 静态 JS：
-// utils/admin-utils.js:9-11 的 RULES_API='/api/rules'、INV_API='/api/inventory'、
-// MODELS_API='/api/models'；pages/admin-review.js:8-9,273 的 /api/creator、
+// static/admin/admin-utils.js:9-11 的 RULES_API='/api/rules'、INV_API='/api/inventory'、
+// MODELS_API='/api/models'；static/admin/admin-review.js:8-9,385 的 /api/creator、
 // /api/payment、/api/auth）。后台一次开页就是十几条，和顾客共用同一个
 // 100 次/15 分钟的桶 ⇒ 管理员多点几下把整台机器的额度吃掉，顾客侧表现为
 // "请求过于频繁"。带有效管理员令牌的请求不占顾客的额度；

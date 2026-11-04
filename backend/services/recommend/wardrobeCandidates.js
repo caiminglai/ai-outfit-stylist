@@ -74,7 +74,7 @@ function collectWardrobeTops(profile, { skinLab, bodyDev }) {
           ? raw.occasion_tags.map((t) => asText(t)).filter(Boolean)
           : [],
         // 厚薄有两个来源：投影带的那一格，或 `topFitBody` 算完挂在 `body_fit.top` 上的那一格
-        // （`topFitBody.js:716`，没填是 null）。两个都认，⛔ 只认薄/中/厚三个词——判词的事在 `candAxisValue`。
+        // （11-03 拆分前写在 topFitBody 那份里；现量在 `services/topFit/shape.js:274` 的 `fabric_weight`，没填是 null）。两个都认，⛔ 只认薄/中/厚三个词——判词的事在 `candAxisValue`。
         fabric_weight: asText(raw.fabric_weight) || bf.top.fabric_weight || null,
       }
       // 衣橱这一处的颜色有两个来源：顾客填的「颜色」栏（raw.color，可以直接写 hex）

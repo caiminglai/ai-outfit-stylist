@@ -64,7 +64,7 @@ const router = express.Router()
 /**
  * 推荐模式取值表。
  * 库里 rule_groups.mode 实测只有 store／personal 两种（seed 264 组：store 102／personal 162），
- * 后台标签表也是这两档（static/admin/admin-utils.js:75），前端类型同样锁死
+ * 后台标签表也是这两档（static/admin/admin-utils.js:76），前端类型同样锁死
  * （app/src/api/recommend.ts:10 `'store' | 'personal'`，11-03 按内容重指：这一段原先在 api.ts 里）。原来这里是 `asText(data.mode) || 'store'`：
  * 任意长串都能一路写进 recommendation_logs.mode，再由 routes/history.js:27 当作
  * `scenario` 原样回吐到"我的历史"里 ⇒ 一条脏数据就是一个用户看得见的假场景名。
