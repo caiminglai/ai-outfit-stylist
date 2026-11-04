@@ -68,7 +68,7 @@ function cleanupOldLogs() {
         fs.unlinkSync(filePath)
       }
     }
-  } catch (e) {
+  } catch {
     // 清理失败不影响主流程
   }
 }
@@ -86,7 +86,7 @@ function writeToFile(message) {
   const line = `[${logTimeStamp()}] ${message}\n`
   try {
     fs.appendFileSync(filePath, line)
-  } catch (e) {
+  } catch {
     // 写文件失败不影响主流程
   }
 }

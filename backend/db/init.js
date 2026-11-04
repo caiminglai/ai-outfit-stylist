@@ -15,7 +15,6 @@ const fs = require('fs')
 const bcrypt = require('bcryptjs')
 const Database = require('better-sqlite3')
 const {
-  SOURCE_MAP,
   ICON_MAP,
   findPmxFiles,
   parseFolderName,
@@ -27,6 +26,12 @@ const {
 // 但 ICON_MAP['constructor'] 这类顺原型链取值不该靠上游保证——一旦有别的调用方把原始
 // 目录名送进来，图标列就会写进一个函数。
 const { ownValue } = require('../utils/common')
+
+// 报错与告警一律走 utils/logger。db/ 下的建库与迁移脚本按 eslint 口径允许直接打 stdout
+// （stdout 就是它们的交付物，判据见 backend/eslint.config.js 的 db/** override），
+// 但 init.js 不是命令行脚本——它挂在每次进程启动的路上，那 7 条 error/warn 只落 stdout
+// 就会错过 logs/server-*.log，事后查不到痕迹。
+const { error: logErr, warn: logWarn } = require('../utils/logger')
 
 // 数据库路径唯一出口是 ./paths(在这里再拼一次属于历史遗留,拼错会静默开一个空库)
 const { DB_PATH } = require('./paths')
@@ -54,7 +59,7 @@ function checkpointWAL(mode = 'PASSIVE') {
     const row = db.pragma(`wal_checkpoint(${mode})`)
     return row
   } catch (err) {
-    console.error('[数据库] WAL checkpoint 失败:', err.message)
+    logErr('[数据库] WAL checkpoint 失败:', err.message)
     return { busy: 1, log: -1, checkpointed: -1 }
   }
 }
@@ -208,10 +213,10 @@ function initSeedData() {
       seedAll(db)
       console.log('[种子数据] 导入完成')
     } catch (err) {
-      console.error('[种子数据] 导入失败:', err.message)
+      logErr('[种子数据] 导入失败:', err.message)
     }
   } else {
-    console.warn('[种子数据] seed.js 不存在,请运行 npm run seed')
+    logWarn('[种子数据] seed.js 不存在,请运行 npm run seed')
   }
 }
 
@@ -230,10 +235,10 @@ function initRuleSeedIncrement() {
         (stat.rejected.length ? `,不合格未入库 ${stat.rejected.length} 条` : ''),
     )
     for (const reason of stat.rejected) {
-      console.warn(`[规则种子] ✗ ${reason}`)
+      logWarn(`[规则种子] ✗ ${reason}`)
     }
   } catch (err) {
-    console.error('[规则种子] 增量应用失败(不影响启动):', err.message)
+    logErr('[规则种子] 增量应用失败(不影响启动):', err.message)
   }
 }
 
@@ -247,7 +252,7 @@ function initAdminUser() {
 
   if (!admin) {
     if (!password) {
-      console.warn('[初始化] 未配置 ADMIN_PASSWORD,管理员账号未创建')
+      logWarn('[初始化] 未配置 ADMIN_PASSWORD,管理员账号未创建')
       return
     }
     const hash = bcrypt.hashSync(password, 10)
@@ -408,7 +413,7 @@ function startSessionCleanupTimer(intervalMs = 10 * 60 * 1000) {
     try {
       cleanupExpiredSessions()
     } catch (err) {
-      console.error('[隐私清理] 定时清理失败:', err.message)
+      logErr('[隐私清理] 定时清理失败:', err.message)
     }
   }, intervalMs)
   if (sessionCleanupTimer.unref) {

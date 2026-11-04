@@ -7,15 +7,18 @@
  * `payment.js:19` 那句注释写着"日志走 utils/logger"而底下 20 条全是 console.error，
  * 说明这类漂移靠人记是记不住的，必须有机器兜着。
  *
- * 本文件钉四件事：
+ * 本文件钉六件事（编号与下面 6 条 test 一一对应）：
  *   1. 应用代码（routes/** services/** middleware/** server.js common.js）里
  *      不许出现任何 `console.*` 调用（注释里的字样不算）。
  *   2. 谁用了 logMsg/logErr/logWarn 三个别名，谁就必须真的 require 到 utils/logger
  *      ——防止"改了调用没补引用"这种一跑就 ReferenceError 的半截迁移。
- *   3. utils/logger 的 warn 通道行为与 log/error 对齐：写文件带 [WARN]、走 console.warn、
+ *   3. 反向：require 了 utils/logger 却一个别名都没用，是白拿（记 warning，不判死）。
+ *   4. utils/logger 的 warn 通道行为与 log/error 对齐：写文件带 [WARN]、走 console.warn、
  *      BigInt/自引用对象不再把主流程炸成 500。
- *   4. eslint 配置里 no-console 是 **error** 且放行名单（overrides）不包含
- *      routes/services/middleware/server.js —— 规则本身被谁悄悄放宽要能被发现。
+ *   5. eslint 配置里 no-console 是 **error**、不许退回 warn 级，且放行名单（overrides）
+ *      不包含 routes/services/middleware/server.js —— 规则被谁悄悄放宽要能被发现。
+ *   6. db/init.js 特例：它挂在每次进程启动的路上，error/warn 必须归 logger
+ *      （11-04 加，db/** 不在 no-console 适用面上，这条只能由测试兜，见该测试的注释）。
  *
  * 全程用替身接管 fs.appendFileSync / fs.unlinkSync / fs.readdirSync / fs.statSync 与
  * console，测试不写任何真日志文件、不删任何真日志。
@@ -152,4 +155,27 @@ test('5. eslint 配置：no-console 是 error，且放行名单不含应用代�
     )
     assert.ok(!re.test(cfg), dir + '/ 出现在 no-console 放行名单里')
   }
+})
+
+/**
+ * 6. db/init.js 特例（11-04 加）：eslint 给 db/** 关掉了 no-console，理由是"人在终端里手工
+ * 跑的建库与迁移脚本，stdout 就是交付物"。这个理由对 add-rules／export-rules／seed／三份
+ * migrate 成立，对 init.js 不成立——它是 require 链的第一环，每次进程启动都走一遍。
+ * 所以这里单独钉：它的 error/warn 必须归 logger（只落 stdout 就等于报错不留档），
+ * console.log 那 20 条按现有口径留着不动（建库进度本来就是给人看的）。
+ */
+test('6. db/init.js 的 error/warn 归 logger，console.log 仍按 db/ 口径放行', () => {
+  const src = fs.readFileSync(path.join(BE, 'db', 'init.js'), 'utf8')
+  const body = stripComments(src)
+  const leaked = body.match(/console\.(error|warn)\b/g) || []
+  assert.deepStrictEqual(
+    leaked,
+    [],
+    'init.js 挂在启动路径上，error/warn 只打 stdout 就不进日志文件',
+  )
+  assert.match(
+    src,
+    /require\((['"])[^'"]*utils\/logger\1\)/,
+    'init.js 用了 logger 别名却没 require 到',
+  )
 })

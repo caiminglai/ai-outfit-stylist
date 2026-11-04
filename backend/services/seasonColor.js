@@ -20,7 +20,6 @@
  *    说明冷暖倾向不明显，色卡取两季交集。
  */
 
-const { ownValue } = require('../utils/common')
 const { COLOR_NAME_HEX } = require('./colorMetrics')
 
 // 冷暖切点与明度切点（与 colorMetrics.SKIN_HUE、profileEnricher.depthMap 同口径）

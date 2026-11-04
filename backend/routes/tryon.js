@@ -171,6 +171,7 @@ router.get('/:id', loginRequired, (req, res) => {
 
     return sendSuccess(res, { result })
   } catch (err) {
+    logErr('[试穿] 结果读取失败:', err)
     return sendError(res, '获取失败', 500)
   }
 })

@@ -29,12 +29,6 @@ const BUCKET_WORDS = {
 
 const NEUTRAL_COLORS = ['黑', '白', '灰', '米', '驼', '杏', '咖', '棕', '银']
 
-const num = (v) => {
-  if (v === null || v === undefined || v === '') return null
-  const n = Number(v)
-  return Number.isFinite(n) ? n : null
-}
-
 /** 从物品的 color 或 name 中提取 hex */
 function getHex(item) {
   const color = String(item.color || '').trim()

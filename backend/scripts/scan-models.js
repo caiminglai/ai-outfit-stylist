@@ -68,7 +68,6 @@ function analyzePmxTextures(pmxPath) {
 
     // PMX格式: 二进制, 需要解析
     // 简化版: 查找文件名引用
-    const content = buffer.toString('binary')
 
     // 尝试UTF-8解码查找
     const utf8Content = buffer.toString('utf8')
@@ -105,9 +104,9 @@ function analyzePmxTextures(pmxPath) {
               collectFiles(fullPath)
               existingFiles.add(`${f}/${f}`.toLowerCase())
             }
-          } catch (e) {}
+          } catch {}
         })
-      } catch (e) {}
+      } catch {}
     }
     collectFiles(modelDir)
 

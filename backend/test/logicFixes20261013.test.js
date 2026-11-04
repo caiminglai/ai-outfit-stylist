@@ -42,7 +42,7 @@ const Database = require('better-sqlite3')
 
 const memDb = new Database(':memory:')
 memDb.exec(fs.readFileSync(path.join(__dirname, '..', 'db', 'schema.sql'), 'utf-8'))
-// db/init.js:39 在真库上开着外键，替身必须一样开，否则第 4 组断言测的是另一回事
+// db/init.js:44 在真库上开着外键，替身必须一样开，否则第 4 组断言测的是另一回事
 memDb.pragma('foreign_keys = ON')
 const initPath = require.resolve('../db/init')
 require.cache[initPath] = {

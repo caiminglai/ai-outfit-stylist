@@ -513,7 +513,7 @@ process.on('uncaughtException', (err) => {
     server.close(() => process.exit(1))
   }, 5000)
 })
-process.on('unhandledRejection', (reason, promise) => {
+process.on('unhandledRejection', (reason, _promise) => {
   logErr('[未处理Promise] unhandledRejection:', reason?.stack || reason)
   // 记录后退出,让进程管理器重启
   process.exit(1)

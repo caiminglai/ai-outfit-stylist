@@ -108,6 +108,27 @@ jobs:
       - name: Web assets check
         run: npm run assets:check
 
+      # 行号定位符体检（11-04 改进轮挂上）：**只报不拦**。`scripts/check-locators.js` 的退出码
+      # 恒为 0 是它自己写死的设计（该文件第 22 行：「这是体检不是门禁；要让 CI 拦红请另加阈值判断，
+      # 别默认打开」）。为什么这一轮不升成门：本机现量（11-04 收口那趟，⏱ 自指数、谁用谁重跑）第一向「要动」558 条、第三向裸续号「要动」677 条，
+      # 里面绝大多数是**故意留的历史号**——`docs/复盘/`、`docs/进展报告/`、`docs/形象设计模型-现状与路线.md`
+      # 与本文件里那些"改前是 X 行／拆分前那 275 条"的带日期快照句，按台账规矩只加限定、不改写，
+      # 一当门禁就永久红，红到没人看等于没挂。
+      # 这一步真正的价值有两层：①"号在漂"每次 push 都进 Actions 的作业摘要，不必等谁在本地手动跑一遍；
+      # ②脚本自己炸（git 不可用、索引面 glob 改坏、某份 md 变向读不出）时 node 退非 0 ⇒ 这步会红，
+      #    那正是该拦的故障。**⛔ 别把它写成 `… | tee`**：管道尾巴会把退出码换成 tee 的 0，第 ② 层就没了。
+      - name: Locator health (report only)
+        run: |
+          node scripts/check-locators.js > "$RUNNER_TEMP/locators.txt"
+          cat "$RUNNER_TEMP/locators.txt"
+          {
+            echo '### 行号定位符体检（只报不拦，判据见 backend/scripts/check-locators.js）'
+            echo ''
+            echo '```'
+            grep -E '^(\[定位符体检\] 扫描面| *第[一二三]向（)' "$RUNNER_TEMP/locators.txt"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
       # 两个 job 都只跑本机已实测通过的门禁：
       #   app  typecheck 0 错 / lint 0 error 9 warning / build 通过
       #   backend  lint 0 error 121 warning / node --test 505 全过（10-14 现量，本仓 `test/*.test.js` 36 份。

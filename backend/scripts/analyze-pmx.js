@@ -18,7 +18,9 @@ const version = buf.readFloatLE(4)
 const encoding = buf.readUInt8(8) // 0=UTF-16, 1=UTF-8
 const additionalUV = buf.readUInt8(9)
 const appendSystemBytes = buf.readUInt8(10)
-console.log(`Magic: ${magic}, Version: ${version}, 编码: ${encoding === 1 ? 'UTF-8' : 'UTF-16'}`)
+console.log(
+  `Magic: ${magic}, Version: ${version}, 编码: ${encoding === 1 ? 'UTF-8' : 'UTF-16'}, 附加UV: ${additionalUV}, 追加系统字节: ${appendSystemBytes}`,
+)
 
 // 跳过头部,读取全局数据
 // 全局参数: 24 字节 (1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+4)
@@ -40,13 +42,13 @@ console.log('\n=== 数据段分析 ===')
 
 // 1. 顶点数据
 const vertices = readSizedChunk()
-const vertCount = vertices.size / (encoding === 1 ? 38 : 38) // 简化估算
-console.log(`顶点段: ${vertices.size} 字节 (约 ${(Math.abs(vertices.size) / 38) | 0} 个顶点)`)
+const vertCount = Math.abs(vertices.size) / 38 // 简化估算
+console.log(`顶点段: ${vertices.size} 字节 (约 ${vertCount | 0} 个顶点)`)
 
 // 2. 三角面数据
 const triangles = readSizedChunk()
-const triCount = Math.abs(triangles.size) / (encoding === 1 ? 3 : 3)
-console.log(`三角面段: ${triangles.size} 字节 (约 ${(Math.abs(triangles.size) / 3) | 0} 个三角面)`)
+const triCount = Math.abs(triangles.size) / 3
+console.log(`三角面段: ${triangles.size} 字节 (约 ${triCount | 0} 个三角面)`)
 
 // 3. 纹理索引
 const textures = readSizedChunk()

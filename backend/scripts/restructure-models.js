@@ -420,7 +420,7 @@ for (const d of oldDirsToRemove) {
       try {
         const files = fs.readdirSync(full)
         console.log('      剩余文件: ' + files.join(', '))
-      } catch (_) {}
+      } catch {}
     }
   }
 }

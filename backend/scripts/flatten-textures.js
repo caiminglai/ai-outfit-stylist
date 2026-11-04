@@ -140,7 +140,7 @@ function removeEmptyDirs(dir) {
           console.log('  🗑️  ' + path.relative(MODELS_DIR, sub))
           totalDeleted++
         }
-      } catch (_) {}
+      } catch {}
     }
   }
 }
@@ -167,7 +167,7 @@ toRemove.forEach((d) => {
       fs.rmdirSync(d)
       console.log('  🗑️  ' + path.relative(MODELS_DIR, d))
       totalDeleted++
-    } catch (e) {
+    } catch {
       console.log('  ⚠️  ' + path.relative(MODELS_DIR, d) + ' (非空)')
     }
   }

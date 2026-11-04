@@ -294,6 +294,7 @@ router.get('/schema', adminLoginRequired, (req, res) => {
       ]),
     })
   } catch (err) {
+    logErr('[规则] 统计读取失败:', err)
     return sendError(res, '获取失败', 500)
   }
 })
@@ -388,6 +389,7 @@ router.get('/groups', adminLoginRequired, (req, res) => {
 
     return sendSuccess(res, { groups, total: groups.length })
   } catch (err) {
+    logErr('[规则] 分组列表读取失败:', err)
     return sendError(res, '获取失败', 500)
   }
 })
@@ -409,6 +411,7 @@ router.get('/groups/:id', adminLoginRequired, (req, res) => {
 
     return sendSuccess(res, { group, conditions, actions })
   } catch (err) {
+    logErr('[规则] 分组详情读取失败:', err)
     return sendError(res, '获取失败', 500)
   }
 })
@@ -644,7 +647,7 @@ router.delete('/groups/:id', adminLoginRequired, (req, res) => {
       return sendError(res, '规则组不存在', 404)
     }
     // feedback_events.group_id 是 NOT NULL 外键指向 rule_groups(id)（schema.sql:301），
-    // 而 db/init.js:39 开着 `PRAGMA foreign_keys = ON` ⇒ 有人点过"有用/不准"的规则
+    // 而 db/init.js:44 开着 `PRAGMA foreign_keys = ON` ⇒ 有人点过"有用/不准"的规则
     // 直接 DELETE 必抛约束失败，页面只回一句"删除失败"，而且永远删不掉。
     // 这里不改成"连反馈一起删"：那是顾客的评价数据，删规则的正当出口是下面那条 toggle（enabled=0）。
     const rated = db

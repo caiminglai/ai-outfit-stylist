@@ -28,6 +28,7 @@ router.get('/categories', adminLoginRequired, (req, res) => {
     const categories = db.prepare('SELECT * FROM inventory_categories ORDER BY sort_order').all()
     return sendSuccess(res, categories)
   } catch (err) {
+    logErr('[库存] 分类列表读取失败:', err)
     return sendError(res, '获取失败', 500)
   }
 })
@@ -87,8 +88,8 @@ router.get('/products', adminLoginRequired, (req, res) => {
 /** 添加库存商品（管理员） */
 router.post('/products', adminLoginRequired, (req, res) => {
   try {
-    let {
-      category_id,
+    const {
+      category_id: rawCategoryId,
       category_code,
       name,
       sku,
@@ -103,6 +104,8 @@ router.post('/products', adminLoginRequired, (req, res) => {
       description,
       enabled,
     } = req.body || {}
+    // 整块里只有 category_id 会被改写（下面的 code→id 兼容），所以把它单独拎出来用 let
+    let category_id = rawCategoryId
 
     // 兼容前端传 category_code 的情况
     if (!category_id && category_code) {
@@ -164,8 +167,8 @@ router.put('/products/:id', adminLoginRequired, (req, res) => {
     // 但"请求里没提上/下架"不该把刚被下架的商品重新上架（后台每次都带这个字段，
     // 只有脚本会漏 ⇒ 漏一次就悄悄改一次状态）。
     const current = db.prepare('SELECT enabled FROM inventory_products WHERE id = ?').get(productId)
-    let {
-      category_id,
+    const {
+      category_id: rawCategoryId,
       category_code,
       name,
       sku,
@@ -180,6 +183,8 @@ router.put('/products/:id', adminLoginRequired, (req, res) => {
       description,
       enabled,
     } = req.body || {}
+    // 同 POST：只有 category_id 会被 code→id 兼容改写，单独用 let
+    let category_id = rawCategoryId
 
     // 兼容前端传 category_code 的情况
     if (!category_id && category_code) {
@@ -243,6 +248,7 @@ router.delete('/products/:id', adminLoginRequired, (req, res) => {
     }
     return sendSuccess(res, null)
   } catch (err) {
+    logErr('[库存] 商品删除失败:', err)
     return sendError(res, '删除失败', 500)
   }
 })
@@ -318,6 +324,7 @@ router.delete('/categories/:id', adminLoginRequired, (req, res) => {
     }
     return sendSuccess(res, null)
   } catch (err) {
+    logErr('[库存] 分类删除失败:', err)
     return sendError(res, '删除失败', 500)
   }
 })

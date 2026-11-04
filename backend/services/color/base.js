@@ -22,9 +22,9 @@ function hexToLab(hex) {
     .match(/^([0-9a-fA-F]{2})([0-9a-fA-F]{2})([0-9a-fA-F]{2})$/)
   if (!m) return null
   const [R, G, B] = [m[1], m[2], m[3]].map((h) => _srgbToLin(parseInt(h, 16)))
-  let X = R * 0.4124564 + G * 0.3575761 + B * 0.1804375
-  let Y = R * 0.2126729 + G * 0.7151522 + B * 0.072175
-  let Z = R * 0.0193339 + G * 0.119192 + B * 0.9503041
+  const X = R * 0.4124564 + G * 0.3575761 + B * 0.1804375
+  const Y = R * 0.2126729 + G * 0.7151522 + B * 0.072175
+  const Z = R * 0.0193339 + G * 0.119192 + B * 0.9503041
   const f = (t) => (t > 0.008856 ? Math.cbrt(t) : 7.787 * t + 16 / 116)
   const fx = f(X / 0.95047)
   const fy = f(Y / 1.0)

@@ -23,8 +23,6 @@ const {
 } = require('../services/profileEnricher')
 const { FIELD_LABELS, ACTION_LABELS } = require('../services/ruleExplainer')
 const { validateGroup, normalizeCondition, normalizeAction } = require('../db/applyRuleSeeds')
-const { HEALTH_BANDS } = require('../services/bmi')
-const { BODY_TYPES } = require('../services/bodyTypes')
 
 const SEED_PATH = path.join(__dirname, '..', 'db', 'seed', 'rules-aesthetic.json')
 const seed = JSON.parse(fs.readFileSync(SEED_PATH, 'utf-8'))

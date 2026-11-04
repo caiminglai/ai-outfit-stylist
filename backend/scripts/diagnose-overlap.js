@@ -65,7 +65,6 @@ const enabled = db
   .all()
 for (const m of enabled) {
   const pmxPath = path.join(MODELS_DIR, m.folder, m.file)
-  let sizeKB = 0
   if (fs.existsSync(pmxPath)) {
     // 读取 PMX 文件头(前几字节可判断版本),然后读取 MESH 记录数
     try {
