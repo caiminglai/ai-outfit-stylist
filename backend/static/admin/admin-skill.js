@@ -142,7 +142,7 @@ var SKILL_STAGES = [
     goal: '从「看我贴给你的代码」变成「自己能定位到代码」。',
     steps: [
       { t: '后台「接口路由」页列出全部 GET/POST，挑 <code>GET /api/payment/order/:outTradeNo</code>', c: null },
-      { t: '自己找到它在哪个文件第几行（这条 grep 就是本仓所有「找代码」的起手式）', c: 'cd /e/website/3.personal-image-ai && grep -rn "order/:outTradeNo" backend --include=*.js' },
+      { t: '自己找到它在哪个文件第几行（这条 grep 就是本仓所有「找代码」的起手式）', c: 'cd /e/website/ai-outfit-stylist && grep -rn "order/:outTradeNo" backend --include=*.js' },
       { t: '从那一行往下连续读 40 行，在纸上写三行：① 请求进来带什么 ② 中间查了哪张表 ③ 什么条件回什么码', c: null },
       { t: '校准题（别查答案，先猜再验）：这 40 行里有几处 <code>return</code>？<code>order.user_id !== req.user.id</code> 为什么是 403 不是 401？<code>status</code> 在库里出现过哪几种值？', c: 'grep -n "status !== \'paid\'\\|status = \'paid\'\\|status:" backend/routes/payment.js | head -30' },
     ],

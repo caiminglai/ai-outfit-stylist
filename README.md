@@ -22,7 +22,7 @@
 ## 目录结构
 
 ```
-3.personal-image-ai/
+ai-outfit-stylist/
 ├── app/                              # 前端
 │   ├── src/
 │   │   ├── components/
@@ -326,7 +326,7 @@ npm run format:check
 - 一次性脚本:放 `backend/scripts/`,不参与运行时
 
 ```
-3.personal-image-ai
+ai-outfit-stylist
 ├─ .dockerignore
 ├─ app
 │  ├─ .prettierrc.json

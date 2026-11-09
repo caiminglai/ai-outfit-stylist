@@ -378,7 +378,7 @@
           <p>
             <b>三、命令一律复制去跑，别手敲。</b>
             每个灰底代码块右上角有「复制」。跑之前看一眼它在哪个目录：写
-            <code>cd E:/website/3.personal-image-ai/backend</code>
+            <code>cd E:/website/ai-outfit-stylist/backend</code>
             的就在后端目录跑。⛔ 任何一课都不许碰服务器，也不许对
             <code>backend/db/styleai.db</code> 写。
           </p>
@@ -396,7 +396,7 @@
           <ol>
             <li>
               VSCode 里 <code>文件 → 打开文件夹</code>，选
-              <span class="ext">E:/website/3.personal-image-ai</span>。
+              <span class="ext">E:/website/ai-outfit-stylist</span>。
               ⚠️ 是打开<b>文件夹</b>，不是打开单个文件；只开一个文件你就看不见目录树，也跳不了引用。
             </li>
             <li>
@@ -417,7 +417,7 @@ git -v</code></pre>
           <div class="grid">
             <div class="card">
               <b>路径用正斜杠 /</b>
-              <code>E:/website/3.personal-image-ai/backend</code> 这种写法在 PowerShell、Git
+              <code>E:/website/ai-outfit-stylist/backend</code> 这种写法在 PowerShell、Git
               Bash、Node 里都认。反斜杠在代码字符串里是转义符，会把你的路径吃掉一半。
             </div>
             <div class="card">
@@ -510,7 +510,7 @@ git -v</code></pre>
 
           <h3>现在就做：第一次把测试跑红（15 分钟）</h3>
           <p>步骤别换顺序，第二步是我自己现跑过的，结果我写在旁边。</p>
-          <pre><button class="cp">复制</button><code>cd E:/website/3.personal-image-ai/backend
+          <pre><button class="cp">复制</button><code>cd E:/website/ai-outfit-stylist/backend
 node --test test/bmi.test.js</code></pre>
           <p>应当看到 5 条 ✔（读数：<code>tests 5 / pass 5 / fail 0</code>）。</p>
           <ol>
@@ -690,8 +690,8 @@ node --test test/bmi.test.js</code></pre>
             就等于随手改了线上业务数据。先<b>复制</b>一份到仓外。
           </div>
           <pre><button class="cp">复制</button><code>mkdir -p E:/website/files/learn-l3
-cp E:/website/3.personal-image-ai/backend/db/styleai.db E:/website/files/learn-l3/copy.db
-cd E:/website/3.personal-image-ai/backend
+cp E:/website/ai-outfit-stylist/backend/db/styleai.db E:/website/files/learn-l3/copy.db
+cd E:/website/ai-outfit-stylist/backend
 node -e "const D=require('better-sqlite3')('E:/website/files/learn-l3/copy.db',{readonly:true});console.log(D.prepare(\"SELECT name FROM sqlite_master WHERE type='table' ORDER BY name\").all().length+' 张表');console.log(D.prepare('SELECT key,value FROM app_settings ORDER BY key').all())"</code></pre>
           <p>
             看到表数与 <code>app_settings</code> 里那些键值（收款金额就在里面），这一课就通了。
@@ -767,7 +767,7 @@ node -e "const D=require('better-sqlite3')('E:/website/files/learn-l3/copy.db',{
           </p>
 
           <h3>现在就做：本地起前端，改一句文案（20 分钟）</h3>
-          <pre><button class="cp">复制</button><code>cd E:/website/3.personal-image-ai/app
+          <pre><button class="cp">复制</button><code>cd E:/website/ai-outfit-stylist/app
 npm run dev</code></pre>
           <p>
             它回 <code>VITE v7.3.6 ready in 449 ms</code> 和
@@ -865,7 +865,7 @@ npm run dev</code></pre>
           </p>
           <pre><button class="cp">复制</button><code>const test = require('node:test')
 const assert = require('node:assert')
-const { healthBand, bmiValue } = require('E:/website/3.personal-image-ai/backend/services/bmi.js')
+const { healthBand, bmiValue } = require('E:/website/ai-outfit-stylist/backend/services/bmi.js')
 
 test('我自己加的：18.45 的人显示成 18.5，就该按 18.5 归正常', () => {
   const r = healthBand(18.45)
@@ -953,7 +953,7 @@ test('我自己加的：18.45 的人显示成 18.5，就该按 18.5 归正常', 
           </div>
 
           <h3>现在就做：一次把三扇门跑完并留下退出码（10 分钟）</h3>
-          <pre><button class="cp">复制</button><code>cd E:/website/3.personal-image-ai/backend
+          <pre><button class="cp">复制</button><code>cd E:/website/ai-outfit-stylist/backend
 npm run format:check > E:/website/files/learn-l6-format.log 2>&1; echo "format rc=$?"
 npm run lint         > E:/website/files/learn-l6-lint.log  2>&1; echo "lint   rc=$?"
 npm test             > E:/website/files/learn-l6-test.log  2>&1; echo "test   rc=$?"
@@ -1104,7 +1104,7 @@ docker compose -f E:/website/compose/docker-compose.yml logs --tail 20 style-ai<
           </p>
 
           <h3>只读三连：先练这个，永远安全</h3>
-          <pre><button class="cp">复制</button><code>cd E:/website/3.personal-image-ai
+          <pre><button class="cp">复制</button><code>cd E:/website/ai-outfit-stylist
 git status --porcelain
 git diff --stat
 git log --oneline -3</code></pre>
@@ -1182,13 +1182,13 @@ let lines = 0
       lines += fs.readFileSync(q, 'utf8').split('\n').length
     }
   }
-})('E:/website/3.personal-image-ai/backend')
+})('E:/website/ai-outfit-stylist/backend')
 console.log('文件', files, '行', lines)</code></pre>
           <p>
             跑法：<code>node E:/website/files/我的探针.cjs</code>。它不连库、不发请求、不写文件，
             <b>只读</b>——这就是安全边界。更常见的量法不用写脚本，一条命令就够：
           </p>
-          <pre><button class="cp">复制</button><code>cd E:/website/3.personal-image-ai
+          <pre><button class="cp">复制</button><code>cd E:/website/ai-outfit-stylist
 find backend -name '*.js' -not -path '*/node_modules/*' -not -path '*/vendor/*' -print0 | xargs -0 wc -l | tail -1
 find app/src \( -name '*.ts' -o -name '*.tsx' \) -print0 | xargs -0 wc -l | tail -1
 ls backend/test/*.test.js | wc -l</code></pre>
@@ -1314,7 +1314,7 @@ ls backend/test/*.test.js | wc -l</code></pre>
               <th>一句话人话</th>
               <th>在你项目哪儿</th>
             </tr>
-            <tr><td>仓库 repo</td><td>一个项目＋它的全部历史</td><td><code>E:/website/3.personal-image-ai</code> 这个目录</td></tr>
+            <tr><td>仓库 repo</td><td>一个项目＋它的全部历史</td><td><code>E:/website/ai-outfit-stylist</code> 这个目录</td></tr>
             <tr><td>依赖 / node_modules</td><td>别人写好的零件，装在你项目里</td><td><code>backend/node_modules</code>、<code>app/node_modules</code>（都不进版本）</td></tr>
             <tr><td>锁文件</td><td>把零件版本钉死，谁装都一样</td><td><code>package-lock.json</code>（Dockerfile L11 那段注释讲过它救过一次构建）</td></tr>
             <tr><td>脚本 scripts</td><td>起个好记的别名代替长命令</td><td><code>backend/package.json:6-15</code></td></tr>
@@ -1393,8 +1393,8 @@ ls backend/test/*.test.js | wc -l</code></pre>
           </table>
           <p>
             还有两处值得知道：
-            <span class="ext">E:/website/1.my-first-website</span>（23,697 行）与
-            <span class="ext">E:/website/2.my-two-website</span>（19,977 行）是同一套路子的另外两个项目，
+            <span class="ext">E:/website/kxbz365-science</span>（23,697 行）与
+            <span class="ext">E:/website/sparklove-matching</span>（19,977 行）是同一套路子的另外两个项目，
             <b>站2 最小，最适合"读一个我没参与过的项目"</b>这种练习；<code>站1</code> 里面那个 12
             万行的 <code>obsidian\.obsidian\plugins\</code> 是别人写的插件，不算它的代码，别被行数吓到。
           </p>

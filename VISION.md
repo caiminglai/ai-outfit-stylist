@@ -118,8 +118,8 @@ docker compose up -d --build style-ai      # → http://127.0.0.1:5000
 
 ## 项目位置
 
-- 本机：`E:/website/3.personal-image-ai`
-- GitHub：`https://github.com/caiminglai/3.personal-image-ai`
-- 服务器：`/var/www/3.personal-image-ai`，容器 `style-ai`
+- 本机：`E:/website/ai-outfit-stylist`
+- GitHub：`https://github.com/caiminglai/ai-outfit-stylist`
+- 服务器：`/var/www/ai-outfit-stylist`，容器 `style-ai`
 - 域名：`style.sparklove.cn`
 - 跨站约定见 `E:/website/compose/CONVENTIONS.md`，服务器操作口径见 `E:/website/compose/SERVER-OPS.md`
