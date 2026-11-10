@@ -108,17 +108,27 @@ test('/api/models/file：在售模型带尾斜杠照旧能下，闸门没有顺�
   assert.strictEqual(okSlash.status, 200, '非禁用文件不该被这道改动挡掉')
 })
 
-test('/models 静态口：编码尾斜杠 %2F 对禁用模型同样 404，对在售文件仍是 200', OPT, async () => {
+test('/models 静态口：编码尾斜杠 %2F 对禁用模型同样 404，对在售文件不误伤', OPT, async () => {
   const offEnc = await fetch(`${baseUrl}/models/${encodeURIComponent(TMP_DIR)}/${OFF_FILE}%2F`)
   assert.strictEqual(
     offEnc.status,
     404,
     'express.static 把 %2F 解回 / 后 join 会收掉斜杠 ⇒ 只能在这里砍',
   )
+  // 禁用模型的 404 必须是闸门本体回的 JSON「文件不存在」，证明是判据砍的、而非 static 顺手挡的
+  assert.match(await offEnc.text(), /文件不存在/)
   const offBare = await fetch(`${baseUrl}/models/${encodeURIComponent(TMP_DIR)}/${OFF_FILE}`)
   assert.strictEqual(offBare.status, 404)
+  // 在售文件裸路径必须真能下，证明这道闸没有扩大化、误伤正常下载
+  const onBare = await fetch(`${baseUrl}/models/${encodeURIComponent(TMP_DIR)}/${ON_FILE}`)
+  assert.strictEqual(onBare.status, 200, '在售文件裸路径必须能下')
+  // 编码尾斜杠 %2F 的出账跨平台不同：Windows 的 send 收掉斜杠回 200/304；POSIX 的 send 把
+  // “文件＋尾斜杠”当目录去找 index ⇒ 回 404（Express 默认 Cannot GET 页，11-11 本机 Linux 容器实测）。
+  // 这是 express.static 自身的尾斜杠语义，不是闸门误伤——闸门误伤会回 JSON「文件不存在」（见上面 offEnc）。
+  // 所以这里钉真正的不变量：在售文件无论回 200/304 还是 static 的 404，都不许是闸门那条 JSON。
   const onEnc = await fetch(`${baseUrl}/models/${encodeURIComponent(TMP_DIR)}/${ON_FILE}%2F`)
-  assert.ok([200, 304].includes(onEnc.status), `在售文件不该误伤，实测 ${onEnc.status}`)
+  assert.ok([200, 304, 404].includes(onEnc.status), `意外状态 ${onEnc.status}`)
+  assert.ok(!(await onEnc.text()).includes('文件不存在'), `在售文件被闸门误伤了：${onEnc.status}`)
 })
 
 test('收尾：删掉临时目录与库行，关端口', async () => {
