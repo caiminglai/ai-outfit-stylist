@@ -95,3 +95,7 @@ docs/依据/papers/3.完美形体服饰搭配圣经.pdf
 docs/依据/papers/4.这样穿很美 平价搭出时尚范 (（日）典子，杨孟芳译).pdf
 docs/依据/papers/5.The Triumph of Individual Style.pdf
 docs/依据/papers/专业色彩搭配设计师必备宝典 (第二版).pdf
+
+# 求职门面：论文/国标/数据库原件不进仓（本地保留，历史清理见 filter-repo）。
+# 逐份登记（文件名+md5）仍在 docs/依据/10，路径不变⇒指针不受影响。
+docs/依据/papers/
