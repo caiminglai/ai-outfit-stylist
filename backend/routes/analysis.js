@@ -1,0 +1,334 @@
+/**
+ * 面容/身体分析路由模块
+ * 对应 Python: app/routes/analysis.py
+ */
+const express = require('express')
+const db = require('../db/init')
+const { sendSuccess, sendError } = require('../utils/response')
+const { loginRequired } = require('../middleware/auth')
+const { rateLimit } = require('../middleware/rateLimit')
+// 报错与告警一律走 utils/logger：console.* 只落 stdout，容器里那份不归本项目留档，
+// 事后按订单号/用户查不到痕迹（判据见 test/loggerDiscipline.test.js）
+const { error: logErr, warn: logWarn } = require('../utils/logger')
+const { gateBody, capJson, FORM_BLOB_LIMITS } = require('../middleware/bodyGate')
+const {
+  loadPrefill,
+  describeProfile,
+  loadTags,
+  saveArchive,
+  saveDraft,
+  unrecordedNumCells,
+} = require('../services/profileArchive')
+const { clearFeedback } = require('../services/ruleFeedback')
+const { BODY_COLUMN_ORDER, strictNum, crossCheckErrors } = require('../services/bodyLimits')
+const { asId } = require('../utils/common')
+const { isValidFilename, deleteOwnedUpload } = require('../utils/uploads')
+const { DIAGNOSIS_QUESTIONS, diagnoseStyle } = require('../services/styleDiagnosis')
+
+const router = express.Router()
+
+// AI 分析类端点限流：每分钟最多 5 次（消耗 DashScope 额度）
+const aiLimiter = rateLimit({ windowMs: 60000, max: 5, message: '分析请求过于频繁，请稍后再试' })
+
+// 草稿自动保存：前端已防抖，这一层只挡脚本刷库
+const draftLimiter = rateLimit({ windowMs: 60000, max: 30, message: '保存太快了，稍一秒再存' })
+
+/** 提交面部分析（能力未开放） */
+router.post('/face', loginRequired, aiLimiter, (_req, res) => {
+  return sendError(res, '照片自动识别肤色/脸型尚未开放，请在表单中选择肤色与脸型', 501)
+})
+
+/** 获取面部分析结果 */
+router.get('/face/:photoId', loginRequired, (req, res) => {
+  try {
+    const photoId = asId(req.params.photoId)
+    if (photoId === null) return sendError(res, 'photoId 必须是正整数', 400)
+
+    const feature = db
+      .prepare(
+        'SELECT * FROM face_features WHERE photo_id = ? AND user_id = ? ORDER BY created_at DESC',
+      )
+      .get(photoId, req.user.id)
+
+    if (!feature) {
+      return sendError(res, '分析结果不存在', 404)
+    }
+
+    return sendSuccess(res, { feature })
+  } catch (err) {
+    logErr('[分析] 获取面部分析结果失败:', err)
+    return sendError(res, '获取分析结果失败', 500)
+  }
+})
+
+/**
+ * POST /body 数值档的生理范围界（DR1，10-19 蓝图 §5.3：老界 [50,300]／[20,500]
+ * 身高 300cm＋体重 20kg 照过，而且越界值被 safeNum 静默抹成 null，填的人不知道哪格被扔）。
+ * 10-23 第六十四轮把这张表**挪进 `services/bodyLimits.js`**：原来 `profileArchive.js` 的
+ * `BODY_FIELDS` 还握着第二把更松的尺子，而顾客真正走的写库路径是那条（见该文件头注释），
+ * 界留在本文件等于只收紧了没人走的那扇门。本路由只按 `BODY_COLUMN_ORDER` 逐格取值。
+ * BMI 12~50 与「腰围>胸围+15」两条交叉判据在 `crossCheckErrors()` 里。
+ */
+
+/**
+ * 校验分类文本参数，返回安全值或 null
+ * neck_length / body_type 存的是"短/中/长"、"梨形/苹果型"这类选项，不是数字。
+ * 拿数值尺子（原 safeNum，现 strictBodyNum）校验会把用户选的"短"读成 NaN ⇒ 误报 400；
+ * 直接绑原值又会在收到对象/数组时被 better-sqlite3 挡成 TypeError ⇒ 500。
+ * 与 profileArchive.cleanText 同一条尺子：只留 ≤40 字符的字符串。
+ */
+function cleanText(val) {
+  if (typeof val !== 'string') return null
+  const s = val.trim()
+  if (!s || s.length > 40) return null
+  return s
+}
+
+/** 提交身体指标 */
+router.post('/body', loginRequired, (req, res) => {
+  try {
+    const userId = req.user.id
+    const body = req.body || {}
+    // 交叉判据要拿"这次提交后档案会长什么样"来算，所以先读现状再校验。
+    // ⚠️ existing 必须保持"没有行就是 undefined"：下面 `if (existing)` 靠它分 INSERT/UPDATE 两条路，
+    // 在这行就 `|| {}` 会把新用户读成真对象 ⇒ 走 UPDATE 打在不存在的行上，静默丢整次提交（10-23 现量）。
+    // 合并视图另开一个 merged，只给交叉判据喂"没提交的格用档案旧值补"。
+    const existing = db.prepare('SELECT * FROM body_metrics WHERE user_id = ?').get(userId)
+    const merged = existing || {}
+
+    const cleaned = {}
+    const errors = []
+    for (const column of BODY_COLUMN_ORDER) {
+      const r = strictNum(column, body[column])
+      if (r.absent) continue
+      if (r.error) errors.push(r.error)
+      else cleaned[column] = r.value
+    }
+    cleaned.neck_length = cleanText(body.neck_length)
+    cleaned.body_type = cleanText(body.body_type)
+
+    // DR1 ③ 交叉合理性：单格都在界内不代表组合合理，交给同一条尺子的交叉判据。
+    // 这次没提交的格用档案旧值补——库里旧格虽是按老界收进来的，组合齐了才判，只拦新组合。
+    errors.push(...crossCheckErrors({ ...merged, ...cleaned }))
+    if (errors.length > 0) {
+      return sendError(res, `填的数里有不合常理的：${errors.join('；')}。请核对后再提交`, 400)
+    }
+
+    // 只写这次真的提交了的列:没带的列保留档案原值,与长期档案"只增不清"一致。
+    // 填歪的不再静默丢弃——上面已经拦下并回 400 点名哪一格（DR1，10-23 落）。
+    // 老逻辑无条件 UPDATE 全列 ⇒ 一次只发身高体重的局部提交,会把之前量好的三围、颈长清成 NULL。
+    const columns = Object.keys(cleaned).filter((c) => cleaned[c] !== null)
+
+    if (existing) {
+      if (columns.length > 0) {
+        db.prepare(
+          `UPDATE body_metrics SET ${columns.map((c) => `${c} = ?`).join(', ')},
+           updated_at = datetime('now') WHERE user_id = ?`,
+        ).run(...columns.map((c) => cleaned[c]), userId)
+      }
+    } else if (columns.length > 0) {
+      db.prepare(
+        `INSERT INTO body_metrics (user_id, ${columns.join(', ')})
+         VALUES (?, ${columns.map(() => '?').join(', ')})`,
+      ).run(userId, ...columns.map((c) => cleaned[c]))
+    }
+
+    // 回读整份现状:前端拿到的是"这次提交后库里到底是什么",而不是"这次发了什么"
+    const metric = db.prepare('SELECT * FROM body_metrics WHERE user_id = ?').get(userId) || {}
+    return sendSuccess(res, {
+      height_cm: metric.height_cm ?? null,
+      weight_kg: metric.weight_kg ?? null,
+      body_type: metric.body_type ?? null,
+      shoulder_width_cm: metric.shoulder_width_cm ?? null,
+      waist_cm: metric.waist_cm ?? null,
+      hip_cm: metric.hip_cm ?? null,
+      leg_length_ratio: metric.leg_length_ratio ?? null,
+      bust_cm: metric.bust_cm ?? null,
+      neck_length: metric.neck_length ?? null,
+    })
+  } catch (err) {
+    logErr('[分析] 保存身体指标失败:', err)
+    return sendError(res, '保存失败', 500)
+  }
+})
+
+/** 获取身体指标 */
+router.get('/body', loginRequired, (req, res) => {
+  try {
+    const metric = db.prepare('SELECT * FROM body_metrics WHERE user_id = ?').get(req.user.id)
+    return sendSuccess(res, { metric: metric || null })
+  } catch (err) {
+    logErr('[分析] 获取身体指标失败:', err)
+    return sendError(res, '获取失败', 500)
+  }
+})
+
+/** 获取长期档案（上次填的整份表单打底 + 草稿覆盖 + 身体面容档案收尾 + 已算出的标签，字段名与推荐表单一致，供前端预填） */
+router.get('/archive', loginRequired, (req, res) => {
+  try {
+    const profile = loadPrefill(req.user.id)
+    return sendSuccess(res, {
+      profile,
+      fields: describeProfile(profile),
+      tags: loadTags(req.user.id),
+      // 填了但被尺子拒掉的数值格（库里没有这些值；见 profileArchive.unrecordedNumCells 的注释）
+      not_recorded: unrecordedNumCells(profile),
+    })
+  } catch (err) {
+    logErr('[分析] 获取长期档案失败:', err)
+    return sendError(res, '获取失败', 500)
+  }
+})
+
+/** 存草稿：填了一半没点生成也替他记住，身体面容照旧写进档案列，整份表单写进草稿表 */
+router.put('/archive', loginRequired, draftLimiter, (req, res) => {
+  try {
+    const form = req.body || {}
+    if (typeof form !== 'object' || Array.isArray(form)) {
+      return sendError(res, '参数格式不对', 400)
+    }
+    // 整份表单最后会经 profileArchive.saveDraft 的 Object.entries(form) 序列化进
+    // profile_drafts.form_json——那一格原来只被 server.js 的 `express.json({limit:'10mb'})`
+    // 挡着，一条请求能塞 10 MB 进运行库。收口到 bodyGate 那份共用上限（现量依据在它的注释里）。
+    // ⚠️ 这里只量体积，⛔ 不改字段：数值格越界走的是 saveArchive 的"不写 + 点名"（rejected 清单），
+    // 那是自动保存的路，回 400 会把顾客已经填的东西一起卡住。
+    const fit = capJson(form, FORM_BLOB_LIMITS)
+    if (!fit.ok) return sendError(res, `这份表单存不下：${fit.reason}`, 400)
+    const saved = saveArchive(req.user.id, form)
+    const draft = saveDraft(req.user.id, form)
+    return sendSuccess(res, saved, draft ? '已保存' : '没有新内容要保存')
+  } catch (err) {
+    logErr('[分析] 保存草稿失败:', err)
+    return sendError(res, '保存失败', 500)
+  }
+})
+
+/**
+ * 删除我的全部数据：档案 + 草稿 + 标签 + 反馈 + 样本 + 照片 + 试穿结果 + 衣橱/化妆柜/配饰柜/搭配/心愿单
+ * + 创作者作品 + 脸型特征 + 衣物条目（含磁盘文件），一并清掉。
+ * 唯独不动 deposits / payment_orders：那是收付款凭证，出纠纷时要靠它对账，不归"清除个人数据"管。
+ */
+router.delete('/archive', loginRequired, (req, res) => {
+  try {
+    const userId = req.user.id
+    const sessionId = req.user.session_id
+
+    // 只以服务端登记的所有权台账为文件清单；用户可编辑 URL 不能自证归属。
+    // 清单必须在删行业务之前取，提交后再逐文件清理，失败时保留对应台账。
+    const ownedFiles = db
+      .prepare('SELECT filename FROM upload_files WHERE user_id = ? ORDER BY filename')
+      .all(userId)
+      .map((row) => row.filename)
+
+    // ★ 三张柜表的 session_id / user_id 两把钥匙都要删，避免只按 user_id 漏掉登录前记录。
+    const bothKeys = (table) => `DELETE FROM ${table} WHERE user_id = ? OR session_id = ?`
+    const delBody = db.prepare('DELETE FROM body_metrics WHERE user_id = ?')
+    const delFace = db.prepare('DELETE FROM face_profiles WHERE user_id = ?')
+    const delFaceFeatures = db.prepare('DELETE FROM face_features WHERE user_id = ?')
+    const delDraft = db.prepare('DELETE FROM profile_drafts WHERE user_id = ?')
+    const delTags = db.prepare('DELETE FROM profile_tags WHERE user_id = ?')
+    const delRecords = db.prepare('DELETE FROM recommendations WHERE user_id = ?')
+    const delTryon = db.prepare('DELETE FROM tryon_results WHERE user_id = ?')
+    const delPhotos = db.prepare('DELETE FROM photos WHERE user_id = ?')
+    const delWorks = db.prepare('DELETE FROM creator_works WHERE user_id = ?')
+    // 三柜 + 搭配 + 心愿单 + 推荐日志：两把钥匙都可能挂着我的行（见上面的 ★），
+    // 原来这六张只按 user_id 删 ⇒ 点「删除我的全部数据」后柜里的东西一条都没少
+    const delLogs = db.prepare(bothKeys('recommendation_logs'))
+    const delWardrobe = db.prepare(bothKeys('user_wardrobe'))
+    const delCosmetics = db.prepare(bothKeys('user_cosmetics'))
+    const delAccessories = db.prepare(bothKeys('user_accessories'))
+    const delOutfits = db.prepare(bothKeys('wardrobe_outfits'))
+    const delWishlist = db.prepare(bothKeys('shopping_wishlist'))
+    // clothing_items 只认 session_id，没有 user_id 列
+    const delClothing = db.prepare('DELETE FROM clothing_items WHERE session_id = ?')
+    const removed = db.transaction(() => ({
+      body: delBody.run(userId).changes,
+      face: delFace.run(userId).changes,
+      // face_features 外键引用 photos.id，必须排在清照片之前
+      face_features: delFaceFeatures.run(userId).changes,
+      draft: delDraft.run(userId).changes,
+      tags: delTags.run(userId).changes,
+      // 反馈要连带把规则的计数改回来，不能只删行
+      feedback: clearFeedback(userId),
+      logs: delLogs.run(userId, sessionId).changes,
+      // recommendations 与 tryon_results 都外键引用 photos，删除必须排在清照片之前
+      records: delRecords.run(userId).changes,
+      tryon: delTryon.run(userId).changes,
+      photos: delPhotos.run(userId).changes,
+      wardrobe: delWardrobe.run(userId, sessionId).changes,
+      cosmetics: delCosmetics.run(userId, sessionId).changes,
+      accessories: delAccessories.run(userId, sessionId).changes,
+      outfits: delOutfits.run(userId, sessionId).changes,
+      wishlist: delWishlist.run(userId, sessionId).changes,
+      works: delWorks.run(userId).changes,
+      clothing: delClothing.run(sessionId).changes,
+    }))()
+
+    // 业务事务提交后才碰文件系统；每个文件成功删除（或本来就不存在）才删它的台账。
+    // 被保留凭证/库存等其他记录共享的文件不删，台账也保留，避免误删与签名失联。
+    let files = 0
+    let filesFailed = 0
+    let sharedFiles = 0
+    for (const filename of ownedFiles) {
+      try {
+        if (!isValidFilename(filename)) throw new Error('非法上传文件名，拒绝清理')
+        const result = deleteOwnedUpload(filename, userId, db)
+        if (result.deleted) files += 1
+        if (result.shared) sharedFiles += 1
+      } catch (err) {
+        filesFailed += 1
+        logWarn('[档案] 删除上传文件或所有权台账失败:', filename, err.message)
+      }
+    }
+
+    if (filesFailed > 0) {
+      return sendError(
+        res,
+        `档案业务记录已删除，但 ${filesFailed} 个上传文件或台账清理失败，请重试或联系管理员`,
+        500,
+        'UPLOAD_CLEANUP_FAILED',
+      )
+    }
+
+    return sendSuccess(
+      res,
+      { ...removed, files, files_shared: sharedFiles },
+      '您的档案与相关记录已删除',
+    )
+  } catch (err) {
+    logErr('[分析] 删除长期档案失败:', err)
+    return sendError(res, '删除失败', 500)
+  }
+})
+
+// ==================== 风格诊断测试（借鉴邂逅时尚） ====================
+
+/** 获取风格诊断题目 */
+router.get('/style-questions', (_req, res) => {
+  return sendSuccess(res, { questions: DIAGNOSIS_QUESTIONS })
+})
+
+/** 提交风格诊断答案，返回风格类型 */
+router.post(
+  '/style-diagnose',
+  // services/styleDiagnosis.js:85 那句 `!answers || typeof answers !== 'object'` 挡得住字符串与数字，
+  // 但数组照样过（typeof [] === 'object'）：answers 传成 [] 时每道题都取不到值、
+  // 五项得分全 0，一路走到 200 回一份凭空挑出来的风格。数组在这一格同样是"传来的不是对象"，
+  // 前置挡掉，话术与别的入口统一。
+  gateBody({ objects: ['answers'] }),
+  (req, res) => {
+    try {
+      const { answers } = req.body || {}
+      const result = diagnoseStyle(answers)
+      if (!result) {
+        return sendError(res, '请至少回答一道题', 400)
+      }
+      return sendSuccess(res, result)
+    } catch (err) {
+      logErr('[风格诊断] 失败:', err)
+      return sendError(res, '诊断失败', 500)
+    }
+  },
+)
+
+module.exports = router

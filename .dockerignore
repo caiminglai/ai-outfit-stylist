@@ -1,0 +1,56 @@
+# ===== 依赖与构建产物 =====
+# 宿主机 node_modules 是 Windows 版，盖进镜像会让 better-sqlite3 的原生绑定失效
+**/node_modules
+# dist 在镜像内重新构建，避免把本机的旧产物烤进去
+app/dist
+# Playwright 项目内浏览器缓存与诊断可能超过 700MB，也不能进入镜像层
+.tmp/
+app/.tmp/
+**/.tmp/
+
+# ===== 运行时数据（全部走 compose 挂载，不该进镜像）=====
+backend/db/*.db
+backend/db/*.db-shm
+backend/db/*.db-wal
+backend/uploads
+backend/logs
+
+# ===== 密钥与证书（仓库与镜像都是公开的）=====
+.env
+.env.*
+**/.env
+**/.env.*
+# 示例文件不含真实凭据，必须保留给安装与 Compose 使用
+!.env.example
+!backend/.env.example
+**/*.pem
+**/*.key
+**/*.p12
+**/*.pfx
+**/certs
+**/certificates
+
+# ===== 模型文件（只允许项目自产 CC0 演示资产；第三方本机模型不进构建上下文）=====
+models/*
+!models/demo/
+models/demo/*
+!models/demo/PortfolioBot.pmx
+!models/demo/LICENSE.md
+
+# ===== 版本控制与编辑器 =====
+.git
+**/.gitignore
+**/.vscode
+**/.history
+
+# ===== 容器里用不到的本机脚本与文档 =====
+dev.bat
+npm-patch.js
+**/*.md
+# 许可与来源文件必须随分发资产进入镜像
+!NOTICE.md
+!models/demo/LICENSE.md
+!backend/vendor/makehuman/LICENSE.md
+!backend/vendor/makehuman/PROVENANCE.md
+!backend/vendor/lunar/LICENSE
+!backend/vendor/lunar/NOTICE.txt

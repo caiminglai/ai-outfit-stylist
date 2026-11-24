@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- 站3 · 第十四阶段·组3：只收录面向顾客、且无需登录态的三页。
+     判据见 docs/依据/22-用户体验与商业模式输入输出规范-20261022.md §十二.9c。
+     ⛔ 不放 /pay.html（付款页，robots 里已 noindex）、⛔ 不放 /creator.html（创作者后台）、
+     ⛔ 不放 /models/**（模型二进制）与 /uploads/**（顾客实拍图）。
+     <lastmod> 是本页内容实际改动的日期，不是构建日期。 -->
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url>
+    <loc>https://style.sparklove.cn/</loc>
+    <lastmod>2026-10-22</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>1.0</priority>
+  </url>
+  <url>
+    <loc>https://style.sparklove.cn/gallery</loc>
+    <lastmod>2026-10-22</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.9</priority>
+  </url>
+  <url>
+    <loc>https://style.sparklove.cn/how-it-works.html</loc>
+    <lastmod>2026-10-22</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+</urlset>

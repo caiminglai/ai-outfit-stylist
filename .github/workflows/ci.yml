@@ -1,0 +1,269 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  frontend:
+    name: Frontend (app)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: app
+
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      # 快速失败：格式、类型和静态检查先于较慢的测试与构建。
+      - name: Format check
+        run: npm run format:check
+
+      - name: Dependency audit
+        run: npm audit --audit-level=high
+
+      - name: Type check
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Unit test
+        run: npm test
+
+      - name: Build
+        run: npm run build
+
+  backend:
+    name: Backend
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci --ignore-scripts --no-audit --no-fund
+
+      - name: Format check
+        run: npm run format:check
+
+      - name: Dependency audit
+        run: npm audit --audit-level=high
+
+      - name: Lint
+        run: npm run lint
+
+      # 测试运行器从 schema 与种子创建临时 SQLite 库，不读取本机运行库。
+      - name: Unit test
+        run: npm test
+
+      - name: OpenAPI spec is up to date
+        run: npm run openapi:check
+
+      - name: Web assets check
+        run: npm run assets:check
+
+      # 该脚本是体检报告，不是阈值门禁；保留步骤以发现脚本自身故障。
+      - name: Locator health (report only)
+        run: |
+          node scripts/check-locators.js > "$RUNNER_TEMP/locators.txt"
+          cat "$RUNNER_TEMP/locators.txt"
+          {
+            echo '### 行号定位符体检（只报不拦）'
+            echo ''
+            echo '```'
+            grep -E '^(\[定位符体检\] 扫描面| *第[一二三]向（| *(续号)?要动按引用方拆)' "$RUNNER_TEMP/locators.txt"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  windows:
+    name: Windows clean install and tests
+    runs-on: windows-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: |
+            app/package-lock.json
+            backend/package-lock.json
+
+      - name: Install frontend dependencies on Windows
+        run: npm ci --no-audit --no-fund
+        working-directory: app
+
+      - name: Install backend dependencies on Windows
+        # npm 会因 binding.gyp 自动尝试源码编译；使用包内预编译绑定，跳过 Python/node-gyp。
+        run: npm ci --ignore-scripts --no-audit --no-fund
+        working-directory: backend
+
+      - name: Frontend Windows checks
+        run: |
+          npm run typecheck
+          npm run lint
+          npm test
+          npm run build
+        working-directory: app
+
+      # A clean install plus the real backend suite proves the bundled native
+      # SQLite binding loads on Windows, without requiring Python or node-gyp.
+      - name: Backend Windows tests
+        run: npm test
+        working-directory: backend
+
+  docker-smoke:
+    name: Docker build and health smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Validate Compose configuration
+        run: docker compose config --quiet
+
+      - name: Build production image
+        run: docker build --tag styleai:ci .
+
+      # 镜像只含仓库自有 CC0 演示模型；不挂空模型卷，以免遮住镜像内的演示资产。
+      - name: Start isolated container and probe health and demo model
+        run: |
+          docker run -d --name styleai-ci \
+            -p 127.0.0.1:5001:5000 \
+            -e NODE_ENV=production \
+            -e SECRET_KEY="$(openssl rand -hex 32)" \
+            -e ADMIN_PASSWORD="$(openssl rand -base64 24)" \
+            -e STYLEAI_DB_PATH=/tmp/styleai-ci.db \
+            -e STYLEAI_UPLOAD_DIR=/tmp/styleai-ci-uploads \
+            -e DASHSCOPE_API_KEY= \
+            -e LLM_API_BASE= \
+            -e LLM_API_KEY= \
+            -e LLM_MODEL= \
+            -e TRYON_API_URL= \
+            -e TRYON_API_KEY= \
+            -e TRYON_MODEL= \
+            -e WXPAY_MCHID= \
+            -e WXPAY_SERIAL_NO= \
+            -e WXPAY_APIV3_KEY= \
+            -e WXPAY_PUBLIC_KEY_ID= \
+            -e WXPAY_PRIVATE_KEY_PATH= \
+            -e WXPAY_PUBLIC_KEY_PATH= \
+            -e WXPAY_NOTIFY_URL= \
+            -e WXPAY_APPID= \
+            -e ALIPAY_APP_ID= \
+            -e ALIPAY_PRIVATE_KEY_PATH= \
+            -e ALIPAY_PUBLIC_KEY_PATH= \
+            -e ALIPAY_NOTIFY_URL= \
+            -e ALIPAY_RETURN_URL= \
+            -e ALIPAY_SELLER_ID= \
+            styleai:ci
+          ready=0
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent --show-error http://127.0.0.1:5001/health; then
+              ready=1
+              break
+            fi
+            sleep 2
+          done
+          if [ "$ready" -ne 1 ]; then
+            docker logs styleai-ci
+            exit 1
+          fi
+          docker exec styleai-ci node -e "(async()=>{const r=await fetch('http://127.0.0.1:5000/api/models/list');const b=await r.json();const list=Array.isArray(b)?b:(b.models||b.data||[]);console.log(JSON.stringify({models:list.length}));if(!r.ok||list.length!==1)process.exit(1)})()"
+
+      - name: Show container logs on failure
+        if: failure()
+        run: docker logs styleai-ci || true
+
+      - name: Remove smoke container
+        if: always()
+        run: docker rm -f styleai-ci || true
+
+  playwright:
+    name: Playwright browser smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/app/.tmp/playwright-browsers
+    defaults:
+      run:
+        working-directory: app
+
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: |
+            app/package-lock.json
+            backend/package-lock.json
+
+      - name: Install frontend dependencies
+        run: |
+          npm ci --no-audit --no-fund
+          rm -rf node_modules/@playwright/test node_modules/playwright node_modules/playwright-core
+
+      - name: Install backend dependencies
+        run: npm ci --ignore-scripts --no-audit --no-fund
+        working-directory: backend
+
+      - name: Build real frontend assets
+        run: |
+          npm ci --no-audit --no-fund
+          npm run build
+
+      - name: Install project-local Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Playwright teardown regression
+        run: node --test ../scripts/playwright-cleanup.test.cjs
+
+      # 根配置从 schema/种子创建临时库，只登记 PortfolioBot，并使用明显的测试凭据。
+      - name: Run browser smoke
+        run: npm run test:e2e
+
+      - name: Upload Playwright diagnostics
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: playwright-diagnostics
+          path: |
+            .tmp/playwright-report/
+            .tmp/playwright-results/
+          if-no-files-found: ignore
+          retention-days: 7

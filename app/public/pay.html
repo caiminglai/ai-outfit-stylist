@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex,nofollow"><meta name="description" content="付款与付款凭证提交入口：本页只在下单后使用，不需要被搜索收录。">
+  <title>付款与凭证提交 — 私人形象定制AI</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; background: #12141a; color: #e8eaf0; min-height: 100vh; padding: 20px 16px 60px; }
+    .wrap { max-width: 520px; margin: 0 auto; }
+    h1 { font-size: 20px; margin-bottom: 6px; }
+    .sub { color: #8b93a7; font-size: 13px; line-height: 1.6; margin-bottom: 20px; }
+    .card { background: #1b1f28; border: 1px solid #2a3040; border-radius: 12px; padding: 18px; margin-bottom: 16px; }
+    .price { font-size: 30px; font-weight: 700; color: #ffd479; }
+    .price small { font-size: 14px; color: #8b93a7; font-weight: 400; margin-left: 6px; }
+    .tabs { display: flex; gap: 8px; margin: 16px 0 12px; }
+    .tab { flex: 1; padding: 10px; text-align: center; border-radius: 8px; border: 1px solid #2a3040; background: #14171f; color: #a8b0c2; font-size: 14px; cursor: pointer; }
+    .tab.on { background: #24304a; border-color: #3d5a8a; color: #dbe6f8; }
+    .qr { display: none; text-align: center; }
+    .qr.on { display: block; }
+    .qr img { width: 240px; max-width: 80%; border-radius: 10px; background: #fff; padding: 8px; }
+    .qr p { font-size: 12px; color: #8b93a7; margin-top: 8px; }
+    label { display: block; font-size: 13px; color: #a8b0c2; margin: 14px 0 6px; }
+    input[type=file] { width: 100%; font-size: 13px; color: #a8b0c2; }
+    button.act { width: 100%; margin-top: 14px; padding: 12px; border: 0; border-radius: 8px; background: #ffd479; color: #2a220a; font-size: 15px; font-weight: 600; cursor: pointer; }
+    button.act:disabled { opacity: .5; cursor: not-allowed; }
+    .row { display: flex; align-items: center; justify-content: space-between; font-size: 13px; padding: 7px 0; border-bottom: 1px solid #242a37; }
+    .row:last-child { border-bottom: 0; }
+    .row span:first-child { color: #8b93a7; }
+    .badge { padding: 2px 9px; border-radius: 20px; font-size: 12px; }
+    .b-pending { background: #3a3218; color: #ffd479; }
+    .b-approved { background: #1c3526; color: #7ddba3; }
+    .b-rejected { background: #3a1f22; color: #ff9ba1; }
+    .msg { font-size: 13px; margin-top: 10px; min-height: 18px; }
+    .msg.err { color: #ff9ba1; }
+    .msg.ok { color: #7ddba3; }
+    .note { font-size: 12px; color: #6f7789; line-height: 1.7; }
+    .alt { font-size: 12px; color: #8ab4f8; margin-top: 8px; cursor: pointer; }
+    a { color: #8ab4f8; }
+    /* 窄屏真点一遍补正（只新增，不改上面任何一条）。证据：工装 gate-logs/tap-other-before.json，
+       390×844 实测 input#proof 高 25px、它的 label 高 17px、返回展厅链接高 16px，都够不上 24px 点击下限。 */
+    @media (max-width: 480px) {
+      label { min-height: 24px; line-height: 24px; }
+      input[type=file] { min-height: 44px; }
+      .note a { display: inline-block; min-height: 24px; line-height: 24px; padding: 2px 8px; }
+    }
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <h1>付款与凭证提交</h1>
+  <p class="sub">点「一键付款」在线支付，付完本页会自动确认到账。<b>到账后回展厅首页，「我的报告」里就能领取这份深度细账</b>（一笔一份，可以反复打开；价格以下面那个大字金额为准，本页文案不另写一份）。<br />备用收款码默认收起：需要扫码转账时点「显示备用收款码」，上传付款截图后由我们人工确认——<b>确认后同样在「我的报告」里自助领，不用等客服</b>。</p>
+
+  <div class="card">
+    <div class="price" id="price">—<small id="price-title"></small></div>
+    <div class="tabs">
+      <div class="tab on" data-ch="wechat">微信支付</div>
+      <div class="tab" data-ch="alipay">支付宝</div>
+    </div>
+    <div class="qr on" id="qr-wechat">
+      <button class="act" id="wechat-pay" style="display:none">微信扫码付款</button>
+      <div class="msg" id="wechat-msg"></div>
+      <div id="wechat-qr"></div>
+      <div id="wechat-fallback"><img alt="微信收款码" src="/wechat-qr.png"><p>扫这个码付款，付完在本页上传付款截图，我们人工确认后你就能回展厅「我的报告」领取这份细账</p></div>
+      <p class="alt" id="wechat-alt" style="display:none">显示备用收款码</p>
+    </div>
+    <div class="qr" id="qr-alipay">
+      <button class="act" id="alipay-pay" style="display:none">支付宝一键付款</button>
+      <div class="msg" id="alipay-msg"></div>
+      <div id="alipay-fallback"><img alt="支付宝收款码" src="/alipay-qr.png"><p>扫这个码付款，付完在本页上传付款截图，我们人工确认后你就能回展厅「我的报告」领取这份细账</p></div>
+      <p class="alt" id="alipay-alt" style="display:none">显示备用收款码</p>
+    </div>
+  </div>
+
+  <div class="card">
+    <label for="proof">付款截图（jpg / png / webp，10MB 以内）</label>
+    <input type="file" id="proof" accept="image/jpeg,image/png,image/webp">
+    <button class="act" id="submit">提交凭证</button>
+    <div class="msg" id="msg"></div>
+  </div>
+
+  <div class="card">
+    <div class="row"><span>当前状态</span><span id="my-status">未提交</span></div>
+    <div class="row"><span>金额</span><span id="my-amount">—</span></div>
+    <div class="row"><span>提交时间</span><span id="my-time">—</span></div>
+    <div class="row"><span>备注</span><span id="my-note">—</span></div>
+  </div>
+
+  <p class="note">两枚按钮都走商户号，付完本页自动确认到账。如果点了按钮没出现付款页，说明这一路收款还没开通——点上面的「显示备用收款码」扫码转账，再用下面的「提交凭证」由我们人工确认。</p>
+  <p class="note"><a href="/">返回展厅</a></p>
+</div>
+
+<script src="/qrcode.js"></script>
+<script>
+/* 本页的支付身份：优先沿用展厅 SPA 那一个，读不到才自己注册游客号。
+   账号身份只读共享槽；只有“本次确实带着当前账号 session”的请求收到 401，
+   才清掉那个账号并广播失效事件。游客 401 轮换则把新身份写回共享槽，
+   确保立即重试和下一次请求不会又拆成两个游客。 */
+var SID_KEY = 'style_ai_guest',
+  TS_KEY = 'style_ai_guest_ts',
+  SPA_ACCOUNT_KEY = 'style_ai_account',
+  SPA_SID_KEY = 'style_ai_session',
+  SPA_TS_KEY = 'style_ai_session_ts',
+  SID_RE = /^[A-Za-z0-9_-]{8,64}$/,
+  guestRegistration = null;
+
+function esc(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+    return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+  });
+}
+
+/* 展厅那边的身份：登录了就是账号的 session_id，没登录是本地生成的游客 sess_ 号 */
+function readSpaAccountSession() {
+  try {
+    var raw = localStorage.getItem(SPA_ACCOUNT_KEY);
+    if (raw) {
+      var acc = JSON.parse(raw);
+      if (acc && SID_RE.test(acc.sessionId || '')) return acc.sessionId;
+    }
+  } catch (e) {
+    /* 键被老版本写坏 ⇒ 当没登录 */
+  }
+  return '';
+}
+
+function readSpaSession() {
+  var accountSid = readSpaAccountSession();
+  if (accountSid) return accountSid;
+  var sid = localStorage.getItem(SPA_SID_KEY);
+  return sid && SID_RE.test(sid) ? sid : '';
+}
+
+function clearExpiredAccount(sessionId) {
+  var current = readSpaAccountSession();
+  if (!current || current !== sessionId) return false;
+  localStorage.removeItem(SPA_ACCOUNT_KEY);
+  if (localStorage.getItem(SPA_SID_KEY) === sessionId) localStorage.removeItem(SPA_SID_KEY);
+  if (localStorage.getItem(SID_KEY) === sessionId) {
+    localStorage.removeItem(SID_KEY);
+    localStorage.removeItem(TS_KEY);
+  }
+  /* 账号已失效，继续按旧订单轮询只会一直 401，并可能把后续请求带到另一身份。 */
+  if (typeof orders !== 'undefined') Object.keys(orders).forEach(stopPoll);
+  window.dispatchEvent(new CustomEvent('style-ai-account-change', {
+    detail: { account: null, reason: 'unauthorized' },
+  }));
+  return true;
+}
+
+/* 首访注册与 401 轮换共用同一个在途 Promise：付款页的初始化、提交和查单可以同时失败，
+   但同一轮只能注册一个游客，所有重试必须落在同一个已持久化身份上。 */
+function registerGuestSession() {
+  if (guestRegistration) return guestRegistration;
+  var sharedBefore = localStorage.getItem(SPA_SID_KEY);
+  var localBefore = localStorage.getItem(SID_KEY);
+  var pending = (async function () {
+    var res = await fetch('/api/auth/guest', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
+    });
+    var data = await res.json();
+    if (!data.success) throw new Error('游客身份注册失败');
+    /* 注册期间登录了账号，就不能把游客请求悄悄换成账号请求，也不能污染账号身份。 */
+    if (readSpaAccountSession()) throw new Error('账号已切换,请刷新后重试');
+    var sid = data.data.session_id;
+    var sharedNow = localStorage.getItem(SPA_SID_KEY);
+    var localNow = localStorage.getItem(SID_KEY);
+    /* 别的标签页先写入了较新的身份，就以共享槽为准；没有共享槽时才认较新的本地游客。
+       本页较晚返回的注册结果不能把这两个身份再次拆开。 */
+    if (sharedNow && sharedNow !== sharedBefore) sid = sharedNow;
+    else if (!sharedNow && localNow && localNow !== localBefore) sid = localNow;
+    var now = String(Date.now());
+    /* 若本次轮换的是展厅共享游客，必须把新 id 写回下一次会优先读取的共享槽；
+       注册期间共享槽若被别的标签页改过，则保留那个较新的值。 */
+    if (sharedBefore && sharedNow === sharedBefore) {
+      localStorage.setItem(SPA_SID_KEY, sid);
+      localStorage.setItem(SPA_TS_KEY, now);
+    }
+    localStorage.setItem(SID_KEY, sid);
+    localStorage.setItem(TS_KEY, now);
+    return sid;
+  })();
+  guestRegistration = pending;
+  /* 成功或失败都要摘掉在途句柄；用 then 的第二个参数接住拒绝，避免 finally 产生未处理 Promise。 */
+  pending.then(
+    function () {
+      if (guestRegistration === pending) guestRegistration = null;
+    },
+    function () {
+      if (guestRegistration === pending) guestRegistration = null;
+    },
+  );
+  return pending;
+}
+
+async function ensureSession(force) {
+  var accountSid = readSpaAccountSession();
+  if (accountSid) return accountSid;
+  if (force) return registerGuestSession();
+  var shared = readSpaSession();
+  if (shared) return shared;
+  var sid = localStorage.getItem(SID_KEY);
+  if (sid) return sid;
+  return registerGuestSession();
+}
+
+async function api(path, opts) {
+  opts = opts || {};
+  opts.headers = opts.headers || {};
+  var accountSid = readSpaAccountSession();
+  opts.headers['X-Session-Id'] = await ensureSession();
+  var res = await fetch(path, opts);
+  if (res.status === 401) {
+    if (accountSid) {
+      if (clearExpiredAccount(accountSid)) {
+        setMsg('登录已过期,请返回展厅重新登录', 'err');
+        throw new Error('登录已过期,请返回展厅重新登录');
+      }
+      throw new Error('账号已切换,请刷新后重试');
+    }
+    if (readSpaAccountSession()) throw new Error('账号已切换,请刷新后重试');
+    opts.headers['X-Session-Id'] = await ensureSession(true);
+    res = await fetch(path, opts);
+  }
+  return res.json();
+}
+
+function setMsg(text, cls) {
+  var el = document.getElementById('msg');
+  el.textContent = text;
+  el.className = 'msg' + (cls ? ' ' + cls : '');
+}
+
+function showMine(row) {
+  // GET /api/payment/my 现在没有凭证也回对象（带 entitlement），所以判空要看 status 而不是判 row
+  if (!row || !row.status) return;
+  var map = { pending: ['待确认', 'b-pending'], approved: ['已确认', 'b-approved'], rejected: ['未通过', 'b-rejected'] };
+  var st = map[row.status] || [row.status, 'b-pending'];
+  document.getElementById('my-status').innerHTML = '<span class="badge ' + st[1] + '">' + esc(st[0]) + '</span>';
+  document.getElementById('my-amount').textContent = '¥' + Number(row.amount).toFixed(2);
+  document.getElementById('my-time').textContent = row.created_at || '—';
+  document.getElementById('my-note').textContent = row.admin_note || '—';
+}
+
+/* 在线付款：后端把密钥配齐才通电（cfg.alipay_web / cfg.wechat_native）。
+   没通电时这两枚按钮一直 display:none，本页行为跟接商户号之前一字不差。 */
+var CHANNELS = {
+  alipay: { orderEp: '/api/payment/alipay/order', urlKey: 'pay_url', again: '重新打开支付宝付款页' },
+  wechat: { orderEp: '/api/payment/order', urlKey: 'code_url', again: '重新显示微信收款码' },
+};
+var orders = { alipay: { no: '', url: '', timer: null, tries: 0 }, wechat: { no: '', url: '', timer: null, tries: 0 } };
+
+function setOnlineMsg(ch, html, cls) {
+  var el = document.getElementById(ch + '-msg');
+  el.innerHTML = html;
+  el.className = 'msg' + (cls ? ' ' + cls : '');
+}
+
+function stopPoll(ch) {
+  var o = orders[ch];
+  if (o.timer) {
+    clearInterval(o.timer);
+    o.timer = null;
+  }
+}
+
+/* 支付宝跳收银台，微信在本页出码；重复点按钮都回到同一笔订单，不再建第二单 */
+function showPayPage(ch) {
+  var o = orders[ch];
+  if (ch === 'wechat') {
+    drawWxQr(o.url);
+    setOnlineMsg(ch, '用微信「扫一扫」扫上面的码付款，付完这页会自动确认到账。');
+    return;
+  }
+  var win = window.open(o.url, '_blank');
+  setOnlineMsg(
+    ch,
+    win
+      ? '已在新窗口打开支付宝收银台，付完这页会自动确认到账。'
+      : '浏览器拦住了新窗口，请手动点：<a href="' + esc(o.url) + '" target="_blank" rel="noopener">打开支付宝付款</a>',
+  );
+}
+
+/* 查单接口内部会再向渠道兜底问一次，所以回调万一丢了也不影响这里确认到账 */
+function pollOrder(ch) {
+  var o = orders[ch];
+  if (o.timer) return; o.tries = 0; // 🔴 10-22 组4 真钱测单抓到的：tries 从前一次轮询里带着 60 的余值过来、这里不清零 ⇒ 顾客点「重新打开支付宝付款页」时 pollOrder 一进门就命中 tries>60 自己停掉，付了钱页面也不会再自动确认。清零只在"真的新起一个计时器"之后做（上面那句 return 挡掉重复挂表的情况）。
+  o.timer = setInterval(async function () {
+    if (!o.no) return;
+    if (++o.tries > 400) { // 400×3s＝20 分钟，刻意短于后端 ORDER_TTL_MINUTES=30 分（routes/payment.js:76），让下面那条 closed 分支先够得着；⚠️ 这个口本就豁免在总闸外（server.js 的 skip 里 /api/payment/order/），3 秒一次＝20 次/分，仍在它自己那道 orderQueryLimiter 40 次/分以内。
+      stopPoll(ch);
+      setOnlineMsg(ch, '还没查到到账。确实付成功的话，稍后刷新本页即可；也可以先用下面的「提交凭证」。');
+      return;
+    }
+    try {
+      var d = await api('/api/payment/order/' + encodeURIComponent(o.no));
+      if (d.success && d.data.status === 'paid') {
+        stopPoll(ch);
+        setOnlineMsg(ch, '已到账 ¥' + esc(Number(d.data.amount).toFixed(2)) + '，回展厅首页点「我的报告」即可领取这份细账。', 'ok');
+        await loadMine();
+        return;
+      }
+      // 超过 30 分钟没付完的单会被后端关掉（routes/payment.js 的 closeStaleOrders）。
+      // 这里必须把本地这单清干净，否则「重新打开付款页」会把人送回一张已经作废的码。
+      if (d.success && d.data.status === 'closed') {
+        stopPoll(ch);
+        o.no = '';
+        o.url = '';
+        o.closed = true;
+        var payBtn = document.getElementById(ch + '-pay');
+        if (o.label) payBtn.textContent = o.label;
+        setOnlineMsg(ch, '这单已超时关闭，请重新下单。', 'err');
+      }
+    } catch (e) {
+      /* 查单偶发失败就下一轮再试，别把按钮和提示打断 */
+    }
+  }, 3000);
+}
+
+/* code_url 是纯 ASCII（weixin://wxpay/bizpayurl?pr=xxx），用 vendor 进来的 qrcode-generator 现场画 */
+function drawWxQr(codeUrl) {
+  var qr = qrcode(0, 'M');
+  qr.addData(codeUrl);
+  qr.make();
+  // 只传 cellSize：第二参是像素边距，缺省 cellSize*4 才够二维码标准要求的 4 模块静区
+  document.getElementById('wechat-qr').innerHTML =
+    '<img alt="微信支付二维码" src="' + qr.createDataURL(8) + '"><p>这是商户号收款码，扫一扫即可付款</p>';
+  document.getElementById('wechat-fallback').style.display = 'none';
+}
+
+function bindPayButton(ch) {
+  document.getElementById(ch + '-pay').addEventListener('click', async function () {
+    var btn = this;
+    var o = orders[ch];
+    // o.closed：这一单已被后端超时关闭 ⇒ 不能 reuse，必须重新下单（见 pollOrder 里那段）
+    if (o.url && !o.closed) {
+      showPayPage(ch); pollOrder(ch); // 🔴 10-22 组4：这一支原来只重开收银台、不重新起轮询（pollOrder 一次都没调）⇒ 上一轮询到点停了之后，这一单就算付了钱本页也永远不再确认到账。
+      return;
+    }
+    btn.disabled = true;
+    setOnlineMsg(ch, '正在创建订单…');
+    try {
+      var d = await api(CHANNELS[ch].orderEp, { method: 'POST' });
+      if (!d.success) throw new Error((d.error && d.error.message) || '下单失败');
+      o.no = d.data.out_trade_no;
+      o.url = d.data[CHANNELS[ch].urlKey];
+      o.closed = false;
+      btn.textContent = CHANNELS[ch].again;
+      showPayPage(ch);
+      pollOrder(ch);
+    } catch (e) {
+      setOnlineMsg(ch, esc(e.message || '下单失败'), 'err');
+    } finally {
+      btn.disabled = false;
+    }
+  });
+}
+
+function revealPay(ch, label, amount) {
+  var btn = document.getElementById(ch + '-pay');
+  btn.textContent = label + ' ¥' + Number(amount).toFixed(2);
+  // 存下原始按钮文案：超时关单后要把它换回来（pollOrder 里的 closed 分支）
+  orders[ch].label = btn.textContent;
+  btn.style.display = 'block';
+  // 在线路通电了就把个人收款码收起，免得同屏两张码让人不知道该扫哪个
+  document.getElementById(ch + '-fallback').style.display = 'none';
+  document.getElementById(ch + '-alt').style.display = 'block';
+}
+
+['wechat', 'alipay'].forEach(function (ch) {
+  document.getElementById(ch + '-alt').addEventListener('click', function () {
+    document.getElementById(ch + '-fallback').style.display = 'block';
+    this.style.display = 'none';
+  });
+});
+
+bindPayButton('alipay');
+bindPayButton('wechat');
+
+function activateTab(ch) {
+  document.querySelectorAll('.tab').forEach(function (t) {
+    t.classList.toggle('on', t.dataset.ch === ch);
+  });
+  document.querySelectorAll('.qr').forEach(function (q) {
+    q.classList.toggle('on', q.id === 'qr-' + ch);
+  });
+}
+
+document.querySelectorAll('.tab').forEach(function (tab) {
+  tab.addEventListener('click', function () {
+    activateTab(tab.dataset.ch);
+  });
+});
+
+document.getElementById('submit').addEventListener('click', async function () {
+  var btn = this;
+  var file = document.getElementById('proof').files[0];
+  if (!file) return setMsg('请先选择付款截图', 'err');
+  // 与后端 middleware/upload.js 同一条上限（multer memoryStorage 10MB）：本机先挡住，
+  // 免得整张手机截图传上去才换一句 400。accept 已经限了 jpeg/png/webp，这里只补体积。
+  if (file.size > 10 * 1024 * 1024) return setMsg('截图超过 10 MB，请压缩后再传', 'err');
+  btn.disabled = true;
+  setMsg('上传中…');
+  try {
+    var fd = new FormData();
+    fd.append('file', file);
+    fd.append('channel', document.querySelector('.tab.on').dataset.ch);
+    var data = await api('/api/payment/deposit', { method: 'POST', body: fd });
+    if (!data.success) throw new Error((data.error && data.error.message) || data.message || '提交失败');
+    setMsg('已提交，等待人工确认（编号 ' + data.data.id + '）', 'ok');
+    document.getElementById('proof').value = '';
+    await loadMine();
+  } catch (e) {
+    setMsg(e.message || '提交失败', 'err');
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+async function loadMine() {
+  try {
+    var data = await api('/api/payment/my');
+    if (data.success && data.data) showMine(data.data);
+  } catch (e) { /* 首访无凭证，忽略 */ }
+}
+
+(async function init() {
+  try {
+    var cfg = await (await fetch('/api/payment/qrcodes')).json();
+    if (cfg.success) {
+      document.getElementById('price').firstChild.nodeValue = '¥' + Number(cfg.data.amount).toFixed(2);
+      document.getElementById('price-title').textContent = cfg.data.title;
+      if (cfg.data.alipay_web) revealPay('alipay', '支付宝一键付款', cfg.data.amount);
+      if (cfg.data.wechat_native) revealPay('wechat', '微信扫码付款', cfg.data.amount);
+      // 默认停在真正能付的那一档，别让访客一进来就落在没开通的渠道上
+      var live = cfg.data.wechat_native ? 'wechat' : cfg.data.alipay_web ? 'alipay' : '';
+      if (live) activateTab(live);
+    }
+    await loadMine();
+  } catch (e) {
+    setMsg('页面初始化失败：' + e.message, 'err');
+  }
+})();
+</script>
+</body>
+</html>

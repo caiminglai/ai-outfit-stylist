@@ -1,0 +1,99 @@
+# 环境与密钥
+.env
+.env.*
+!.env.example
+!backend/.env.example
+*.key
+*.pem
+
+# Node.js
+node_modules/
+dist/
+app/dist/
+
+# 数据库(默认不入库:WAL 伴生文件、备份、以及新建的运行时库)
+*.db-shm
+*.db-wal
+*.sqlite3
+*.db
+# 唯一放行的是从 schema/种子生成、经隐私断言的公开演示快照。
+!backend/db/styleai.db
+*.bak
+*.bak.*
+
+# backend/db/styleai.db 不是运行库：只含规则、库存分类和 PortfolioBot 演示登记。
+# 本地开发、测试和部署必须用 STYLEAI_DB_PATH 指向独立运行库；测试库在系统临时目录重建。
+# 更新公开快照用 node backend/scripts/generate-demo-db.js --replace，随后必须 --check。
+
+# 上传文件
+backend/uploads/
+
+# 维护脚本产物
+backend/scripts/scan-report.json
+
+# 日志
+*.log
+backend/logs/
+
+# 模型文件(体积大,不纳入 git,本地存放即可；仅放行项目自产 CC0 演示资产)
+models/*
+!models/.gitkeep
+!models/demo/
+models/demo/*
+!models/demo/PortfolioBot.pmx
+!models/demo/LICENSE.md
+
+# 构建产物日志
+build-out.log
+build-err.log
+backend-out.log
+backend-err.log
+
+# IDE
+.vscode/
+.idea/
+
+# 系统文件
+.DS_Store
+Thumbs.db
+
+# TRAE SOLO CN 虚拟文件系统目录(重解析点)
+Administrator/
+AppData/
+
+# 编辑器本地历史
+.history/
+
+# 临时编译目录与 Playwright 项目内缓存/报告
+.tmp-better-sqlite3/
+.tmp/
+app/.tmp/
+
+# AI工具配置
+CLAUDE.md
+# Office 锁文件（Word/Excel 打开时同目录生成的 ~$xxx.docx，162B 垃圾件，永不入库）
+~$*
+
+# 论文与通俗出版物扫描件只在本机留存，永不进入公开仓库。
+# 下面的历史文件名保留作来源提示；整目录规则确保任何新增扫描件也不会误入库。
+docs/依据/papers/Color me beautiful  discover your natural beauty through the colors that make you look great  feel fabulous (Jackson, Carole, 1942-) (z-library.sk, 1lib.sk, z-lib.sk).pdf
+docs/依据/papers/THE SCIENCE OF SEXY.pdf
+docs/依据/papers/完美形体服饰搭配圣经 (布拉德利·拜尤) (z-library.sk, 1lib.sk, z-lib.sk).pdf
+# 历史文件名可能随本机整理变化；真正生效的是下方整目录忽略规则。
+docs/依据/papers/Dressing your truth  discover your type of beauty (Tuttle, Carol, author) (z-library.sk, 1lib.sk, z-lib.sk).pdf
+docs/依据/papers/Dressing Your Truth Discover Your Type of Beauty (Carol Tuttle) (z-library.sk, 1lib.sk, z-lib.sk).pdf
+docs/依据/papers/The triumph of individual style  a guide to dressing your body, your beauty, your self (Mathis, Carla Mason, Connor, Helen Villa) (z-library.sk, 1lib.sk, z-lib.sk).pdf
+
+# 历史文件名可能随本机整理变化；真正生效的是下方整目录忽略规则。
+docs/依据/papers/1.The Science of Sexy.pdf
+docs/依据/papers/2.Color me beautiful.pdf
+docs/依据/papers/3.Dressing Your Truth Discover Your Personal of Beauty Profile.pdf
+docs/依据/papers/3.完美形体服饰搭配圣经.pdf
+docs/依据/papers/4.这样穿很美 平价搭出时尚范 (（日）典子，杨孟芳译).pdf
+docs/依据/papers/5.The Triumph of Individual Style.pdf
+docs/依据/papers/专业色彩搭配设计师必备宝典 (第二版).pdf
+
+# 求职门面：论文/国标/数据库原件不进仓（本地保留）。
+# 逐份登记（文件名+md5）仍在 docs/依据/10，路径不变⇒指针不受影响。
+docs/依据/papers/
+docs/依据/中文对照/*.xlsx

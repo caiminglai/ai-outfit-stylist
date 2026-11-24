@@ -1,0 +1,613 @@
+/**
+ * 配饰柜标签页
+ *
+ * 独立管理配饰相关的全部状态、CRUD 操作和分析功能。
+ * 从 CabinetManager 中提取而来，降低单文件复杂度。
+ */
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
+import { toast } from '../utils/toastOnce'
+import type {
+  CustomerProfile,
+  AccessoryItem,
+  AccessoryGapResult,
+  AccessoryGap,
+  AccessoryStats,
+  ShoppingWishlistItem,
+} from '../types'
+import {
+  listAccessories,
+  addAccessory,
+  updateAccessory,
+  deleteAccessory,
+  getAccessoryGaps,
+  suggestAccessories,
+} from '../api'
+import {
+  ACCESSORY_CATEGORIES,
+  getAccessoryCategoryLabel,
+  getPriorityColor,
+  getPriorityLabel,
+  btnStyle,
+} from './CabinetConstants'
+
+/* ================================================================
+   Props
+   ================================================================ */
+
+interface AccessoryTabProps {
+  profile?: CustomerProfile | null
+  compact?: boolean
+}
+
+/* ================================================================
+   默认表单值
+   ================================================================ */
+
+const ACCESSORY_FORM_DEFAULT = {
+  name: '',
+  brand: '',
+  category: 'earring' as string,
+  material: '',
+  metal_color: '',
+  price: '',
+}
+
+/* ================================================================
+   防御性数据规范化
+   兼容后端新旧两种 gap 数据格式
+   ================================================================ */
+
+/**
+ * 缺口类型中文兜底名:category_* 后端带 label(项链/耳饰…),脸型/金属色这类只给 type,
+ * 不映射就会把 'face_shape_mismatch'/'tone_mismatch' 这类英文码糊在 pill 上。
+ */
+const ACCESSORY_GAP_TYPE_LABELS: Record<string, string> = {
+  face_shape_mismatch: '脸型不匹配',
+  tone_mismatch: '肤色不匹配',
+}
+
+/** 规范化缺口数据，兼容后端新旧格式 */
+function normalizeGapResult(raw: Record<string, unknown> | null): AccessoryGapResult | null {
+  if (!raw || typeof raw !== 'object') return null
+
+  const rawGaps = Array.isArray(raw.gaps) ? raw.gaps : []
+  const gaps: AccessoryGap[] = rawGaps.map((g: Record<string, unknown>) => ({
+    type: (g.type as string) ?? (g.category as string) ?? '未知类型',
+    label: (g.label as string) ?? undefined,
+    priority: (g.priority as 'high' | 'medium' | 'low') ?? 'medium',
+    message: (g.message as string) ?? (g.reason as string) ?? '',
+    suggestions: Array.isArray(g.suggestions) ? (g.suggestions as string[]) : [],
+  }))
+
+  const rawStats = (raw.stats as Record<string, unknown>) ?? raw
+  const byCategory =
+    (rawStats.by_category as Record<string, number>) ??
+    (raw.by_category as Record<string, number>) ??
+    {}
+  const stats: AccessoryStats = {
+    total: (rawStats.total as number) ?? (raw.total_items as number) ?? 0,
+    by_category: byCategory,
+  }
+
+  return { gaps, stats }
+}
+
+/** 规范化购物建议数组 */
+function normalizeSuggestions(raw: unknown): ShoppingWishlistItem[] {
+  if (!Array.isArray(raw)) return []
+  return raw.map((item: Record<string, unknown>) => ({
+    name: (item.name as string) ?? (item.label as string) ?? '未知商品',
+    category: (item.category as string) ?? '',
+    reason: (item.reason as string) ?? '',
+    priority: (item.priority as 'high' | 'medium' | 'low') ?? 'medium',
+  }))
+}
+
+/* ================================================================
+   组件
+   ================================================================ */
+
+export default function AccessoryTab({ profile, compact }: AccessoryTabProps) {
+  /* ---------- 状态 ---------- */
+  const [items, setItems] = useState<AccessoryItem[]>([])
+  // 🔴 11-03 挂起态复位：本组件一挂载就发请求，所以初值直接是「正在取」，
+  // ⛔ 再在 `fetchItems` 开头同步 `setLoading(true)`——那条同步 setState 坐在 effect 的调用链上
+  // （effect → fetchItems → setLoading），React 的 `react-hooks/set-state-in-effect` 判它是多余的一次重渲染。
+  // 手动重取（改完/删完之后的 `fetchItems()`）改由事件处理器自己置真，行为与从前逐字一致。
+  const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState(false)
+  const [showAdd, setShowAdd] = useState(false)
+  const [gaps, setGaps] = useState<AccessoryGapResult | null>(null)
+  const [gapsLoading, setGapsLoading] = useState(false)
+  const [suggestions, setSuggestions] = useState<ShoppingWishlistItem[] | null>(null)
+  const [suggestionsLoading, setSuggestionsLoading] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
+
+  const [form, setForm] = useState(ACCESSORY_FORM_DEFAULT)
+  /** 非空 = 表单正在改这一条;null = 新增 */
+  const [editingId, setEditingId] = useState<number | null>(null)
+
+  /* ---------- 数据加载 ---------- */
+
+  const fetchItemsRequestId = useRef(0)
+
+  // 🔴 11-03 第 4 项：写成 promise 链而不是 `try { await } catch { } finally { }`。
+  // 两把尺量的都是"effect 的同步前缀里不许有 setState"，但 React 的编译器规则看不见 `await` 会挂起
+  // （只要函数里挂着 catch，它就把整段当同步可达），async 版每一处都要压一行 disable；
+  // promise 链里三格写全在 `.then/.catch/.finally` 的回调里 ⇒ 天然不在同步前缀，⛔ 不用豁免。
+  // 行为逐字不变：成功填列表、失败弹同一条吐司、无论成败都收掉挂起态。
+  const fetchItems = useCallback(() => {
+    const requestId = ++fetchItemsRequestId.current
+    return listAccessories()
+      .then((nextItems) => {
+        if (requestId !== fetchItemsRequestId.current) return
+        setItems(nextItems)
+        setLoadError(false)
+      })
+      .catch((e: unknown) => {
+        if (requestId !== fetchItemsRequestId.current) return
+        setLoadError(true)
+        toast.error(e instanceof Error ? e.message : '加载配饰失败')
+      })
+      .finally(() => {
+        if (requestId === fetchItemsRequestId.current) setLoading(false)
+      })
+  }, [])
+
+  useEffect(() => {
+    fetchItems()
+    return () => {
+      fetchItemsRequestId.current += 1
+    }
+  }, [fetchItems])
+
+  const retryItems = () => {
+    setLoading(true)
+    setLoadError(false)
+    void fetchItems()
+  }
+
+  /* ---------- 表单开关与提交 ---------- */
+
+  const closeForm = () => {
+    setShowAdd(false)
+    setEditingId(null)
+    setForm(ACCESSORY_FORM_DEFAULT)
+  }
+
+  const openEdit = (item: AccessoryItem) => {
+    if (!item.id) return
+    setForm({
+      name: item.name ?? '',
+      brand: item.brand ?? '',
+      category: item.category ?? '',
+      material: item.material ?? '',
+      metal_color: item.metal_color ?? '',
+      price: item.price != null ? String(item.price) : '',
+    })
+    setEditingId(item.id)
+    setShowAdd(true)
+  }
+
+  // POST/PUT 共用这一份：可空列没填就发 null，不发 undefined。
+  // PUT 的契约是「键不传＝这一列不动，传 null＝写成 NULL」(api.ts 的 PutPayload)——
+  // 原来打包成 undefined 时，修改框里删掉品牌/材质点保存，刷新回来老值还在全在，
+  // 等于后台按 brand 出的"配饰品牌"分布永远清不掉一条写错的品牌。POST 那边 null 与"没给"同结果。
+  const buildPayload = () => ({
+    name: form.name.trim(),
+    // 品牌:后台按 brand 出「配饰品牌」分布,这里不采集那一栏就永远是空的
+    brand: form.brand.trim() || null,
+    category: form.category,
+    material: form.material.trim() || null,
+    metal_color: form.metal_color.trim() || null,
+    price: form.price ? Number(form.price) : null,
+  })
+
+  const handleSubmit = async () => {
+    if (submitting) return
+    if (!form.name.trim()) {
+      toast.error('请输入配饰名称')
+      return
+    }
+    const payload = buildPayload()
+    setSubmitting(true)
+    try {
+      if (editingId != null) {
+        await updateAccessory(editingId, payload)
+        toast.success('已保存修改')
+      } else {
+        await addAccessory(payload)
+        toast.success('添加成功')
+      }
+      closeForm()
+      setLoading(true)
+      await fetchItems()
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : editingId != null ? '保存失败' : '添加失败')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  /* ---------- 删除 ---------- */
+
+  const handleDelete = async (id: number | undefined) => {
+    if (!id) return
+    try {
+      await deleteAccessory(id)
+      toast.success('已删除')
+      setLoading(true)
+      await fetchItems()
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : '删除失败')
+    }
+  }
+
+  /* ---------- 分析操作 ---------- */
+
+  const handleGaps = async () => {
+    setGapsLoading(true)
+    setGaps(null)
+    try {
+      const result = await getAccessoryGaps(profile ?? undefined)
+      setGaps(normalizeGapResult(result as unknown as Record<string, unknown>))
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : '缺口分析失败')
+    } finally {
+      setGapsLoading(false)
+    }
+  }
+
+  const handleSuggestions = async () => {
+    setSuggestionsLoading(true)
+    setSuggestions(null)
+    try {
+      const result = await suggestAccessories(profile ?? undefined)
+      setSuggestions(normalizeSuggestions(result))
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : '获取购物建议失败')
+    } finally {
+      setSuggestionsLoading(false)
+    }
+  }
+
+  /* ---------- 统计 ---------- */
+
+  const stats = useMemo(() => {
+    const byCategory: Record<string, number> = {}
+    items.forEach((item) => {
+      const cat = item.category || '其他'
+      byCategory[cat] = (byCategory[cat] || 0) + 1
+    })
+    return { total: items.length, byCategory }
+  }, [items])
+
+  /* ---------- 渲染 ---------- */
+
+  const pillCls = 'pill-tag'
+
+  return (
+    <div className="animate-fade-in">
+      {/* 顶部状态栏 */}
+      <div
+        className="glass-card p-3 mb-3"
+        style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', alignItems: 'center' }}
+      >
+        <span style={{ color: 'var(--text)', fontWeight: 600, fontSize: '13px' }}>
+          共 {stats.total} 件
+        </span>
+        {Object.entries(stats.byCategory).map(([cat, count]) => (
+          <span key={cat} className={pillCls}>
+            {getAccessoryCategoryLabel(cat)} {count}
+          </span>
+        ))}
+      </div>
+
+      {/* 添加按钮 */}
+      <button
+        className="gradient-btn"
+        style={{ width: '100%', ...btnStyle(compact) }}
+        onClick={() => {
+          setForm(ACCESSORY_FORM_DEFAULT)
+          setEditingId(null)
+          setShowAdd(true)
+        }}
+      >
+        + 添加配饰
+      </button>
+
+      {/* 添加表单弹窗 */}
+      {showAdd && (
+        <div
+          className="glass-card p-3 mt-3 animate-fade-in"
+          style={{ borderColor: 'var(--accent)' }}
+        >
+          <div className="section-title">{editingId != null ? '修改配饰' : '添加配饰'}</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            <input
+              className="form-input"
+              placeholder="名称"
+              value={form.name}
+              onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))}
+            />
+            <input
+              className="form-input"
+              placeholder="品牌（选填）"
+              value={form.brand}
+              onChange={(e) => setForm((prev) => ({ ...prev, brand: e.target.value }))}
+            />
+            <select
+              className="form-select"
+              value={form.category}
+              onChange={(e) => setForm((prev) => ({ ...prev, category: e.target.value }))}
+            >
+              {ACCESSORY_CATEGORIES.map((c) => (
+                <option key={c.value} value={c.value}>
+                  {c.label}
+                </option>
+              ))}
+            </select>
+            <input
+              className="form-input"
+              placeholder="材质"
+              value={form.material}
+              onChange={(e) => setForm((prev) => ({ ...prev, material: e.target.value }))}
+            />
+            <input
+              className="form-input"
+              placeholder="金属色"
+              value={form.metal_color}
+              onChange={(e) => setForm((prev) => ({ ...prev, metal_color: e.target.value }))}
+            />
+            <input
+              className="form-input"
+              placeholder="价格"
+              type="number"
+              value={form.price}
+              onChange={(e) => setForm((prev) => ({ ...prev, price: e.target.value }))}
+            />
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <button
+                className="gradient-btn"
+                style={{ flex: 1, ...btnStyle(compact) }}
+                onClick={handleSubmit}
+                disabled={submitting}
+              >
+                {editingId != null ? '保存修改' : '确认添加'}
+              </button>
+              <button
+                className="ghost-btn"
+                style={{ flex: 1, ...btnStyle(compact) }}
+                onClick={closeForm}
+              >
+                取消
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 列表 */}
+      <div style={{ marginTop: '10px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+        {loading && (
+          <div role="status" aria-label="加载中" style={{ textAlign: 'center', padding: '20px' }}>
+            <span className="spinner" />
+          </div>
+        )}
+        {!loading && loadError && (
+          <div
+            role="alert"
+            style={{
+              textAlign: 'center',
+              padding: '20px',
+              color: 'var(--danger)',
+              fontSize: '13px',
+            }}
+          >
+            <div>加载失败</div>
+            <button
+              className="ghost-btn"
+              style={{ marginTop: '8px', padding: '5px 16px', fontSize: '12px' }}
+              onClick={retryItems}
+            >
+              重试
+            </button>
+          </div>
+        )}
+        {!loading && !loadError && items.length === 0 && (
+          <div
+            style={{
+              textAlign: 'center',
+              padding: '20px',
+              color: 'var(--muted)',
+              fontSize: '13px',
+            }}
+          >
+            暂无配饰，点击上方按钮添加
+          </div>
+        )}
+        {!loading &&
+          !loadError &&
+          items.map((item) => (
+            <div
+              key={item.id}
+              className="glass-card p-3"
+              style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}
+            >
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div
+                  style={{
+                    fontWeight: 600,
+                    fontSize: '13px',
+                    color: 'var(--text)',
+                    marginBottom: '4px',
+                  }}
+                >
+                  {item.name}
+                  {item.brand && (
+                    <span style={{ color: 'var(--muted)', fontWeight: 400, marginLeft: '6px' }}>
+                      {item.brand}
+                    </span>
+                  )}
+                </div>
+                <div
+                  style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', alignItems: 'center' }}
+                >
+                  <span className={pillCls}>{getAccessoryCategoryLabel(item.category)}</span>
+                  {item.material && <span className={pillCls}>{item.material}</span>}
+                  {item.metal_color && <span className={pillCls}>{item.metal_color}</span>}
+                  {item.price != null && (
+                    <span style={{ color: 'var(--accent)', fontSize: '12px', fontWeight: 500 }}>
+                      ¥{Number(item.price).toFixed(2)}
+                    </span>
+                  )}
+                </div>
+              </div>
+              <div
+                style={{
+                  marginLeft: '10px',
+                  flexShrink: 0,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '6px',
+                }}
+              >
+                <button
+                  className="ghost-btn"
+                  style={{ padding: '4px 8px', fontSize: '11px' }}
+                  onClick={() => openEdit(item)}
+                >
+                  修改
+                </button>
+                <button
+                  className="ghost-btn"
+                  style={{
+                    padding: '4px 8px',
+                    fontSize: '11px',
+                    color: 'var(--danger)',
+                    borderColor: 'var(--danger)',
+                  }}
+                  onClick={() => handleDelete(item.id)}
+                >
+                  删除
+                </button>
+              </div>
+            </div>
+          ))}
+      </div>
+
+      {/* 底部操作按钮组 */}
+      <div style={{ marginTop: '12px', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+        <button
+          className="ghost-btn"
+          style={{ flex: 1, ...btnStyle(compact) }}
+          onClick={handleGaps}
+          disabled={gapsLoading}
+        >
+          {gapsLoading ? <span className="spinner" /> : '🔍 缺口分析'}
+        </button>
+        <button
+          className="ghost-btn"
+          style={{ flex: 1, ...btnStyle(compact) }}
+          onClick={handleSuggestions}
+          disabled={suggestionsLoading}
+        >
+          {suggestionsLoading ? <span className="spinner" /> : '💡 购物建议'}
+        </button>
+      </div>
+
+      {/* 缺口分析结果 */}
+      {gaps && (
+        <div className="glass-card p-3 mt-3 animate-fade-in">
+          <div className="section-title">配饰缺口分析</div>
+          {gaps.gaps.length === 0 ? (
+            <div style={{ color: 'var(--muted)', fontSize: '13px' }}>暂无缺口</div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              {gaps.gaps.map((gap, idx) => (
+                <div
+                  key={idx}
+                  className="glass-card"
+                  style={{ padding: '10px', background: 'var(--bg)' }}
+                >
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      marginBottom: '4px',
+                    }}
+                  >
+                    <span className={pillCls}>
+                      {gap.label || ACCESSORY_GAP_TYPE_LABELS[gap.type] || gap.type}
+                    </span>
+                    <span
+                      className={pillCls}
+                      style={{
+                        color: getPriorityColor(gap.priority),
+                        borderColor: getPriorityColor(gap.priority),
+                      }}
+                    >
+                      {getPriorityLabel(gap.priority)}优先级
+                    </span>
+                  </div>
+                  <div style={{ fontSize: '13px', color: 'var(--text)', marginBottom: '4px' }}>
+                    {gap.message}
+                  </div>
+                  {gap.suggestions.length > 0 && (
+                    <div style={{ fontSize: '12px', color: 'var(--muted)' }}>
+                      {gap.suggestions.map((s, si) => (
+                        <div key={si}>- {s}</div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* 购物建议结果 */}
+      {suggestions && (
+        <div className="glass-card p-3 mt-3 animate-fade-in">
+          <div className="section-title">购物建议</div>
+          {suggestions.length === 0 ? (
+            <div style={{ color: 'var(--muted)', fontSize: '13px' }}>暂无推荐</div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              {suggestions.map((item, idx) => (
+                <div
+                  key={idx}
+                  className="glass-card"
+                  style={{ padding: '10px', background: 'var(--bg)' }}
+                >
+                  <div style={{ fontWeight: 600, fontSize: '13px', color: 'var(--text)' }}>
+                    {item.name}
+                  </div>
+                  <div
+                    style={{ display: 'flex', gap: '6px', marginTop: '4px', alignItems: 'center' }}
+                  >
+                    <span className={pillCls}>{getAccessoryCategoryLabel(item.category)}</span>
+                    <span
+                      className={pillCls}
+                      style={{
+                        color: getPriorityColor(item.priority),
+                        borderColor: getPriorityColor(item.priority),
+                      }}
+                    >
+                      {getPriorityLabel(item.priority)}优先级
+                    </span>
+                  </div>
+                  <div style={{ fontSize: '12px', color: 'var(--muted)', marginTop: '4px' }}>
+                    {item.reason}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}

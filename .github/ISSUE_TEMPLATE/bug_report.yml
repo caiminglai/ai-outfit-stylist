@@ -1,0 +1,56 @@
+name: 问题报告
+description: 报告可复现的缺陷，并提供脱敏后的必要信息。
+body:
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: 复现步骤
+      description: 按顺序写出从启动到出现问题的操作；涉及临时数据库时说明初始化方式。
+      placeholder: |
+        1. 执行……
+        2. 打开……
+        3. 点击……后出现……
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: 期望行为
+      description: 说明原本应出现的结果及判断依据。
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: 实际行为
+      description: 说明实际结果、影响范围及是否稳定复现。
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: 环境
+      description: 填写操作系统、Node.js、npm、浏览器版本、启动方式及当前提交号。
+      placeholder: |
+        操作系统：
+        Node.js / npm：
+        浏览器（如适用）：
+        启动方式（原生 / Docker）：
+        当前提交号：
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: 日志
+      description: 粘贴最小必要的脱敏日志；无日志时写明“无日志”及原因。必须删除 Token、密钥、密码、手机号、上传内容和内部地址。
+      placeholder: 请勿粘贴 .env、完整数据库或真实用户数据。
+    validations:
+      required: true
+  - type: checkboxes
+    id: privacy_check
+    attributes:
+      label: 提交前确认
+      options:
+        - label: 我已检查上述内容并完成脱敏，未公开敏感信息。
+          required: true

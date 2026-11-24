@@ -1,0 +1,215 @@
+{
+  "_说明": "第五批规则：personal 模式男性拍照姿势补档（10-19 第一阶段·止血第 3 条）。现量判据＝把四个规则语料（rules-aesthetic.json／rules-aesthetic-2.json／rules-wuxing.json／rules.json 整库快照）按 (category × gender × mode) 拉表：姿势类共 16 组，personal/女 8 组、store/女 4 组、store/男 4 组、personal/男 **0 组**。⇒ 男性顾客在个人模式下选任何拍照场景，姿势这一栏一条规则都命不中，整屏退回硬编码兜底。这 8 组照 personal/女 那 8 组（组 140-147，db/add-rules.js 写的、无 source_key）逐场景镜像：category、scenario、priority、条件形状、8 种动作类型一字对齐，只换性别、文案按男性重写。",
+  "_依据": "key 前缀 pose- 不在 services/evidenceLevels.js 的 KEY_PREFIX_TO_LEVEL 里 ⇒ evidence_level 按默认 C（行业体系/经验）落库。摄影教程里的机位、焦段、重心法是行业经验，查不到同行评议的有效性检验，不许挂 B 档。",
+  "_一个措辞问题": "拍照场景的候选值里那颗「闺蜜合照」是前端 CustomerForm/PersonalProfileForm 共用的选项，男性顾客看到的也是这四个字。本文件沿用同一个取值（改了就和表单对不上、这条规则当场变死规则），组名叫「多人合照」并在 description 里写明原因。要不要给男性换成「朋友合照」这个选项标签，属产品措辞，等他拍。",
+  "rules": [
+    {
+      "key": "pose-m-street",
+      "name": "男-日常街拍-拍照姿势推荐",
+      "mode": "personal",
+      "category": "姿势",
+      "gender": "男",
+      "scenario": "日常街拍",
+      "priority": 20,
+      "enabled": 1,
+      "description": "personal 模式男性姿势补档，镜像组 140（女-日常街拍）。",
+      "conditions": [
+        { "field": "gender", "operator": "eq", "value": "男" },
+        { "field": "category", "operator": "eq", "value": "posture" },
+        { "field": "scenario", "operator": "eq", "value": "日常街拍" }
+      ],
+      "actions": [
+        { "type": "pose_key", "content": "重心落在后腿，前脚脚尖朝外打开一拳宽；两脚别并拢立正" },
+        { "type": "head_pose", "content": "脸转 30~45° 看向镜头外侧两三米处，下巴保持水平，不抬也不压" },
+        { "type": "hand_pose", "content": "单手插裤兜只插四指、露大拇指；另一只手拎外套或搭包带，给手一个去处" },
+        { "type": "upper_body", "content": "肩放松下沉别耸；外套敞开穿，拉链拉到顶会把肩线拉平显得板正" },
+        { "type": "lower_body", "content": "裤长到鞋面留一道折，站定时别让裤脚堆在鞋带上，那一截会把腿长吃掉" },
+        { "type": "camera_hint", "content": "机位与腰带齐平，竖构图，人占画面三分之二" },
+        { "type": "expression", "content": "嘴角平、微收下巴；要笑就轻一点，咧嘴会顶出双下巴" },
+        { "type": "reason", "content": "男性街拍最常见的失败是立正加双手贴裤缝，重心和手的去处一解决，画面立刻松开" }
+      ]
+    },
+    {
+      "key": "pose-m-date",
+      "name": "男-约会-拍照姿势推荐",
+      "mode": "personal",
+      "category": "姿势",
+      "gender": "男",
+      "scenario": "约会",
+      "priority": 20,
+      "enabled": 1,
+      "description": "personal 模式男性姿势补档，镜像组 141（女-约会甜美风）。这一档的场景取值是「约会」，来自主要场合而不是拍照场景。",
+      "conditions": [
+        { "field": "gender", "operator": "eq", "value": "男" },
+        { "field": "category", "operator": "eq", "value": "posture" },
+        { "field": "scenario", "operator": "eq", "value": "约会" }
+      ],
+      "actions": [
+        { "type": "pose_key", "content": "侧身 45° 朝向对方，前脚虚点地，重心留在后腿" },
+        { "type": "head_pose", "content": "头转向对方，下颌自然出来就行，不用刻意低头或仰头" },
+        { "type": "hand_pose", "content": "手里拿东西（咖啡杯、书、包带）或轻扶门框，别空着两只手垂在身侧" },
+        { "type": "upper_body", "content": "肩线一前一后，双肩正对镜头最容易显得僵" },
+        { "type": "lower_body", "content": "一只脚略向前，膝盖放松别锁死" },
+        { "type": "camera_hint", "content": "机位略高于胸口，让光从侧面来；抓拍比摆拍好看" },
+        { "type": "expression", "content": "看对方笑，不看镜头" },
+        { "type": "reason", "content": "约会照要的是松弛，视线给对方、手有去处，这两条占了大半效果" }
+      ]
+    },
+    {
+      "key": "pose-m-id",
+      "name": "男-职业照证件照-拍照姿势推荐",
+      "mode": "personal",
+      "category": "姿势",
+      "gender": "男",
+      "scenario": "职业照",
+      "priority": 22,
+      "enabled": 1,
+      "description": "personal 模式男性姿势补档，镜像组 142（女-证件照职业照）。priority 沿用这一档最高的 22，保证职业照时压过同场景的泛用组。",
+      "conditions": [
+        { "field": "gender", "operator": "eq", "value": "男" },
+        { "field": "category", "operator": "eq", "value": "posture" },
+        { "field": "scenario", "operator": "eq", "value": "职业照" }
+      ],
+      "actions": [
+        { "type": "pose_key", "content": "脊柱拉长、头顶向上延伸，双肩回到水平" },
+        { "type": "head_pose", "content": "面部正对镜头，下巴轻微收，眼睛平视镜头" },
+        { "type": "hand_pose", "content": "站姿双手自然垂放或单手轻搭身前；坐姿双手放在大腿上，别交叉抱胸" },
+        { "type": "upper_body", "content": "肩向后向下沉；衬衫领口留一指空隙，扣到最上面一颗会把脖子勒短" },
+        { "type": "lower_body", "content": "站姿双脚与肩同宽，坐姿双脚踩实地面、腿不叠" },
+        { "type": "camera_hint", "content": "机位与眼睛齐平，中轴构图，背景干净无杂物" },
+        { "type": "expression", "content": "闭唇轻笑或平嘴，眼神落在镜头上方一点点，比直视更稳" },
+        { "type": "reason", "content": "证件照与职业照只判三件事：肩平、颈直、脸正，三件都能当场自查" }
+      ]
+    },
+    {
+      "key": "pose-m-travel",
+      "name": "男-旅行景点打卡-拍照姿势推荐",
+      "mode": "personal",
+      "category": "姿势",
+      "gender": "男",
+      "scenario": "旅行打卡",
+      "priority": 18,
+      "enabled": 1,
+      "description": "personal 模式男性姿势补档，镜像组 143（女-旅行景点打卡）。",
+      "conditions": [
+        { "field": "gender", "operator": "eq", "value": "男" },
+        { "field": "category", "operator": "eq", "value": "posture" },
+        { "field": "scenario", "operator": "eq", "value": "旅行打卡" }
+      ],
+      "actions": [
+        { "type": "pose_key", "content": "走路抓拍：起步的那条腿向前迈实，同侧手臂自然向后" },
+        { "type": "head_pose", "content": "侧脸看景，或走两步再回头半侧脸" },
+        { "type": "hand_pose", "content": "一只手扶帽、拉背包带或指向远处，另一只手空着别攥拳" },
+        { "type": "upper_body", "content": "身体 30~45° 侧向镜头，肩膀放松" },
+        { "type": "lower_body", "content": "迈步那一瞬间按快门，前腿伸直、后腿脚跟抬起" },
+        { "type": "camera_hint", "content": "24~35mm 广角，人放画面三分之一，把建筑或山留在另一侧" },
+        { "type": "expression", "content": "放松笑，或者干脆不看镜头" },
+        { "type": "reason", "content": "广角加动态比摆姿势自然，人也不会被拍成一张贴在景上的小人" }
+      ]
+    },
+    {
+      "key": "pose-m-cafe",
+      "name": "男-探店咖啡馆-拍照姿势推荐",
+      "mode": "personal",
+      "category": "姿势",
+      "gender": "男",
+      "scenario": "探店",
+      "priority": 17,
+      "enabled": 1,
+      "description": "personal 模式男性姿势补档，镜像组 144（女-探店咖啡馆）。",
+      "conditions": [
+        { "field": "gender", "operator": "eq", "value": "男" },
+        { "field": "category", "operator": "eq", "value": "posture" },
+        { "field": "scenario", "operator": "eq", "value": "探店" }
+      ],
+      "actions": [
+        { "type": "pose_key", "content": "坐在椅子前三分之二，背轻靠，一只前臂搭在桌面上" },
+        { "type": "head_pose", "content": "视线落在窗外或杯子上，不追镜头" },
+        { "type": "hand_pose", "content": "手指虚握杯身，别把杯子捏死；另一只手放松放在腿上" },
+        { "type": "upper_body", "content": "肩线一前一后，胸口别正对镜头坐成一堵墙" },
+        { "type": "lower_body", "content": "脚踝交叉或双脚踩地，腿别蜷进椅子里" },
+        { "type": "camera_hint", "content": "略微俯拍 15~30°，靠窗顺光，把桌上的杯子和书当近景" },
+        { "type": "expression", "content": "平静的表情，像在想事情" },
+        { "type": "reason", "content": "室内环境照靠前景和视线方向讲故事，桌上一件东西就够手的去处" }
+      ]
+    },
+    {
+      "key": "pose-m-outdoor",
+      "name": "男-户外写真-拍照姿势推荐",
+      "mode": "personal",
+      "category": "姿势",
+      "gender": "男",
+      "scenario": "户外写真",
+      "priority": 16,
+      "enabled": 1,
+      "description": "personal 模式男性姿势补档，镜像组 145（女-户外写真森系）。女性那组靠 S 形曲线，男性这组改用支点与侧光。",
+      "conditions": [
+        { "field": "gender", "operator": "eq", "value": "男" },
+        { "field": "category", "operator": "eq", "value": "posture" },
+        { "field": "scenario", "operator": "eq", "value": "户外写真" }
+      ],
+      "actions": [
+        { "type": "pose_key", "content": "找支点：靠树、石墙或栏杆，一侧肩膀承重，重心偏过去" },
+        { "type": "head_pose", "content": "侧脸或微微仰头看天，下颌放松不绷紧" },
+        { "type": "hand_pose", "content": "插兜、拉袖口，或单手拎外套搭在肩上" },
+        { "type": "upper_body", "content": "身体侧对镜头，两肩一高一低，靠支点那侧沉下去" },
+        { "type": "lower_body", "content": "一条腿伸直，另一条屈膝踩在台阶或石头上" },
+        { "type": "camera_hint", "content": "逆光或侧光的傍晚时段，人占画面一半，留出天与地" },
+        { "type": "expression", "content": "平静，嘴唇放松别抿着" },
+        { "type": "reason", "content": "户外靠环境光和身体支点，没有支点时四肢不知道往哪放，最容易僵" }
+      ]
+    },
+    {
+      "key": "pose-m-group",
+      "name": "男-多人合照-拍照姿势推荐",
+      "mode": "personal",
+      "category": "姿势",
+      "gender": "男",
+      "scenario": "闺蜜合照",
+      "priority": 15,
+      "enabled": 1,
+      "description": "personal 模式男性姿势补档，镜像组 146（女-闺蜜合照）。场景取值沿用库里那颗「闺蜜合照」——它是前端男女共用的选项，换成别的值这条当场变死规则；组名对男性写成「多人合照」。",
+      "conditions": [
+        { "field": "gender", "operator": "eq", "value": "男" },
+        { "field": "category", "operator": "eq", "value": "posture" },
+        { "field": "scenario", "operator": "eq", "value": "闺蜜合照" }
+      ],
+      "actions": [
+        { "type": "pose_key", "content": "别站成一排：一人前半步微屈膝，其余人稍后站直，做出前后层次" },
+        { "type": "head_pose", "content": "头向中间那人略靠，脸朝向镜头但不要每人一样角度" },
+        { "type": "hand_pose", "content": "搭肩、竖拇指、举杯碰一下都行，手别全部垂着" },
+        { "type": "upper_body", "content": "外侧的人肩膀略低，内侧靠近，中间不留大缝" },
+        { "type": "lower_body", "content": "每人各站各的，腿别交叉叠在一起，画面会乱" },
+        { "type": "camera_hint", "content": "50mm 左右拍全身，几个人居中占画面一半，退远一步比广角贴脸更不变形" },
+        { "type": "expression", "content": "互相对视笑一下再抓拍，比一起喊一二三自然" },
+        { "type": "reason", "content": "合照最容易翻车的是所有人一样高一样正，前后半步和手上的动作就能破掉" }
+      ]
+    },
+    {
+      "key": "pose-m-selfie",
+      "name": "男-自拍手机前置-拍照姿势推荐",
+      "mode": "personal",
+      "category": "姿势",
+      "gender": "男",
+      "scenario": "自拍",
+      "priority": 18,
+      "enabled": 1,
+      "description": "personal 模式男性姿势补档，镜像组 147（女-自拍手机前置）。",
+      "conditions": [
+        { "field": "gender", "operator": "eq", "value": "男" },
+        { "field": "category", "operator": "eq", "value": "posture" },
+        { "field": "scenario", "operator": "eq", "value": "自拍" }
+      ],
+      "actions": [
+        { "type": "pose_key", "content": "手机举到比眼睛高 10~15cm，手臂略弯别完全伸直（伸直会把脸拉变形）" },
+        { "type": "head_pose", "content": "头微收，眼睛看镜头上方一点，别仰着下颌" },
+        { "type": "hand_pose", "content": "一只手拿手机，另一只手放松或做个简单手势" },
+        { "type": "upper_body", "content": "肩一前一后，双肩正对镜头会把上半身拍成一整块" },
+        { "type": "lower_body", "content": "半身入镜时身体离镜头 40~60cm，太近会被广角畸变把鼻子放大" },
+        { "type": "camera_hint", "content": "能用后置镜头加定时就换后置，前置的广角畸变更挑角度；按音量键当快门防手抖" },
+        { "type": "expression", "content": "吸一口气、吐到一半时按下快门，那一下脸部最松" },
+        { "type": "reason", "content": "男性自拍的通病是仰拍加手臂伸直：仰拍顶宽下颌，直手臂把脸拉歪，机位抬高、手臂弯曲两条就解决" }
+      ]
+    }
+  ]
+}

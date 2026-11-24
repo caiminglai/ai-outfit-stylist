@@ -1,0 +1,1889 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"><meta name="description" content="3D 形象展厅：真人比例的穿衣量化演示，先看效果再下单。色彩、版型、体型四条轴各自算分，量不到的写没量到。"><meta property="og:type" content="website"><meta property="og:site_name" content="私人形象定制AI"><meta property="og:title" content="3D形象展示 · AI形象顾问"><meta property="og:description" content="3D 形象展厅：先看效果，再决定要不要做一份属于自己的细账。"><link rel="canonical" href="https://style.sparklove.cn/gallery">
+  <title>3D形象展示 · AI形象顾问</title>
+  <style>
+    :root {
+      --bg: #0d1117;
+      --panel: #151b23;
+      --panel-2: #1b2330;
+      --line: #232c38;
+      --text: #e6edf3;
+      --muted: #8b98a5;
+      --accent: #f5834c;
+      --accent-dim: rgba(245, 131, 76, 0.12);
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    body {
+      font-family: 'PingFang SC', 'Microsoft YaHei', 'Segoe UI', system-ui, sans-serif;
+      background: radial-gradient(ellipse at center, #182030 0%, #0d1117 70%);
+      min-height: 100vh;
+      overflow: hidden;
+      color: var(--text);
+      font-size: 14px;
+      line-height: 1.45;
+    }
+
+    /* 顶部提示 */
+    #model-hint {
+      position: absolute;
+      top: 14px;
+      left: 14px;
+      z-index: 10;
+      padding: 5px 12px;
+      background: rgba(13, 17, 23, 0.7);
+      backdrop-filter: blur(8px);
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      font-size: 12px;
+      color: var(--muted);
+      pointer-events: none;
+    }
+
+    /* 3D画布容器 */
+    #canvas-container {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 1;
+    }
+
+    /* 加载提示 */
+    #model-status {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      z-index: 50;
+      background: rgba(13, 17, 23, 0.85);
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 14px 24px;
+      font-size: 13px;
+      color: var(--accent);
+      white-space: nowrap;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    #model-status.hidden {
+      display: none;
+    }
+
+    .spinner {
+      width: 20px;
+      height: 20px;
+      border: 2px solid rgba(245, 131, 76, 0.2);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+
+    @keyframes spin {
+      to {
+        transform: rotate(360deg);
+      }
+    }
+
+    /* 模型信息卡 */
+    .model-info {
+      position: fixed;
+      top: 14px;
+      right: 14px;
+      z-index: 10;
+      background: rgba(13, 17, 23, 0.7);
+      backdrop-filter: blur(12px);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 8px 14px;
+      text-align: center;
+      min-width: 80px;
+    }
+
+    .model-info .name {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text);
+    }
+
+    .model-info .source {
+      font-size: 11px;
+      color: var(--accent);
+      margin-top: 3px;
+      opacity: 0.85;
+      font-weight: 500;
+    }
+
+    /* 控制按钮 */
+    /* 备案信息:待机态与服务态都要可见,整行不吃点击,只有链接本身可点 */
+    #beian-line {
+      position: fixed;
+      left: 0;
+      right: 0;
+      bottom: 6px;
+      z-index: 60;
+      text-align: center;
+      font-size: 11px;
+      line-height: 1.6;
+      color: rgba(255, 255, 255, 0.45);
+      text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+      pointer-events: none;
+    }
+    #beian-line a {
+      color: inherit;
+      text-decoration: none;
+      pointer-events: auto;
+    }
+    .controls {
+      position: fixed;
+      right: 14px;
+      /* 实测底部栏高 188px(内边距 26 + 筛选行 36 + 卡片轨 ~126),按钮列必须整列抬到它上面 */
+      bottom: 196px;
+      z-index: 50;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    /* 44 而不是 40：本轮 X7 把"窄屏点按区至少 44 px"定成口径，这一列四颗圆钮是展厅里唯一
+       在窄屏上会被手指点的控件，⛔ 只把 React 那边改达标、展厅这一列留 40，那句话就只说了一半 */
+    .ctrl-btn {
+      width: 44px;
+      height: 44px;
+      border-radius: 50%;
+      border: 1px solid var(--line);
+      background: rgba(13, 17, 23, 0.8);
+      backdrop-filter: blur(12px);
+      font-size: 18px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--muted);
+      transition: all 0.2s ease;
+    }
+
+    .ctrl-btn:active {
+      transform: scale(0.92);
+    }
+
+    .ctrl-btn.active {
+      background: var(--accent);
+      color: #06231c;
+      border-color: var(--accent);
+      box-shadow: 0 0 12px rgba(245, 131, 76, 0.4);
+    }
+
+    /* 第十四阶段·追加（他 10-22 的原话：「要 http://127.0.0.1:5000/ 里面找到有个介绍的按钮」）。
+       待机态整屏只有 3D 轮播（右侧那一列在 `set-mode` 里被 `display:none` 掉了），
+       介绍页 /how-it-works.html 原本只藏在 React 侧「选择模式」那一层的卡片里，站在首页看不见。
+       ⇒ 这颗带文字的入口自己独立定位、两种模式都常驻，⛔ 不新建路由、⛔ 不动后端，
+       直接吃后端已在服务的静态页。点按区按本轮 X7 的 44 px 口径。 */
+    .intro-btn {
+      position: fixed;
+      /* 左上那颗 #model-hint 占 top:14px（高约 28px），这里从 52px 起，任何模式都不压它 */
+      top: 52px;
+      left: 14px;
+      z-index: 70;
+      height: 44px;
+      padding: 0 12px;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      background: rgba(13, 17, 23, 0.8);
+      backdrop-filter: blur(12px);
+      font-size: 13px;
+      color: var(--accent);
+      text-decoration: none;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+      flex-shrink: 0;
+      transition: all 0.2s ease;
+    }
+
+    .intro-btn:active {
+      transform: scale(0.94);
+    }
+
+    /* 底部模型选择栏 */
+    .model-bar {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      z-index: 100;
+      padding: 10px 14px 16px;
+      background: rgba(13, 17, 23, 0.85);
+      backdrop-filter: blur(20px);
+      border-top: 1px solid var(--line);
+    }
+
+    .model-scroll {
+      display: flex;
+      gap: 8px;
+      overflow-x: auto;
+      scroll-behavior: smooth;
+      padding-bottom: 4px;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    .model-scroll::-webkit-scrollbar {
+      height: 3px;
+    }
+
+    .model-scroll::-webkit-scrollbar-thumb {
+      background: var(--line);
+      border-radius: 2px;
+    }
+
+    /* ═══ 筛选栏(搜索 + 来源),放在卡片轨上方 ═══ */
+    .filter-bar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+
+    #model-search {
+      flex-shrink: 0;
+      width: 130px;
+      height: 28px;
+      padding: 0 10px;
+      border-radius: 14px;
+      border: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.04);
+      color: var(--text);
+      font-size: 12px;
+      outline: none;
+    }
+
+    #model-search::placeholder {
+      color: var(--muted);
+    }
+
+    #model-search:focus {
+      border-color: var(--accent);
+    }
+
+    .source-chips {
+      display: flex;
+      flex: 1;
+      gap: 6px;
+      overflow-x: auto;
+      scroll-behavior: smooth;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    .source-chips::-webkit-scrollbar {
+      height: 0;
+    }
+
+    .chip {
+      flex-shrink: 0;
+      height: 28px;
+      padding: 0 11px;
+      border-radius: 14px;
+      border: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.03);
+      color: var(--muted);
+      font-size: 11px;
+      line-height: 26px;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: all 0.2s ease;
+      user-select: none;
+    }
+
+    .chip.active {
+      background: var(--accent-dim);
+      border-color: var(--accent);
+      color: var(--accent);
+      font-weight: 600;
+    }
+
+    #filter-count {
+      flex-shrink: 0;
+      font-size: 11px;
+      color: var(--muted);
+      opacity: 0.75;
+      min-width: 30px;
+      text-align: right;
+    }
+
+    .model-card {
+      position: relative;
+      flex-shrink: 0;
+      width: 68px;
+      cursor: pointer;
+      text-align: center;
+      padding: 7px 5px;
+      border-radius: 12px;
+      transition: all 0.25s ease;
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid var(--line);
+    }
+
+    .model-card:active {
+      transform: scale(0.95);
+    }
+
+    .model-card.active {
+      background: var(--accent-dim);
+      border-color: var(--accent);
+      box-shadow: 0 0 10px rgba(245, 131, 76, 0.2);
+    }
+
+    .model-card .icon {
+      font-size: 26px;
+      line-height: 1;
+    }
+
+    .model-card .thumb {
+      display: block;
+      width: 56px;
+      height: 70px;
+      margin: 0 auto;
+      object-fit: contain;
+      pointer-events: none;
+      user-select: none;
+    }
+
+    .model-card .label {
+      font-size: 11px;
+      color: var(--muted);
+      margin-top: 4px;
+      font-weight: 500;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 60px;
+    }
+
+    .model-card .sublabel {
+      font-size: 9px;
+      color: var(--muted);
+      opacity: 0.65;
+      margin-top: 1px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 60px;
+    }
+
+    .model-card.active .label {
+      color: var(--accent);
+      font-weight: 600;
+    }
+
+    .model-card.hidden-failed {
+      display: none !important;
+    }
+
+    .model-card.load-error {
+      opacity: 0.4;
+      border-color: #5a2a2a;
+      background: rgba(255, 80, 80, 0.06);
+    }
+
+    .model-card .error-dot {
+      position: absolute;
+      top: 3px;
+      right: 3px;
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: #ff5555;
+      display: none;
+    }
+
+    .model-card.load-error .error-dot {
+      display: block;
+    }
+
+    /* ═══ 触摸优化 ═══ */
+    #canvas-container {
+      touch-action: none;
+      -webkit-touch-callout: none;
+    }
+
+    body {
+      overscroll-behavior: none;
+    }
+
+    .ctrl-btn {
+      -webkit-touch-callout: none;
+      user-select: none;
+    }
+
+    .model-card {
+      -webkit-touch-callout: none;
+      user-select: none;
+    }
+
+    /* 触摸时的视觉反馈 */
+    .ctrl-btn:active,
+    .model-card:active {
+      transform: scale(0.94);
+    }
+
+    /* ═══ 切换模型按钮(两种模式通用,归入控制按钮组)═══ */
+    /* 44 而不是 40：与上面 .ctrl-btn 同口径（见那里的注释），同一列里只改几颗会留一颗小的 */
+    #btn-skip {
+      width: 44px;
+      height: 44px;
+      border-radius: 50%;
+      border: 1px solid var(--line);
+      background: rgba(13, 17, 23, 0.8);
+      backdrop-filter: blur(12px);
+      font-size: 18px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--accent);
+      transition: all 0.2s ease;
+      flex-shrink: 0;
+    }
+
+    #btn-skip:hover {
+      opacity: 1;
+    }
+
+    #btn-skip:active {
+      transform: scale(0.92);
+    }
+
+    #btn-skip.hidden {
+      display: none;
+    }
+
+    /* 轮播进度条(仅展示模式) */
+    #carousel-progress {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      z-index: 55;
+      height: 3px;
+      background: rgba(35, 44, 56, 0.5);
+    }
+
+    #carousel-progress-bar {
+      height: 100%;
+      width: 0%;
+      background: var(--accent);
+      opacity: 0.6;
+      transition: width 0.1s linear;
+    }
+
+    #carousel-progress.hidden {
+      display: none;
+    }
+
+    /* ═══ API 错误提示 ═══ */
+    #api-error-overlay {
+      display: none;
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      z-index: 100;
+      text-align: center;
+      max-width: 360px;
+    }
+
+    #api-error-overlay.show {
+      display: block;
+    }
+
+    #api-error-overlay .error-icon {
+      font-size: 48px;
+      margin-bottom: 12px;
+    }
+
+    #api-error-overlay .error-title {
+      font-size: 16px;
+      color: #e0e0e0;
+      font-weight: 600;
+      margin-bottom: 6px;
+    }
+
+    #api-error-overlay .error-desc {
+      font-size: 13px;
+      color: var(--muted);
+      line-height: 1.5;
+    }
+
+    #api-error-overlay .error-retry {
+      margin-top: 16px;
+      padding: 8px 24px;
+      background: rgba(245, 131, 76, 0.15);
+      border: 1px solid var(--accent);
+      color: var(--accent);
+      border-radius: 20px;
+      cursor: pointer;
+      font-size: 13px;
+      transition: all 0.2s;
+    }
+
+    #api-error-overlay .error-retry:hover {
+      background: rgba(245, 131, 76, 0.25);
+    }
+
+    /* ═══ 模型切换淡入淡出 ═══ */
+    #canvas-container canvas {
+      transition: opacity 0.6s ease;
+    }
+
+    #canvas-container.transitioning canvas {
+      opacity: 0.3;
+    }
+
+    /* ═══ 粒子背景 ═══ */
+    #particles-canvas {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 0;
+      pointer-events: none;
+      opacity: 0.4;
+    }
+
+    /* ── 窄屏真点一遍补正（只新增规则，一条既有声明都没改）──
+       证据：工装 gate-logs/tap-gallery-before.json（390×844）与 tap-gallery-1280-before.json（1280×800）。
+       两档视口里 elementFromPoint 打在备案号中心都回 div.model-bar ⇒ 这一行链接其实点不到。
+       原因是 #beian-line 的 z-index:60 低于 .model-bar 的 100，而底栏是 fixed bottom:0、高 190，
+       备案行 bottom:6 正落在它里面。这里只把备案提到 101，几何不动：给它加内边距会把中间两张
+       模型卡片底部的点击区抢走（点到卡片却跳去备案页），15px 这个高度就留着并写明取舍。 */
+    #beian-line {
+      z-index: 101;
+    }
+
+    /* 触摸目标：搜索框与筛选芯片实测高 28px，窄屏抬到 36px。底栏随之由 190 长到 198，
+       而右侧控制列的 bottom:196 是硬编码值（.controls 规则里那条「实测底部栏高 188px」的注释就是它），
+       所以同一媒体查询里把它一起抬到 206，保证按钮列仍落在底栏上方。 */
+    @media (max-width: 480px) {
+      #model-search {
+        height: 36px;
+        border-radius: 18px;
+      }
+
+      .chip {
+        height: 36px;
+        line-height: 34px;
+        border-radius: 18px;
+      }
+
+      .controls {
+        bottom: 206px;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <!-- 粒子背景 -->
+  <canvas id="particles-canvas"></canvas>
+
+  <!-- 顶部提示 -->
+  <div id="model-hint">3D 形象展示 · 拖拽旋转</div>
+
+  <!-- 3D画布 -->
+  <div id="canvas-container"></div>
+
+  <!-- 模型信息(模型加载后由 JS 替换为真实名/来源,加载前显示"加载中") -->
+  <div class="model-info" id="model-info">
+    <div class="name" id="model-name">加载中</div>
+    <div class="source" id="model-source"></div>
+  </div>
+
+  <!-- 加载提示 -->
+  <div id="model-status">
+    <div class="spinner"></div>
+    <span id="loading-text">加载3D模型中...</span>
+  </div>
+
+  <!-- 控制按钮 -->
+  <div class="controls">
+    <button class="ctrl-btn active" id="btn-rotate" title="自动旋转">🔄</button>
+    <button class="ctrl-btn" id="btn-reset" title="重置视角">🎯</button>
+    <button class="ctrl-btn" id="btn-skip" title="切换下一个模型">⏭</button>
+    <button class="ctrl-btn" id="btn-shot" title="截图保存当前模型">📷</button>
+  </div>
+
+  <!-- 第十四阶段·追加：介绍页入口。⛔ 不能放进上面那个 .controls——
+       待机态那段模式切换（`set-mode`）把整列 `display:none` 掉了，而首页 `/` 落地就是待机态，
+       放进去等于放了颗看不见的按钮。这里独立定一份，两种模式都常驻可见。 -->
+  <a class="intro-btn" href="/how-it-works.html" target="_blank" rel="noopener" title="这套系统是怎么造的：量化管线 · 依据分档 · 当前底数">🧭 介绍</a>
+
+  <!-- 底部模型选择栏 -->
+  <div class="model-bar">
+    <div class="filter-bar">
+      <input id="model-search" type="search" placeholder="搜索模型…" autocomplete="off"
+             spellcheck="false" aria-label="按名字或来源搜索模型" />
+      <div class="source-chips" id="source-chips"></div>
+      <div id="filter-count"></div>
+    </div>
+    <div class="model-scroll" id="model-scroll"></div>
+  </div>
+
+  <!-- 轮播进度条(展示模式专用) -->
+  <div id="carousel-progress" class="hidden">
+    <div id="carousel-progress-bar"></div>
+  </div>
+
+  <!-- API 错误/全部失效覆盖层 -->
+  <div id="api-error-overlay">
+    <div class="error-icon">⚠️</div>
+    <div class="error-title" id="error-title">无法连接服务器</div>
+    <div class="error-desc" id="error-desc">请确认后端服务正在运行</div>
+    <button class="error-retry" id="model-list-retry" type="button">重试</button>
+  </div>
+
+  <!-- Three.js + MMD Loader (importmap) -->
+  <!-- 本地化 three@0.160.0:原 CDN(three@0.180.0)已移除 MMDLoader,且 jsdelivr 国内不稳,改为本地加载 -->
+  <script type="importmap">
+    {
+        "imports": {
+            "three": "/three/build/three.module.js",
+            "three/addons/": "/three/examples/jsm/"
+        }
+    }
+    </script>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+    import { MMDLoader } from 'three/addons/loaders/MMDLoader.js';
+
+    // ======================== 模型列表 ========================
+    // 从后端API动态加载已启用的模型列表
+    let MODELS = [];
+
+    const MODEL_BASE = '/api/models/file/';
+
+    // ======================== 全局变量 ========================
+    let scene, camera, renderer, controls, clock;
+    let pivot, currentMesh = null;
+    let mmdLoader;
+    let autoRotate = true;  // 默认开启自动旋转
+    let currentModelIndex = 0;
+
+    // ★ 加载版本锁:防止异步竞态导致模型重叠
+    // 每次调用 loadModel 时 +1,加载回调中检查 token 是否匹配
+    // 只有 token 匹配时才允许添加到场景,否则视为过期回调丢弃
+    let loadToken = 0;
+    // ★ 加载状态标志:防止轮播在加载未完成时触发新切换
+    let isLoading = false;
+
+    // ======================== 轮播配置 ========================
+    const CAROUSEL_INTERVAL = 120; // 每个模型展示 120 秒(2分钟)
+    let carouselTimer = null;      // 轮播计时器
+    let carouselProgress = 0;      // 当前进度(0~1)
+    let carouselLastTick = 0;      // 上次 tick 时间戳
+    let isStandbyMode = false;     // 是否处于展示模式
+    let loadTimeoutId = null;      // 模型加载超时计时器
+    const LOAD_TIMEOUT_MS = 60000; // 60秒加载超时(含纹理)
+    const MODEL_LIST_TIMEOUT_MS = 12000; // 列表请求+响应体读取共用 12 秒上限
+    let isHandlingError = false;   // 防止纹理错误并发触发多次跳转
+
+    // iframe 被手机服务页遮住时，连同 Three.js 渲染循环与轮播一起暂停。
+    let iframeVisible = true;
+    let animationFrameId = null;
+    let particleAnimationFrameId = null;
+    let drawParticles = null;
+    const shouldAnimate = () => iframeVisible && !document.hidden;
+
+    // 粒子与 Three.js 共用同一套可见性口径；syncAnimation 统一暂停/恢复两套循环。
+    function syncParticles() {
+      if (!drawParticles) return;
+      if (shouldAnimate() && particleAnimationFrameId === null) {
+        particleAnimationFrameId = requestAnimationFrame(drawParticles);
+      } else if (!shouldAnimate() && particleAnimationFrameId !== null) {
+        cancelAnimationFrame(particleAnimationFrameId);
+        particleAnimationFrameId = null;
+      }
+    }
+
+    // ======================== 粒子背景 ========================
+    function initParticles() {
+      const canvas = document.getElementById('particles-canvas');
+      const ctx = canvas.getContext('2d');
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+
+      const particles = [];
+      const count = 50;
+      for (let i = 0; i < count; i++) {
+        particles.push({
+          x: Math.random() * canvas.width,
+          y: Math.random() * canvas.height,
+          r: Math.random() * 1.5 + 0.5,
+          vx: (Math.random() - 0.5) * 0.3,
+          vy: (Math.random() - 0.5) * 0.3,
+          opacity: Math.random() * 0.5 + 0.2,
+        });
+      }
+
+      function draw() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        particles.forEach(p => {
+          p.x += p.vx;
+          p.y += p.vy;
+          if (p.x < 0) p.x = canvas.width;
+          if (p.x > canvas.width) p.x = 0;
+          if (p.y < 0) p.y = canvas.height;
+          if (p.y > canvas.height) p.y = 0;
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+          ctx.fillStyle = `rgba(245, 131, 76, ${p.opacity})`;
+          ctx.fill();
+        });
+        if (shouldAnimate()) {
+          particleAnimationFrameId = requestAnimationFrame(draw);
+        } else {
+          particleAnimationFrameId = null;
+        }
+      }
+      drawParticles = draw;
+      syncParticles();
+
+      window.addEventListener('resize', () => {
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+      });
+    }
+
+    // ======================== 初始化场景 ========================
+    function initScene() {
+      const container = document.getElementById('canvas-container');
+      const w = window.innerWidth;
+      const h = window.innerHeight;
+
+      scene = new THREE.Scene();
+      scene.background = new THREE.Color(0x0d1117);
+
+      camera = new THREE.PerspectiveCamera(45, w / h, 0.1, 200);
+      camera.position.set(0, 12, 28);
+
+      renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+      renderer.setSize(w, h);
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+      renderer.outputColorSpace = THREE.SRGBColorSpace;
+      renderer.toneMapping = THREE.ACESFilmicToneMapping;
+      renderer.toneMappingExposure = 0.3;   // 基准曝光(项目统一 0.3),由每个模型加载时覆盖
+      container.appendChild(renderer.domElement);
+
+      controls = new OrbitControls(camera, renderer.domElement);
+      controls.enableDamping = true;
+      controls.dampingFactor = 0.08;
+      controls.enablePan = false;
+      controls.minDistance = 2;
+      controls.maxDistance = 100;
+      controls.minPolarAngle = Math.PI * 0.15;
+      controls.maxPolarAngle = Math.PI * 0.85;
+      controls.target.set(0, 12, 0);
+
+      // ======================== 灯光(温和版七点布光) ========================
+      // 环境光(基础照明,避免死黑)
+      scene.add(new THREE.AmbientLight(0xffffff, 0.9));
+
+      // 主光(暖色)
+      const keyLight = new THREE.DirectionalLight(0xfff5e6, 3.5);
+      keyLight.position.set(8, 28, 18);
+      scene.add(keyLight);
+
+      // 辅助光(冷色)
+      const fillLight = new THREE.DirectionalLight(0xe0f0ff, 2.2);
+      fillLight.position.set(-18, 14, 14);
+      scene.add(fillLight);
+
+      // 轮廓光(蓝紫色,从后方打亮发丝和衣服边缘)
+      const rimLight = new THREE.DirectionalLight(0xc0d8ff, 2.5);
+      rimLight.position.set(4, 14, -20);
+      scene.add(rimLight);
+
+      // 底光(补光,照亮裙摆下方)
+      const bottomLight = new THREE.DirectionalLight(0xffeedd, 1.2);
+      bottomLight.position.set(0, -5, 10);
+      scene.add(bottomLight);
+
+      // 正面补光(确保面部和正面明亮)
+      const frontLight = new THREE.DirectionalLight(0xffffff, 1.2);
+      frontLight.position.set(0, 10, 22);
+      scene.add(frontLight);
+
+      // 顶光(照亮头顶和肩部)
+      const topLight = new THREE.DirectionalLight(0xfff8f0, 1.8);
+      topLight.position.set(0, 30, 5);
+      scene.add(topLight);
+
+      // 半球光(增强天空/地面反射)
+      scene.add(new THREE.HemisphereLight(0xf5f8ff, 0x2a3040, 1.0));
+
+      // ======================== 地面光环 ========================
+      const ringGeo = new THREE.RingGeometry(7, 7.8, 48);
+      const ringMat = new THREE.MeshBasicMaterial({
+        color: 0xf5834c, transparent: true, opacity: 0.15, side: THREE.DoubleSide
+      });
+      const ring = new THREE.Mesh(ringGeo, ringMat);
+      ring.rotation.x = -Math.PI / 2;
+      ring.position.y = 0.01;
+      scene.add(ring);
+
+      // 旋转轴心组
+      pivot = new THREE.Group();
+      scene.add(pivot);
+
+      // ★ 禁用 THREE.Cache:防止 MMDLoader 缓存跨模型污染
+      // 不同模型的纹理在缓存中可能被错误复用(如 skin.png 重名)
+      // 我们通过 HTTP 层已解决传输效率,无需 Three.js 内存缓存
+      THREE.Cache.enabled = false;
+
+      clock = new THREE.Clock();
+      mmdLoader = new MMDLoader();
+
+      // 捕获纹理/资源加载失败(MMDLoader 内部纹理 404 不会触发 load 的 onError)
+      // v2.1: 纹理缺失不应导致模型失效
+      THREE.DefaultLoadingManager.onError = (url) => {
+        console.warn('[v2.1] 纹理资源加载失败(不影响主模型显示):', url);
+      };
+
+      window.addEventListener('resize', onResize);
+    }
+
+    function onResize() {
+      const w = window.innerWidth;
+      const h = window.innerHeight;
+      camera.aspect = w / h;
+      camera.updateProjectionMatrix();
+      renderer.setSize(w, h);
+      fitCameraToModel();
+    }
+
+    // 根据窗口尺寸和模型大小自适应调整相机,确保模型始终完整显示并铺满屏幕
+    function fitCameraToModel() {
+      if (!currentMesh || !camera || !controls) return;
+      const box = new THREE.Box3().setFromObject(currentMesh);
+      const center = box.getCenter(new THREE.Vector3());
+      const size = box.getSize(new THREE.Vector3());
+
+      // Perspective: 2 * dist * tan(fov/2) = visible_height
+      const vFov = camera.fov * Math.PI / 180;
+      const canvasW = window.innerWidth;
+      // 扣除底部模型选择栏(筛选行 + 卡片轨,约 168px)+ 顶部留白(约 30px)后的有效高度
+      const canvasH = Math.max(window.innerHeight - 168, 300);
+      const aspect = canvasW / canvasH;
+
+      // 透视公式: visibleHeight = 2 * dist * tan(fov/2)
+      // 目标: modelHeight = fillRatio * visibleHeight → dist = (modelHeight/fillRatio) / (2*tan(fov/2))
+      // 高度方向:模型占屏幕 75%,上下各留 12.5% 确保头脚完整
+      const distByHeight = (size.y / 0.75) / (2 * Math.tan(vFov / 2));
+      // 宽度方向:模型占屏幕 70%,左右各留 15%(人物瘦高,宽度冗余更充分)
+      const distByWidth = (size.x / 0.70) / (2 * Math.tan(vFov / 2) * aspect);
+      // 取较大距离 = 两个方向都不裁切
+      const dist = Math.max(distByHeight, distByWidth);
+
+      // 限制距离范围,避免极端值
+      const clampedDist = Math.max(3, Math.min(dist, 120));
+
+      camera.position.set(0, center.y, clampedDist);
+      controls.target.set(0, center.y, 0);
+      controls.update();
+    }
+
+    // ======================== 触摸优化 ========================
+    function setupTouchOptimization() {
+      const canvas = renderer.domElement;
+      // 阻止双指缩放页面
+      document.addEventListener('gesturestart', (e) => e.preventDefault());
+      // 阻止双击缩放
+      let lastTouchEnd = 0;
+      document.addEventListener('touchend', (e) => {
+        const now = Date.now();
+        if (now - lastTouchEnd <= 300) e.preventDefault();
+        lastTouchEnd = now;
+      }, { passive: false });
+    }
+
+    // 统一模型切换入口
+    function selectModel(idx) {
+      if (idx < 0 || idx >= MODELS.length || idx === currentModelIndex) return;
+      // 跳过已失效模型
+      if (MODELS[idx] && MODELS[idx].failed) {
+        const next = findNextAvailable(idx, 1);
+        if (next !== idx && next !== -1) {
+          selectModel(next);
+        }
+        return;
+      }
+      document.querySelectorAll('.model-card').forEach(c => c.classList.remove('active'));
+      const card = document.querySelector(`.model-card[data-index="${idx}"]`);
+      if (card) card.classList.add('active');
+      loadModel(idx);
+    }
+
+    // 查找下一个/上一个可用模型:先只在筛选结果里找
+    function findNextAvailable(fromIdx, direction) {
+      const len = MODELS.length;
+      if (len === 0) return -1;
+      // 第二遍放开筛选条件:否则筛选命中 0 个时轮播会永久卡住
+      for (let pass = 0; pass < 2; pass++) {
+        for (let i = 1; i <= len; i++) {
+          const idx = ((fromIdx + direction * i) % len + len) % len;
+          const m = MODELS[idx];
+          if (!m || m.failed) continue;
+          if (pass === 0 && !matchesFilter(m)) continue;
+          return idx;
+        }
+      }
+      // 全部失效则返回 -1
+      return -1;
+    }
+
+    // ======================== 轮播逻辑(展示模式专用)========================
+    // 切换到下一个模型(循环),跳过失效模型
+    function nextModel() {
+      if (MODELS.length === 0) return;
+      if (isLoading) return;  // ★ 加载中,跳过
+      const next = findNextAvailable(currentModelIndex, 1);
+      if (next === -1) return;
+      resetCarouselProgress();
+      document.querySelectorAll('.model-card').forEach(c => c.classList.remove('active'));
+      const card = document.querySelector(`.model-card[data-index="${next}"]`);
+      if (card) card.classList.add('active');
+      loadModel(next);
+    }
+
+    // 切换到上一个模型(循环),跳过失效模型
+    function prevModel() {
+      if (MODELS.length === 0) return;
+      if (isLoading) return;  // ★ 加载中,跳过
+      const prev = findNextAvailable(currentModelIndex, -1);
+      if (prev === -1) return;
+      resetCarouselProgress();
+      document.querySelectorAll('.model-card').forEach(c => c.classList.remove('active'));
+      const card = document.querySelector(`.model-card[data-index="${prev}"]`);
+      if (card) card.classList.add('active');
+      loadModel(prev);
+    }
+
+    // 启动轮播
+    function startCarousel() {
+      if (carouselTimer) return;
+      if (!isStandbyMode) {
+        isStandbyMode = true;
+        carouselProgress = 0;
+      }
+      carouselLastTick = Date.now();
+      document.getElementById('carousel-progress').classList.remove('hidden');
+      if (!shouldAnimate()) return;
+      carouselTimer = setInterval(tickCarousel, 100);
+    }
+
+    // 仅暂停计时器，保留“展示模式”意图，iframe 恢复可见时继续轮播。
+    function pauseCarousel() {
+      if (carouselTimer) {
+        clearInterval(carouselTimer);
+        carouselTimer = null;
+      }
+      document.getElementById('carousel-progress').classList.add('hidden');
+    }
+
+    // 停止轮播
+    function stopCarousel() {
+      isStandbyMode = false;
+      pauseCarousel();
+    }
+
+    // 重置进度(切换模型后重新计时)
+    function resetCarouselProgress() {
+      carouselProgress = 0;
+      carouselLastTick = Date.now();
+      const bar = document.getElementById('carousel-progress-bar');
+      if (bar) bar.style.width = '0%';
+    }
+
+    // 轮播 tick:更新进度条,到时切换
+    function tickCarousel() {
+      const now = Date.now();
+      const delta = (now - carouselLastTick) / 1000;
+      carouselLastTick = now;
+      carouselProgress += delta / CAROUSEL_INTERVAL;
+
+      const bar = document.getElementById('carousel-progress-bar');
+      if (bar) bar.style.width = Math.min(100, carouselProgress * 100) + '%';
+
+      if (carouselProgress >= 1) {
+        nextModel();
+      }
+    }
+
+    // ======================== 材质优化 ========================
+    function optimizeMaterials(mesh) {
+      if (!mesh) return;
+      const maxAniso = renderer.capabilities.getMaxAnisotropy();
+      mesh.traverse((obj) => {
+        if (obj.isMesh) {
+          obj.castShadow = true;
+          obj.receiveShadow = true;
+          obj.frustumCulled = false;
+
+          const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
+          mats.forEach((mat) => {
+            if (mat.map) {
+              mat.map.colorSpace = THREE.SRGBColorSpace;
+              mat.map.anisotropy = maxAniso;
+              mat.map.minFilter = THREE.LinearMipmapLinearFilter;
+              mat.map.magFilter = THREE.LinearFilter;
+              mat.map.needsUpdate = true;
+            }
+            if (mat.gradientMap) {
+              mat.gradientMap.colorSpace = THREE.NoColorSpace;
+              mat.gradientMap.needsUpdate = true;
+            }
+            if (mat.toonMap) {
+              mat.toonMap.colorSpace = THREE.NoColorSpace;
+              mat.toonMap.needsUpdate = true;
+            }
+            if (mat.matcap) {
+              mat.matcap.colorSpace = THREE.SRGBColorSpace;
+              mat.matcap.anisotropy = maxAniso;
+              mat.matcap.needsUpdate = true;
+            }
+            if (mat.isMMDToonMaterial && mat.shininess !== undefined) {
+              mat.shininess = Math.min(mat.shininess * 1.5, 200);
+            }
+            mat.needsUpdate = true;
+          });
+        }
+      });
+    }
+
+    // 标记模型失效并隐藏卡片
+    function markModelFailed(index, reason) {
+      const model = MODELS[index];
+      if (!model || model.failed) return;
+      model.failed = true;
+      console.warn(`模型失效: ${model.name} (${reason})`);
+      const card = document.querySelector(`.model-card[data-index="${index}"]`);
+      if (card) {
+        card.classList.add('hidden-failed');
+        card.classList.remove('active');
+      }
+      applyFilter();   // 让筛选栏的可见数与卡片轨保持一致
+    }
+
+    // 彻底释放 mesh 及其所有资源(几何体+材质+纹理)
+    // ★ 关键:释放 texture 防止显存泄漏,释放 pivot 中所有子节点防止叠加
+    function disposeMesh(mesh) {
+      if (!mesh) return;
+      mesh.traverse((obj) => {
+        // 释放几何体
+        if (obj.geometry) {
+          obj.geometry.dispose();
+          obj.geometry = null;
+        }
+        // 释放材质及其纹理
+        if (obj.material) {
+          const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
+          mats.forEach((m) => {
+            // 释放所有关联的纹理
+            Object.keys(m).forEach((key) => {
+              if (m[key] && m[key].isTexture) {
+                m[key].dispose();
+                m[key] = null;
+              }
+            });
+            m.dispose();
+          });
+          obj.material = null;
+        }
+      });
+    }
+
+    // 强制清空 pivot 组中所有子节点(防止任何残留叠加)
+    function clearPivot() {
+      if (!pivot) return;
+      // 从后往前移除,确保安全
+      while (pivot.children.length > 0) {
+        const child = pivot.children[pivot.children.length - 1];
+        pivot.remove(child);
+        disposeMesh(child);
+      }
+      currentMesh = null;
+    }
+
+    // 加载模型(带超时保护)
+    function loadModel(index) {
+      if (index < 0 || index >= MODELS.length) return;
+      // 如果目标模型已失效,自动跳到下一个可用
+      if (MODELS[index].failed) {
+        const next = findNextAvailable(index, 1);
+        if (next !== -1 && next !== index) {
+          loadModel(next);
+        }
+        return;
+      }
+
+      // ★ 版本锁 +1:标记此次加载的唯一令牌
+      const myToken = ++loadToken;
+      currentModelIndex = index;
+      isLoading = true;  // ★ 标记加载中
+      const model = MODELS[index];
+
+      // 清除旧的加载超时
+      if (loadTimeoutId) {
+        clearTimeout(loadTimeoutId);
+        loadTimeoutId = null;
+      }
+
+      // 淡出过渡
+      const container = document.getElementById('canvas-container');
+      container.classList.add('transitioning');
+
+      showLoading(`正在加载 ${model.name}...`);
+
+      // ★ 强制清空 pivot 中所有残留 mesh(不仅仅是 currentMesh)
+      // 防止异步竞态留下的叠加 mesh
+      clearPivot();
+
+      // ★ 为每次加载创建独立的 MMDLoader 实例
+      // 全局 MMDLoader 在并发加载时会造成内部纹理/资源加载冲突
+      // (如 A 加载纹理时 B 触发 setResourcePath,导致 A 的纹理 URL 错乱)
+      const loader = new MMDLoader();
+
+      // 手动计算 resourcePath,避免 MMDLoader 的 extractUrlBase 因 URL 编码误判
+      // ★ 注意:不要在 URL 中加查询参数,MMDLoader 无法识别带 ? 的扩展名
+      // 缓存破坏通过后端禁用纹理缓存实现
+      const lastSlash = model.file.lastIndexOf('/');
+      const modelDir = lastSlash >= 0 ? model.file.substring(0, lastSlash + 1) : '';
+      const modelFile = lastSlash >= 0 ? model.file.substring(lastSlash + 1) : model.file;
+      const encodedDir = modelDir ? modelDir.split('/').filter(Boolean).map(encodeURIComponent).join('/') + '/' : '';
+      const encodedFile = encodeURIComponent(modelFile);
+      const url = MODEL_BASE + encodedDir + encodedFile;
+      loader.setResourcePath(MODEL_BASE + encodedDir);
+
+      // 加载超时计时器(纹理可能较大,留60秒)
+      loadTimeoutId = setTimeout(() => {
+        loadTimeoutId = null;
+        // ★ 超时也要检查版本锁,避免过期超时误杀新模型
+        if (myToken !== loadToken) return;
+        isLoading = false;  // ★ 超时重置加载状态
+        handleModelLoadError(index, '加载超时');
+      }, LOAD_TIMEOUT_MS);
+
+      loader.load(url, (mesh) => {
+        // ★ 版本锁检查:如果 token 不匹配,说明这是过期回调,直接丢弃
+        // 例如:用户在 A 加载完成前点了 B,A 的回调到达时 token 已过期
+        if (myToken !== loadToken) {
+          disposeMesh(mesh);  // 释放过期加载的 mesh
+          return;
+        }
+
+        if (loadTimeoutId) {
+          clearTimeout(loadTimeoutId);
+          loadTimeoutId = null;
+        }
+
+        isLoading = false;  // ★ 加载完成,重置状态
+
+        currentMesh = mesh;
+        // ★ 添加前再次确认 pivot 已清空
+        // (理论上 clearPivot 已做,此处防御性检查)
+        while (pivot.children.length > 0) {
+          const old = pivot.children[pivot.children.length - 1];
+          pivot.remove(old);
+          disposeMesh(old);
+        }
+        pivot.add(currentMesh);
+
+        // 应用独立曝光值
+        const exposure = model.exposure !== undefined ? model.exposure : 0.3;
+        renderer.toneMappingExposure = exposure;
+
+        optimizeMaterials(currentMesh);
+        applyBodyShape(currentBody); // 体型驱动：骨骼是新加载的实例，切模后必须重应用一次（先缩放再取景，包围盒才含缩放）
+        fitCameraToModel();
+
+        // 更新模型信息
+        document.getElementById('model-name').textContent = model.name;
+        document.getElementById('model-source').textContent = model.source || '';
+
+        hideLoading();
+        document.getElementById('canvas-container').classList.remove('transitioning');
+      }, (xhr) => {
+        // ★ 进度更新也要检查版本锁,避免过期进度覆盖新进度
+        if (myToken !== loadToken) return;
+        if (xhr.total) {
+          const pct = Math.min(99, Math.max(0, Math.round((xhr.loaded / xhr.total) * 100))); // 🔴 10-22 组2b：原来是裸的 loaded/total*100，实测加载今汐时打出「227%」——MMDLoader 的 onProgress 在贴图阶段把多个文件的 loaded 累加、total 却仍是单个文件的长度，比值能超 1。钳到 99 是因为到 100 会让顾客以为下载完了而迟迟不出画面；真完成由 hideLoading() 负责。
+          updateLoadingText(`正在加载 ${model.name}... ${pct}%`);
+        }
+      }, (err) => {
+        // ★ 错误处理也要检查版本锁
+        // 注意:err 回调的第一个参数是 Error,不是 mesh(与 load 成功回调不同)
+        if (myToken !== loadToken) return;
+        if (loadTimeoutId) {
+          clearTimeout(loadTimeoutId);
+          loadTimeoutId = null;
+        }
+        isLoading = false;  // ★ 加载失败,重置状态
+        handleModelLoadError(index, err ? String(err.message || err) : '加载失败');
+      });
+    }
+
+    // 处理模型加载失败:标记失效 + 跳过
+    function handleModelLoadError(index, reason) {
+      if (isHandlingError) return;
+      isHandlingError = true;
+      const model = MODELS[index];
+      markModelFailed(index, reason);
+      updateLoadingText(`模型失效: ${model ? model.name : ''}`);
+      document.getElementById('canvas-container').classList.remove('transitioning');
+
+      // 尝试加载下一个可用模型
+      const next = findNextAvailable(index, 1);
+      if (next !== -1 && next !== index) {
+        document.querySelectorAll('.model-card').forEach(c => c.classList.remove('active'));
+        const card = document.querySelector(`.model-card[data-index="${next}"]`);
+        if (card) card.classList.add('active');
+        loadModel(next);
+      } else {
+        // 全部失效:显示错误覆盖层
+        hideLoading();
+        showApiError(
+          '模型加载失败',
+          '已尝试加载全部人物模型但均失败,请检查模型文件是否完整.'
+        );
+      }
+      isHandlingError = false;
+    }
+
+    // ======================== UI 辅助 ========================
+    function showLoading(text) {
+      const el = document.getElementById('model-status');
+      el.classList.remove('hidden');
+      updateLoadingText(text);
+    }
+    function hideLoading() {
+      document.getElementById('model-status').classList.add('hidden');
+    }
+    function updateLoadingText(text) {
+      document.getElementById('loading-text').textContent = text;
+    }
+
+    // ======================== 构建模型选择栏 ========================
+    function buildModelBar() {
+      const scroll = document.getElementById('model-scroll');
+      scroll.innerHTML = '';
+      MODELS.forEach((m, idx) => {
+        const card = document.createElement('div');
+        card.className = 'model-card' + (idx === 0 ? ' active' : '');
+        card.dataset.index = idx;
+        if (m.failed) card.classList.add('hidden-failed');
+        // 使用 DOM API 避免 XSS(数据来自管理员输入,不可信)
+        const makeIcon = () => {
+          const el = document.createElement('div');
+          el.className = 'icon';
+          el.textContent = m.icon;
+          return el;
+        };
+        const errorDot = document.createElement('span');
+        errorDot.className = 'error-dot';
+        let visual;
+        if (typeof m.preview === 'string' && m.preview.startsWith('/')) {
+          const img = document.createElement('img');
+          img.className = 'thumb';
+          img.loading = 'lazy';
+          img.decoding = 'async';
+          img.alt = m.name;
+          img.onerror = () => img.replaceWith(makeIcon());
+          img.src = m.preview;
+          visual = img;
+        } else {
+          visual = makeIcon();
+        }
+        const labelDiv = document.createElement('div');
+        labelDiv.className = 'label';
+        labelDiv.textContent = m.name;
+        const subDiv = document.createElement('div');
+        subDiv.className = 'sublabel';
+        subDiv.textContent = m.source || '';
+        card.append(errorDot, visual, labelDiv, subDiv);
+        card.addEventListener('click', () => {
+          const modelIdx = parseInt(card.dataset.index, 10);
+          if (currentModelIndex === modelIdx) return;
+          if (MODELS[modelIdx].failed) return;
+          document.querySelectorAll('.model-card').forEach(c => c.classList.remove('active'));
+          card.classList.add('active');
+          loadModel(modelIdx);
+        });
+        scroll.appendChild(card);
+      });
+    }
+
+    // ======================== 筛选(搜索 + 来源)========================
+    // 只隐藏卡片、不重建列表:dataset.index 必须始终等于 MODELS 下标,
+    // 一旦重排,loadModel / nextModel / active 高亮会全部错位。
+    const FILTER = { q: '', source: '' };
+
+    function matchesFilter(m) {
+      if (FILTER.source && (m.source || '未分类') !== FILTER.source) return false;
+      if (!FILTER.q) return true;
+      return [m.name, m.source, m.desc].some(
+        (v) => typeof v === 'string' && v.toLowerCase().includes(FILTER.q)
+      );
+    }
+
+    // 来源名来自管理员输入,一律走 DOM API 赋值,不用 innerHTML
+    function buildSourceChips() {
+      const box = document.getElementById('source-chips');
+      box.innerHTML = '';
+      const makeChip = (label, value) => {
+        const chip = document.createElement('button');
+        chip.type = 'button';
+        chip.className = 'chip';
+        chip.dataset.source = value;
+        chip.textContent = label;
+        chip.addEventListener('click', () => {
+          FILTER.source = value;
+          applyFilter();
+        });
+        return chip;
+      };
+      const counts = new Map();
+      MODELS.forEach((m) => {
+        const key = m.source || '未分类';
+        counts.set(key, (counts.get(key) || 0) + 1);
+      });
+      box.appendChild(makeChip('全部', ''));
+      // 模型数多的排前面,常用的来源不用横向滚
+      [...counts.entries()]
+        .sort((a, b) => b[1] - a[1])
+        .forEach(([source, n]) => box.appendChild(makeChip(`${source} ${n}`, source)));
+    }
+
+    function applyFilter() {
+      let visible = 0;
+      document.querySelectorAll('.model-card').forEach((card) => {
+        const m = MODELS[parseInt(card.dataset.index, 10)];
+        const ok = !!m && !m.failed && matchesFilter(m);
+        card.style.display = ok ? '' : 'none';
+        if (ok) visible++;
+      });
+      document.getElementById('filter-count').textContent = `${visible}/${MODELS.length}`;
+      document.querySelectorAll('#source-chips .chip').forEach((chip) => {
+        chip.classList.toggle('active', chip.dataset.source === FILTER.source);
+      });
+      // 当前模型被筛掉时只撤高亮、不换画面:正在看的东西被自动跳走更让人困惑
+      const activeCard = document.querySelector(`.model-card[data-index="${currentModelIndex}"]`);
+      if (activeCard && activeCard.style.display === 'none') activeCard.classList.remove('active');
+    }
+
+    // ======================== 截图保存 ========================
+    // 开 preserveDrawingBuffer 会让每帧多留一份 GPU 拷贝,不值:
+    // 先补渲染一帧、再在同一轮 JS 里读回,buffer 还没被合成器清掉。
+    function captureShot() {
+      if (!renderer || !scene || !camera) return;
+      renderer.render(scene, camera);
+      const m = MODELS[currentModelIndex];
+      const name = (m && m.name ? m.name : 'model').replace(/[\\/:*?"<>|]/g, '');
+      const link = document.createElement('a');
+      const url = renderer.domElement.toDataURL('image/png');
+      link.href = url;
+      link.download = `${name}-${new Date().toISOString().slice(0, 10)}.png`;
+      link.click();
+      const btn = document.getElementById('btn-shot');
+      btn.textContent = '✅';
+      setTimeout(() => { btn.textContent = '📷'; }, 900);
+      return url;
+    }
+
+    // ======================== 按钮事件 ========================
+    document.getElementById('model-list-retry').addEventListener('click', () => {
+      void retryModelList();
+    });
+
+    document.getElementById('btn-rotate').addEventListener('click', (e) => {
+      autoRotate = !autoRotate;
+      e.currentTarget.classList.toggle('active', autoRotate);
+    });
+
+    document.getElementById('btn-reset').addEventListener('click', () => {
+      fitCameraToModel();
+    });
+
+    // 轮播跳过按钮:手动切换下一个模型
+    document.getElementById('btn-skip').addEventListener('click', () => {
+      nextModel();
+    });
+
+    document.getElementById('btn-shot').addEventListener('click', captureShot);
+
+    const searchInput = document.getElementById('model-search');
+    searchInput.addEventListener('input', () => {
+      FILTER.q = searchInput.value.trim().toLowerCase();
+      applyFilter();
+    });
+
+    // 键盘快捷键:→ 切换下一个模型,← 切换上一个(两种模式通用)
+    document.addEventListener('keydown', (e) => {
+      // 焦点在搜索框时 ← → 是移动光标,不能顺手翻模型
+      if (e.target === searchInput) {
+        if (e.key === 'Escape') {
+          searchInput.value = '';
+          FILTER.q = '';
+          applyFilter();
+        }
+        return;
+      }
+      if (e.key === 'ArrowRight') {
+        nextModel();
+      } else if (e.key === 'ArrowLeft') {
+        prevModel();
+      }
+    });
+
+    // ======================== 渲染循环 ========================
+    function animate() {
+      if (!shouldAnimate()) {
+        animationFrameId = null;
+        return;
+      }
+      animationFrameId = requestAnimationFrame(animate);
+      const dt = clock.getDelta();
+      // 自动旋转:围绕 Y 轴匀速旋转
+      if (autoRotate && pivot) {
+        pivot.rotation.y += dt * 0.4;
+      }
+      controls.update();
+      renderer.render(scene, camera);
+    }
+
+    function syncAnimation() {
+      syncParticles();
+      const active = shouldAnimate() && !!renderer;
+      if (active) {
+        if (animationFrameId === null) {
+          clock.getDelta(); // 丢弃隐藏期间的间隔，恢复时不要突然跳帧
+          animationFrameId = requestAnimationFrame(animate);
+        }
+        if (isStandbyMode) startCarousel();
+      } else {
+        if (animationFrameId !== null) {
+          cancelAnimationFrame(animationFrameId);
+          animationFrameId = null;
+          if (clock) clock.getDelta();
+        }
+        pauseCarousel();
+      }
+    }
+    document.addEventListener('visibilitychange', syncAnimation);
+
+    // ======================== 从API加载模型列表 ========================
+    let modelListController = null;
+    let modelListRequestId = 0;
+
+    async function loadModelsFromAPI() {
+      modelListController?.abort();
+      const controller = new AbortController();
+      modelListController = controller;
+      const requestId = ++modelListRequestId;
+      let timedOut = false;
+      let timeoutId = null;
+      const timeout = new Promise((_, reject) => {
+        timeoutId = setTimeout(() => {
+          timedOut = true;
+          reject(new Error('模型列表加载超过 12 秒'));
+          controller.abort();
+        }, MODEL_LIST_TIMEOUT_MS);
+      });
+
+      try {
+        // 超时覆盖 fetch 与 res.json() 整个链路，避免响应体永远不结束。
+        const request = fetch('/api/models/list', { signal: controller.signal }).then(async (res) => {
+          if (!res.ok && res.status !== 304) throw new Error(`HTTP ${res.status}`);
+          return res.json();
+        });
+        const data = await Promise.race([request, timeout]);
+        if (requestId !== modelListRequestId) return false;
+        if (data.success && data.data && data.data.length > 0) {
+          MODELS = data.data;
+          hideApiError();
+          return true;
+        }
+        // 空列表也算异常
+        throw new Error('模型列表为空');
+      } catch (e) {
+        if (requestId !== modelListRequestId) return false;
+        console.error('加载模型列表失败:', e);
+        MODELS = [];
+        showApiError(
+          '人物模型列表加载失败',
+          timedOut
+            ? '模型列表加载超过 12 秒，请点击重试。'
+            : '后端 API 未响应或模型列表为空,请确认服务端已启动并扫描了模型目录.'
+        );
+        return false;
+      } finally {
+        clearTimeout(timeoutId);
+        if (modelListController === controller) modelListController = null;
+      }
+    }
+
+    async function retryModelList() {
+      hideApiError();
+      showLoading('正在加载模型列表...');
+      const loaded = await loadModelsFromAPI();
+      if (loaded) {
+        buildModelBar();
+        buildSourceChips();
+        applyFilter();
+        loadModel(0);
+      } else {
+        hideLoading();
+      }
+    }
+
+    const apiErrorHiddenDisplays = new Map();
+
+    function showApiError(title, desc) {
+      const overlay = document.getElementById('api-error-overlay');
+      document.getElementById('error-title').textContent = title;
+      document.getElementById('error-desc').textContent = desc;
+      overlay.classList.add('show');
+      // 隐藏模型信息区，并记住原值供重试成功后恢复。
+      const elements = [
+        document.getElementById('model-info'),
+        document.getElementById('model-hint'),
+        document.getElementById('model-status'),
+        document.querySelector('.controls'),
+        document.querySelector('.model-bar'),
+      ];
+      elements.forEach((el) => {
+        if (!el) return;
+        if (!apiErrorHiddenDisplays.has(el)) apiErrorHiddenDisplays.set(el, el.style.display);
+        el.style.display = 'none';
+      });
+    }
+
+    function hideApiError() {
+      document.getElementById('api-error-overlay').classList.remove('show');
+      apiErrorHiddenDisplays.forEach((display, el) => { el.style.display = display; });
+      apiErrorHiddenDisplays.clear();
+    }
+
+    // ======================== 启动 ========================
+    async function startApp() {
+      initScene();
+      initParticles();
+      setupTouchOptimization();
+      await loadModelsFromAPI();
+      if (MODELS.length > 0) {
+        buildModelBar();
+        buildSourceChips();
+        applyFilter();
+        loadModel(0);
+      }
+      syncAnimation();
+    }
+    startApp();
+
+    // ★ 调试接口:构建为局部变量,默认不暴露到 window（见下方 ?debug=1 门控）
+    const __debugApi = {
+      getState() {
+        const pivotInfo = pivot ? {
+          childrenCount: pivot.children.length,
+          children: pivot.children.map((c) => ({
+            type: c.type,
+            name: c.name,
+            uuid: c.uuid.substring(0, 8) + '...',
+            position: { x: c.position.x.toFixed(2), y: c.position.y.toFixed(2), z: c.position.z.toFixed(2) },
+          })),
+        } : null;
+
+        let meshStats = null;
+        if (currentMesh) {
+          let skinnedMeshes = 0;
+          let regularMeshes = 0;
+          let groups = 0;
+          let total = 0;
+          const names = new Set();
+          currentMesh.traverse((obj) => {
+            total++;
+            if (obj.isSkinnedMesh) skinnedMeshes++;
+            else if (obj.isMesh) regularMeshes++;
+            else if (obj.isGroup) groups++;
+            if (obj.name) names.add(obj.name);
+          });
+          meshStats = {
+            uuid: currentMesh.uuid.substring(0, 8) + '...',
+            skinnedMeshes,
+            regularMeshes,
+            groups,
+            totalObjects: total,
+            uniqueNames: Array.from(names).slice(0, 20),
+            nameCount: names.size,
+            position: {
+              x: currentMesh.position.x.toFixed(2),
+              y: currentMesh.position.y.toFixed(2),
+              z: currentMesh.position.z.toFixed(2),
+            },
+            scale: {
+              x: currentMesh.scale.x.toFixed(3),
+              y: currentMesh.scale.y.toFixed(3),
+              z: currentMesh.scale.z.toFixed(3),
+            },
+          };
+        }
+
+        return {
+          loadToken,
+          currentModelIndex,
+          modelCount: MODELS.length,
+          pivot: pivotInfo,
+          currentMesh: meshStats,
+          threeCacheEnabled: THREE.Cache.enabled,
+          autoRotate,
+          carouselActive: !!carouselTimer,
+          iframeVisible,
+          animationPaused: !shouldAnimate(),
+          filter: { q: FILTER.q, source: FILTER.source },
+        };
+      },
+
+      // 截图(返回 PNG data URL,同时触发下载)
+      capture() {
+        return captureShot();
+      },
+
+      // 强制清理所有 mesh(测试用)
+      forceClear() {
+        clearPivot();
+        return 'Pivot cleared';
+      },
+
+      // 打印 mesh 层级树(调试用)
+      printTree() {
+        if (!currentMesh) return 'No current mesh';
+        const lines = [];
+        function walk(obj, depth = 0) {
+          const prefix = '  '.repeat(depth);
+          const type = obj.type || obj.constructor.name;
+          lines.push(`${prefix}${type} "${obj.name || ''}" [${obj.uuid?.substring(0, 6) || ''}]`);
+          if (obj.children) {
+            obj.children.forEach((c) => walk(c, depth + 1));
+          }
+        }
+        walk(currentMesh);
+        return lines.join('\n');
+      },
+    };
+    // 默认不挂载；打开 /gallery?debug=1 才暴露，供渲染/纹理排查时在浏览器里调
+    if (new URLSearchParams(location.search).get('debug') === '1') {
+      window.__debug = __debugApi;
+      console.log('[__debug] 调试接口已挂载到 window.__debug');
+    }
+
+    // 点击模型区域进入服务流程
+    const canvasEl = document.getElementById('canvas-container');
+    canvasEl.addEventListener('click', () => {
+      // 🔴 第十四阶段·第一步 X1：这一页有两种打开方式。嵌在展厅里时（`ExhibitionHall.tsx` 的 iframe）
+      // postMessage 给父窗口是对的；但**直接打开 /gallery**（门店投屏、顾客手机扫这个址）时
+      // `window.parent === window`，这句是发给自己，而本文件的监听只认 'set-mode' ⇒ 点半天没反应，
+      // 顾客站在门口进不了服务流程。正解＝非嵌入时直接跳展厅页并带 `?start=1`，由 React 那侧开服务态。
+      if (window.parent === window) {
+        location.href = '/?start=1';
+        return;
+      }
+      window.parent.postMessage({ type: 'start-service' }, window.location.origin);
+    });
+
+    // ======================== 体型驱动(顾客尺寸 → 模特体型) ========================
+    // 2026-10-29：顾客在表单里填过的身高/体重/胸/腰/臀/肩，由 ExhibitionHall.tsx 经
+    // postMessage({type:'set-body'}) 送进这个 iframe，映射到模特的骨骼缩放＋整体非均匀缩放，
+    // 让待机/服务态的模特"像我"。三条边界写死：
+    //  1. 展厅模型全是 MMD .pmx——没有体型滑杆，只有日文标准骨骼 ⇒ 只能 best-effort 按骨骼名
+    //     近似：找不到对应骨骼的维度就跳过（与"缺测不出分"同纪律），⛔ 不许因为缺骨骼报错。
+    //  2. BODY_BASE 是**展示用约定基准**（≈女装 160/84A 量级），不是国标数值：⛔ 不进打分、
+    //     ⛔ 不喂规则匹配、⛔ 不往档案写回。与 docs/依据/23 的词表出口约束同一条纪律。
+    //  3. 全部缩放钳制（骨骼 ±25%／整体 ±20%）：夸张变形会让顾客以为渲染坏了；腰／臀落在
+    //     相邻骨骼上时允许钳制内的叠加，这是近似的代价，写在明处。
+    const BODY_BASE = { height: 162, weight: 54, bust: 84, waist: 68, hip: 90, shoulder: 38 };
+    const BODY_CLAMP = { bone: 0.25, whole: 0.20 };
+    let currentBody = null; // {height?,weight?,bust?,waist?,hip?,shoulder?} cm/kg；null=未收到/清空
+
+    function clampBodyRatio(r, range) {
+      return Math.min(1 + range, Math.max(1 - range, r));
+    }
+
+    // MMD 骨骼名是日文（PMX 原生）或 Blender 风格的 .L/.R 后缀（转换模型），按候选顺序取第一个精确命中
+    function findBone(mesh, names) {
+      const bones = (mesh && mesh.skeleton && mesh.skeleton.bones) || [];
+      for (let i = 0; i < names.length; i++) {
+        const hit = bones.find((b) => b.name === names[i]);
+        if (hit) return hit;
+      }
+      return null;
+    }
+
+    function findBonesAll(mesh, names) {
+      const bones = (mesh && mesh.skeleton && mesh.skeleton.bones) || [];
+      return bones.filter((b) => names.indexOf(b.name) !== -1);
+    }
+
+    function setBoneScale(bone, x, y, z) {
+      // 原始 scale 存 userData：重应用时永远相对原值缩放，不会越乘越离谱
+      if (!bone.userData.__bodyOrig) {
+        bone.userData.__bodyOrig = { x: bone.scale.x, y: bone.scale.y, z: bone.scale.z };
+      }
+      const o = bone.userData.__bodyOrig;
+      bone.scale.set(o.x * x, o.y * y, o.z * z);
+    }
+
+    function resetBodyShape(mesh) {
+      if (!mesh) return;
+      const bones = (mesh.skeleton && mesh.skeleton.bones) || [];
+      bones.forEach((b) => {
+        if (b.userData.__bodyOrig) {
+          b.scale.set(b.userData.__bodyOrig.x, b.userData.__bodyOrig.y, b.userData.__bodyOrig.z);
+        }
+      });
+      if (mesh.userData.__bodyWhole) {
+        const w = mesh.userData.__bodyWhole;
+        mesh.scale.set(w.x, w.y, w.z);
+        mesh.userData.__bodyWhole = null;
+      }
+    }
+
+    function applyBodyShape(body) {
+      if (!currentMesh) return;
+      resetBodyShape(currentMesh); // 先还原再套新值：相对原始骨架算，不叠加
+      if (!body) return;
+      const num = (v) => (typeof v === 'number' && isFinite(v) && v > 0 ? v : null);
+      const h = num(body.height);
+      const w = num(body.weight);
+      const bust = num(body.bust);
+      const waist = num(body.waist);
+      const hip = num(body.hip);
+      const shoulder = num(body.shoulder);
+
+      // ① 整体缩放：Y←身高比；XZ←√(BMI/基准BMI)——围度近似随面积走，直接套体重比会夸张
+      let sy = 1;
+      let sxz = 1;
+      if (h) sy = clampBodyRatio(h / BODY_BASE.height, BODY_CLAMP.whole);
+      if (w) {
+        const hM = (h || BODY_BASE.height) / 100;
+        const baseM = BODY_BASE.height / 100;
+        const bmiRatio = (w / (hM * hM)) / (BODY_BASE.weight / (baseM * baseM));
+        sxz = clampBodyRatio(Math.sqrt(bmiRatio), BODY_CLAMP.whole);
+      }
+      if (h || w) {
+        if (!currentMesh.userData.__bodyWhole) {
+          currentMesh.userData.__bodyWhole = {
+            x: currentMesh.scale.x, y: currentMesh.scale.y, z: currentMesh.scale.z,
+          };
+        }
+        const o = currentMesh.userData.__bodyWhole;
+        currentMesh.scale.set(o.x * sxz, o.y * sy, o.z * sxz);
+      }
+
+      // ② 骨骼级差异：各围度比映射到对应骨骼的 XZ（骨骼长度方向是 Y，横扩只动 X/Z）
+      if (waist) {
+        const b = findBone(currentMesh, ['腰', '骨盤']);
+        if (b) {
+          const r = clampBodyRatio(waist / BODY_BASE.waist, BODY_CLAMP.bone);
+          setBoneScale(b, r, 1, r);
+        }
+      }
+      if (hip) {
+        const b = findBone(currentMesh, ['下半身', '骨盤']);
+        if (b) {
+          const r = clampBodyRatio(hip / BODY_BASE.hip, BODY_CLAMP.bone);
+          setBoneScale(b, r, 1, r);
+        }
+      }
+      if (bust) {
+        const b = findBone(currentMesh, ['上半身2', '上半身']);
+        if (b) {
+          const r = clampBodyRatio(bust / BODY_BASE.bust, BODY_CLAMP.bone);
+          setBoneScale(b, r, 1, r);
+          // 头是上半身的子骨骼，会被带着一起变宽 ⇒ 反向补一次，保持头中立
+          const head = findBone(currentMesh, ['頭']);
+          if (head) setBoneScale(head, 1 / r, 1, 1 / r);
+        }
+      }
+      if (shoulder) {
+        const bones = findBonesAll(currentMesh, ['左肩', '右肩', '肩.L', '肩.R']);
+        const r = clampBodyRatio(shoulder / BODY_BASE.shoulder, BODY_CLAMP.bone);
+        bones.forEach((b) => setBoneScale(b, r, 1, r));
+      }
+    }
+
+    // ======================== 模式切换(展示页 / 服务页) ========================
+    window.addEventListener('message', (e) => {
+      // 安全:只接受同源 postMessage,防止跨域攻击
+      if (e.origin !== window.location.origin) return;
+      if (e.data?.type === 'set-mode') {
+        const mode = e.data.mode; // 'standby' | 'service'
+        const hint = document.getElementById('model-hint');
+        const info = document.getElementById('model-info');
+        const bar = document.querySelector('.model-bar');
+        const ctrls = document.querySelector('.controls');
+
+        if (mode === 'standby') {
+          // 展示页:隐藏所有UI,启动轮播
+          hint.style.display = 'none';
+          info.style.display = 'none';
+          bar.style.display = 'none';
+          ctrls.style.display = 'none';
+          startCarousel();
+        } else {
+          // 服务页:保留模型名称和控制按钮,停止轮播
+          hint.style.display = 'none';
+          info.style.display = 'block';
+          bar.style.display = 'none';
+          ctrls.style.display = 'flex';
+          stopCarousel();
+        }
+      }
+      if (e.data?.type === 'set-visible') {
+        iframeVisible = e.data.visible !== false;
+        syncAnimation();
+      }
+      if (e.data?.type === 'set-body') {
+        // 体型驱动：父窗口把顾客六格尺寸送来；null=恢复默认体型，缺字段=不动对应轴。立即重应用到当前模特
+        currentBody = e.data.body && typeof e.data.body === 'object' ? e.data.body : null;
+        applyBodyShape(currentBody);
+      }
+    });
+
+    // 默认启动轮播(独立打开时也是展示模式)
+    startCarousel();
+    syncAnimation();
+  </script>
+    <!-- 备案信息:站3 是 sparklove.cn 的子域,随主域备案,展示主体备案号 -->
+    <div id="beian-line">
+      <a href="https://beian.miit.gov.cn/" target="_blank" rel="noopener noreferrer">
+        浙ICP备2026048677号-1
+      </a>
+    </div>
+</body>
+
+</html>

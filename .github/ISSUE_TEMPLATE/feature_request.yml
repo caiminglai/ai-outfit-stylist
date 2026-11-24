@@ -1,0 +1,35 @@
+name: 功能建议
+description: 先说明问题场景与边界，再讨论方案和实现。
+body:
+  - type: textarea
+    id: scenario
+    attributes:
+      label: 问题场景
+      description: 谁在什么情况下遇到什么问题？请给出具体例子，不要只写想要某个功能。
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: 建议方案
+      description: 描述希望增加或改变的行为、交互方式，以及可接受的替代方案。
+    validations:
+      required: true
+  - type: textarea
+    id: boundaries
+    attributes:
+      label: 边界与非目标
+      description: 说明适用平台、权限、数据与兼容性约束，以及明确不做什么；是否涉及规则、接口、迁移或模型资产？
+    validations:
+      required: true
+  - type: radio
+    id: contribution
+    attributes:
+      label: 是否愿意贡献
+      description: 选择你当前可参与的方式。
+      options:
+        - label: 愿意提交 PR 实现
+        - label: 愿意参与讨论或测试
+        - label: 暂时只提出建议
+    validations:
+      required: true

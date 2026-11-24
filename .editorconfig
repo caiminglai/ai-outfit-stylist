@@ -1,0 +1,39 @@
+# EditorConfig：让每个人的编辑器按同一套排版落盘，省掉"只有 prettier 管得到的那半截"之外
+# 的扯皮（prettier 只吃 **/*.js 与 src/**/*.{ts,tsx,css,json}，md/yml/html/bat 全在它射程外，
+# 这些正好由这里兜住）。
+# 规则来源：两侧 .prettierrc.json 现量 tabWidth=2、semi=false、singleQuote=true、
+# printWidth=100、endOfLine=auto；仓库现有文本文件实测是纯 LF。
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 2
+
+# 批处理必须是 CRLF，且行尾空格在某些 Windows 版本里会影响解析 —— 整条豁免，
+# 别让编辑器"顺手"把它转成 LF（dev.bat 就是这个仓库里唯一的一个）
+[*.bat]
+end_of_line = crlf
+trim_trailing_whitespace = false
+
+[*.cmd]
+end_of_line = crlf
+trim_trailing_whitespace = false
+
+# Markdown 行尾两个空格是"硬换行"语法，不能当尾部空白裁掉
+[*.md]
+trim_trailing_whitespace = false
+max_line_length = off
+
+# package-lock.json 是 npm 自己维护的，编辑器缩进设置不能碰它（改了会让每次 install 的
+# diff 里多一整片排版噪声）
+[package-lock.json]
+indent_size = 2
+insert_final_newline = keep
+trim_trailing_whitespace = false
+
+[*.{yml,yaml}]
+indent_size = 2

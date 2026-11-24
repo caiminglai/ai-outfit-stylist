@@ -1,0 +1,803 @@
+/* ══════════════════════════════════════════════════════════════
+   管理后台 — 全局状态、常量与工具函数
+
+   依赖: 无(最先加载)
+   ══════════════════════════════════════════════════════════════ */
+
+/* ── API 地址常量 ── */
+var API_BASE = '/admin/api';
+var RULES_API = '/api/rules';
+var INV_API = '/api/inventory';
+var MODELS_API = '/api/models';
+
+/* ── 全局状态 ── */
+var State = {
+  tables: [],
+  functions: [],
+  rules: [],
+  categories: [],
+  products: [],
+  models: [],
+  currentTable: null,
+  currentPage: 1,
+  // 每页条数：键名跟后端的分页参数同名（2026-11-02 规范轮把 per_page 统一成 limit）
+  limit: 20,
+  storeId: '',
+  stores: [],
+  editingRuleId: null,
+  editingProductId: null,
+};
+
+/* ── 中文标签映射 ── */
+var CATEGORY_LABELS = {
+  '穿搭': '穿搭', '妆容': '美妆', '发型': '发型', '配饰': '配饰', '姿势': '姿势'
+};
+// SCENARIO_LABELS 已删（2026-10-11）：全仓 grep 只命中它自己的定义，没有任何调用方，
+// 场景标签现在由 /api/rules/schema 的 scenarios 下发（admin-rules.js fillOptions），留这份空壳只会误导后来人。
+
+/* ── 数据值翻译映射（显示用，不改数据库原始值）── */
+var VALUE_LABELS = {
+  // rule_groups.mode
+  'rule_groups.mode': { 'store': '门店', 'personal': '个人', 'all': '门店+个人' },
+  // rule_groups.evidence_level —— 与后端 services/evidenceLevels.js 的档位一致
+  'rule_groups.evidence_level': {
+    'A': 'A 国标/国际标准', 'B': 'B 学术实证', 'C': 'C 行业体系/经验', 'D': 'D 命理体系',
+    'null': '未标注(按 C 档对待)', '': '未标注(按 C 档对待)',
+  },
+  // rule_groups.category
+  'rule_groups.category': { '穿搭': '穿搭', '妆容': '美妆', '发型': '发型', '配饰': '配饰', '姿势': '姿势' },
+  // rule_groups.enabled / inventory_products.enabled / model_configs.enabled 等。键只写字符串形态：对象属性名最终都是字符串，引号包起来的 1 与裸写的 1 是同一个键——原来两种各写一遍（值完全相同，行为从来没变过），eslint 报 no-dupe-keys 12 条，11-04 规范轮把冗余那半收掉。
+  'rule_groups.enabled': { '1': '启用', '0': '禁用' },
+  'inventory_products.enabled': { '1': '上架', '0': '下架' },
+  'model_configs.enabled': { '1': '启用', '0': '禁用' },
+  'admin_users.is_active': { '1': '启用', '0': '禁用' },
+  // face_features.status
+  'face_features.status': { 'pending': '待处理', 'done': '完成', 'error': '错误' },
+  // tryon_results.status
+  'tryon_results.status': {
+    'pending': '处理中',
+    'done': '完成',
+    'failed': '失败',
+    'degraded': '未生成(原图)',
+  },
+  // shopping_wishlist
+  'shopping_wishlist.status': { 'pending': '待买', 'bought': '已买' },
+  'shopping_wishlist.priority': { 'low': '低', 'medium': '中', 'high': '高' },
+  // deposits 付款凭证
+  'deposits.channel': { 'wechat': '微信', 'alipay': '支付宝' },
+  'deposits.status': { 'pending': '待确认', 'approved': '已确认', 'rejected': '已驳回' },
+  // creator_works 创作者作品
+  'creator_works.type': { 'outfit': '搭配', 'makeup': '化妆', 'rule': '推荐规则', 'model': '模型' },
+  'creator_works.status': { 'pending': '待审核', 'approved': '已上架', 'rejected': '未通过' },
+  'creator_works.featured': { '1': '精选', '0': '普通' },
+  // customer_sessions.synced
+  'customer_sessions.synced': { '1': '已同步', '0': '未同步' },
+  // recommendation_logs.mode
+  'recommendation_logs.mode': { 'store': '门店', 'personal': '个人' },
+  // profile_tags.tag_key —— 与后端 services/profileArchive.js 的 TAG_DEFS 一字一样,改那边要改这里
+  'profile_tags.tag_key': {
+    'bmi': 'BMI', 'bmi_level': 'BMI 档位', 'body_shape': '体型（算出）', 'wh_ratio': '腰臀比',
+    'leg_ratio': '腿身比', 'shoulder_ratio': '肩宽比', 'color_match': '适合色系', 'color_avoid': '回避色系',
+    'color_season': '色彩四季型（算出）', 'color_season_12': '色彩十二型（算出）', 'kibbe_type': '风格型（算出）',
+  },
+  // feedback_events.signal —— 与后端 services/ruleFeedback.js 的 SIGNALS 一字一样,改那边要改这里
+  // 10-20 第八阶段·一b：`rated`＝只打了两把星、没点👍/👎（它不进好评/差评计数）
+  'feedback_events.signal': { 'useful': '有用', 'inaccurate': '不准', 'rated': '只打星·未表态' },
+  // photos.type
+  'photos.type': { 'face': '面部', 'body': '全身', 'cloth': '衣物', 'tryon': '试穿' },
+  // admin_users.role
+  'admin_users.role': { 'superadmin': '超级管理员', 'admin': '管理员' },
+  // inventory_categories.code
+  'inventory_categories.code': {
+    'top': '上装', 'bottom': '下装', 'shoes': '鞋履',
+    'accessory': '配饰', 'makeup': '妆容', 'hairstyle': '发型',
+  },
+  // rule_conditions.field —— 与后端 services/ruleExplainer.js 的 FIELD_LABELS 一字一样,改那边要改这里
+  'rule_conditions.field': {
+    'gender': '性别', 'category': '分类', 'scenario': '场景', 'skin_tone': '肤色',
+    'face_shape': '脸型', 'region': '地区', 'body_type': '体型', 'bmi_level': 'BMI等级',
+    'preferred_style': '偏好风格', 'main_goal': '主要目标', 'posture': '体态',
+    'eye_size': '眼睛大小', 'nose_bridge': '鼻梁', 'lip_thickness': '嘴唇厚度',
+    'season': '季节', 'age_range': '年龄段',
+    'color_chroma': '色彩纯度', 'frame_size': '骨架量感', 'line_quality': '线条倾向',
+    'color_season': '色彩四季型（算出）', 'color_season_12': '色彩十二型（算出）',
+    'kibbe_type': '风格型（算出）',
+    'leg_proportion': '腿身比（算出）',
+    'shoulder_frame': '肩宽比（算出）', 'waist_definition': '腰线（算出）'
+  },
+  // rule_conditions.operator
+  'rule_conditions.operator': { 'eq': '等于', 'in': '包含', 'ne': '不等于', 'gt': '大于', 'lt': '小于', 'gte': '大于等于', 'lte': '小于等于' },
+  // rule_actions.action_type
+  'rule_actions.action_type': {
+    'top_style': '上装风格', 'bottom_style': '下装风格', 'shoe_style': '鞋履风格',
+    'color_combo': '色彩搭配', 'reason': '推荐理由', 'makeup_style': '妆容风格',
+    'lip_color': '唇色', 'foundation': '粉底', 'eye_shadow': '眼影', 'blush': '腮红',
+    'eyebrow': '眉型', 'technique': '技巧', 'hairstyle': '发型', 'hair_color': '发色',
+    'bang_type': '刘海类型', 'hair_length': '发长', 'avoid': '避免事项',
+    'earring_type': '耳饰类型', 'necklace_type': '项链类型', 'bag_style': '包款',
+    'metal_color': '金属色', 'outerwear': '外套', 'makeup_base': '妆前乳',
+    'lipstick': '口红', 'eyeshadow': '眼影', 'eyeliner': '眼线',
+    'earring': '耳饰', 'necklace': '项链', 'bag': '包', 'watch': '手表',
+    'belt': '腰带', 'bracelet': '手链', 'ring': '戒指',
+    'earring_avoid': '避免耳饰', 'necklace_avoid': '避免项链', 'accessory': '配饰',
+    'tie': '领带', 'cufflink': '袖扣', 'skincare': '护肤',
+    'lip_care': '唇部护理', 'face_care': '面部护理',
+    'outfit_key': '穿搭要点', 'makeup_key': '美妆要点', 'accessory_key': '配饰要点',
+    'cross_tip': '跨柜提示', 'spring': '春季建议', 'summer': '夏季建议',
+    'autumn': '秋季建议', 'winter': '冬季建议', 'pose_key': '姿势要点',
+    'head_pose': '头部姿势', 'hand_pose': '手部姿势', 'upper_body': '上半身姿势',
+    'lower_body': '下半身姿势', 'camera_hint': '拍摄建议', 'expression': '表情'
+  },
+};
+
+/**
+ * 只认映射表自己的键。
+ * 库里存的值是自由文本，列值恰好是 constructor / toString 时，`map[value]` 顺着原型链
+ * 会拿到一个函数，后台那一格就显示成 "function Object() { [native code] }"。
+ */
+function ownLabel(map, key) {
+  if (!map) return undefined;
+  if (typeof key !== 'string' && typeof key !== 'number') return undefined;
+  return Object.prototype.hasOwnProperty.call(map, key) ? map[key] : undefined;
+}
+
+/**
+ * 翻译数据值：根据表名+列名查找翻译映射，返回中文显示值
+ * 如果没有翻译映射，返回原始值
+ */
+function translateValue(tableName, columnName, value) {
+  if (value === null || value === undefined) return value;
+  var key = tableName + '.' + columnName;
+  var hit = ownLabel(VALUE_LABELS[key], value);
+  if (hit !== undefined) return hit;
+  return value;
+}
+
+/* ── 数据库表中文名对照 ── */
+var TABLE_LABELS = {
+  'users': '用户表',
+  'stores': '门店表',
+  'photos': '照片表',
+  'face_features': '人脸特征表',
+  'face_profiles': '面容档案表(手工)',
+  'profile_tags': '形象标签表(算出)',
+  'body_metrics': '身体数据表',
+  'recommendations': '推荐记录表',
+  'tryon_results': '试穿结果表',
+  'rule_groups': '规则组表',
+  'rule_conditions': '规则条件表',
+  'rule_actions': '规则动作表',
+  'inventory_categories': '库存分类表',
+  'inventory_products': '库存商品表',
+  'customer_sessions': '顾客会话表',
+  'recommendation_logs': '推荐日志表',
+  'feedback_events': '反馈表(规则评价)',
+  'clothing_items': '衣服照片表',
+  'user_wardrobe': '用户衣橱表',
+  'wardrobe_outfits': '衣橱搭配表',
+  'shopping_wishlist': '购物心愿单表',
+  'user_cosmetics': '用户化妆品表',
+  'user_accessories': '用户配饰表',
+  'admin_users': '管理员表',
+  'user_accounts': '正式账号表',
+  'model_configs': '3D模型配置表',
+  'styleai_config': '系统配置表',
+  'deposits': '付款凭证表',
+  'app_settings': '键值设置表',
+  'profile_drafts': '档案草稿表',
+  'payment_orders': '在线收款订单表',
+  'creator_works': '创作者作品表',
+};
+
+/* ── 字段中英文注释 ── */
+var COLUMN_COMMENTS = {
+  // users 用户/游客表
+  'users': {
+    'id': '主键ID',
+    'session_id': '会话ID',
+    'phone': '手机号',
+    'nickname': '昵称',
+    'gender': '性别',
+    'created_at': '创建时间',
+  },
+  // photos 照片表
+  'photos': {
+    'id': '主键ID',
+    'user_id': '用户ID',
+    'url': '照片URL',
+    'type': '类型(face=面部)',
+    'uploaded_at': '上传时间',
+  },
+  // face_features 面容分析表
+  'face_features': {
+    'id': '主键ID',
+    'user_id': '用户ID',
+    'photo_id': '照片ID',
+    'skin_tone': '肤色',
+    'skin_undertone': '肤色底调',
+    'skin_depth': '肤色深浅',
+    'skin_type': '肤质',
+    'face_shape': '脸型',
+    'eye_shape': '眼型',
+    'eye_spacing': '眼距',
+    'nose_type': '鼻型',
+    'lip_shape': '唇形',
+    'eyebrow_type': '眉型',
+    'forehead_width': '额头宽度',
+    'jawline_type': '下颌线类型',
+    'face_ratio': '面部比例',
+    'features_json': '特征JSON',
+    'status': '状态',
+    'created_at': '创建时间',
+  },
+  // face_profiles 手工面容档案表(照片识别未开放时由用户自己填)
+  'face_profiles': {
+    'id': '主键ID',
+    'user_id': '用户ID',
+    'skin_tone': '肤色',
+    'skin_tone_detail': '肤色细分',
+    'color_chroma': '色彩纯度',
+    'skin_type': '肤质',
+    'face_shape': '脸型',
+    'face_ratio': '三庭比例',
+    'eye_spacing': '眼距',
+    'eye_size': '眼睛大小',
+    'eye_shape': '眼型',
+    'nose_bridge': '鼻梁',
+    'lip_thickness': '唇厚',
+    'updated_at': '更新时间',
+  },
+  // profile_tags 形象标签表(每次算完按人覆盖,存的是算出来的结论)
+  'profile_tags': {
+    'id': '主键ID',
+    'user_id': '用户ID',
+    'tag_key': '标签',
+    'tag_value': '标签值',
+    'updated_at': '更新时间',
+  },
+  // body_metrics 身体指标表
+  'body_metrics': {
+    'id': '主键ID',
+    'user_id': '用户ID',
+    'height_cm': '身高(cm)',
+    'weight_kg': '体重(kg)',
+    'body_type': '体型',
+    'shoulder_width_cm': '肩宽(cm)',
+    'waist_cm': '腰围(cm)',
+    'hip_cm': '臀围(cm)',
+    'leg_length_ratio': '腿长比例',
+    'leg_length_cm': '腿长(cm)',
+    'bust_cm': '胸围(cm)',
+    'neck_length': '颈部长度',
+    'shoulder_type': '肩型',
+    'frame_size': '骨架量感',
+    'line_quality': '线条倾向',
+    'updated_at': '更新时间',
+  },
+  // recommendations 穿搭推荐记录表
+  'recommendations': {
+    'id': '主键ID',
+    'user_id': '用户ID',
+    'photo_id': '照片ID',
+    'scenario': '场景',
+    'result_json': '推荐结果JSON',
+    'created_at': '创建时间',
+  },
+  // tryon_results 虚拟试穿结果表
+  'tryon_results': {
+    'id': '主键ID',
+    'user_id': '用户ID',
+    'photo_id': '照片ID',
+    'recommendation_id': '推荐ID',
+    'result_url': '结果图URL',
+    'status': '状态',
+    'created_at': '创建时间',
+  },
+  // clothing_items 衣服照片上传记录表
+  'clothing_items': {
+    'id': '主键ID',
+    'session_id': '会话ID',
+    'filename': '文件名',
+    'image_url': '图片URL',
+    'category': '类别',
+    'color': '颜色',
+    'style': '风格',
+    'season': '季节',
+    'usage': '用途',
+    'item_name': '物品名称',
+    'created_at': '创建时间',
+  },
+  // rule_groups 规则组表
+  'rule_groups': {
+    'id': '主键ID',
+    'name': '规则组名称',
+    'mode': '模式',
+    'gender': '性别',
+    'category': '分类',
+    'scenario': '场景',
+    'region': '地区',
+    'age_range': '年龄段',
+    'description': '描述',
+    'priority': '优先级',
+    'enabled': '是否启用',
+    'hit_count': '命中次数',
+    'last_hit_at': '最近命中时间',
+    'feedback_up': '好评数',
+    'feedback_down': '差评数',
+    'created_at': '创建时间',
+    'source_key': '内置规则标识（空=手工新建）',
+    'evidence_level': '依据档位（A国标/B实证/C体系/D命理）',
+  },
+  // rule_conditions 规则条件表
+  'rule_conditions': {
+    'id': '主键ID',
+    'group_id': '规则组ID',
+    'field': '条件字段',
+    'operator': '操作符',
+    'value': '条件值',
+    'weight': '权重',
+  },
+  // rule_actions 规则动作表
+  'rule_actions': {
+    'id': '主键ID',
+    'group_id': '规则组ID',
+    'action_type': '动作类型',
+    'content': '动作内容',
+    'sort_order': '排序',
+  },
+  // inventory_categories 商品分类表
+  'inventory_categories': {
+    'id': '主键ID',
+    'name': '分类名称',
+    'code': '分类编码',
+    'sort_order': '排序',
+  },
+  // inventory_products 库存商品表
+  'inventory_products': {
+    'id': '主键ID',
+    'category_id': '分类ID',
+    'name': '商品名称',
+    'sku': 'SKU编号',
+    'style_tags': '风格标签(JSON)',
+    'color_tags': '颜色标签(JSON)',
+    'season_tags': '季节标签(JSON)',
+    'fit_skin_tones': '适合肤色(JSON)',
+    'fit_face_shapes': '适合脸型(JSON)',
+    'stock': '库存数量',
+    'price': '价格(¥)',
+    'image_url': '商品图片URL',
+    'description': '商品描述',
+    'enabled': '是否上架',
+    'created_at': '创建时间',
+  },
+  // stores 门店表(同一套系统给多家店用,店名第一次出现时自动登记)
+  'stores': {
+    'id': '主键ID',
+    'name': '门店名称',
+    'created_at': '登记时间',
+  },
+  // customer_sessions 顾客会话表
+  'customer_sessions': {
+    'id': '主键ID',
+    'session_id': '会话ID',
+    'store_id': '归属门店ID',
+    'profile_data': '档案数据(JSON)',
+    'synced': '是否已同步',
+    'synced_at': '同步时间',
+    'created_at': '创建时间',
+    'expires_at': '过期时间',
+  },
+  // recommendation_logs 推荐日志表
+  'recommendation_logs': {
+    'id': '主键ID',
+    'session_id': '会话ID',
+    'user_id': '用户ID(个人模式归属)',
+    'store_id': '归属门店ID',
+    'mode': '模式',
+    'input_snapshot': '输入快照',
+    'result': '推荐结果(JSON)',
+    'created_at': '创建时间',
+  },
+  // feedback_events 反馈表(规则评价)
+  'feedback_events': {
+    'id': '主键ID',
+    'user_id': '用户ID',
+    'group_id': '规则组ID',
+    'category': '分类',
+    'signal': '评价',
+    'updated_at': '评价时间',
+  },
+  // user_wardrobe 个人衣橱表
+  'user_wardrobe': {
+    'id': '主键ID',
+    'session_id': '会话ID',
+    'user_id': '用户ID',
+    'name': '衣物名称',
+    'category': '主类别',
+    'sub_category': '子类别',
+    'color': '主色',
+    'color_tags': '颜色标签(JSON)',
+    'pattern': '图案',
+    'style_tags': '风格标签(JSON)',
+    'season_tags': '季节标签(JSON)',
+    'occasion_tags': '场合标签(JSON)',
+    'fit_body_types': '适合体型(JSON)',
+    'fit_skin_tones': '适合肤色(JSON)',
+    'condition': '成色',
+    'purchase_date': '购入日期',
+    'price': '价格(¥)',
+    'is_favorite': '是否收藏',
+    'image_url': '图片URL',
+    'created_at': '创建时间',
+    'updated_at': '更新时间',
+  },
+  // wardrobe_outfits 搭配组合表
+  'wardrobe_outfits': {
+    'id': '主键ID',
+    'session_id': '会话ID',
+    'user_id': '用户ID',
+    'name': '搭配名称',
+    'item_ids': '衣物ID列表(JSON)',
+    'occasion': '场合',
+    'season': '季节',
+    'rating': '评分',
+    'notes': '备注',
+    'is_favorite': '是否收藏',
+    'created_at': '创建时间',
+  },
+  // shopping_wishlist 购物心愿单
+  'shopping_wishlist': {
+    'id': '主键ID',
+    'session_id': '会话ID',
+    'user_id': '用户ID',
+    'item_name': '物品名称',
+    'category': '类别',
+    'color': '颜色',
+    'reason': '购买理由',
+    'priority': '优先级',
+    'status': '状态',
+    'gap_type': '缺口类型',
+    'created_at': '创建时间',
+  },
+  // admin_users 管理员表
+  'admin_users': {
+    'id': '主键ID',
+    'username': '用户名',
+    'password_hash': '密码哈希',
+    'role': '角色',
+    'is_active': '是否启用',
+    'last_login_at': '最后登录时间',
+    'created_at': '创建时间',
+  },
+  // user_cosmetics 个人化妆品柜表
+  'user_cosmetics': {
+    'id': '主键ID',
+    'session_id': '会话ID',
+    'user_id': '用户ID',
+    'name': '化妆品名称',
+    'brand': '品牌',
+    'category': '主类别',
+    'sub_category': '子类别',
+    'color_name': '色号名称',
+    'color_tone': '色调',
+    'color_family': '色系',
+    'finish': '妆效(哑光/珠光等)',
+    'skin_tone_fit': '适合肤色(JSON)',
+    'skin_type_fit': '适合肤质(JSON)',
+    'face_shape_fit': '适合脸型(JSON)',
+    'eye_shape_fit': '适合眼型(JSON)',
+    'lip_shape_fit': '适合唇形(JSON)',
+    'occasion_tags': '场合标签(JSON)',
+    'style_tags': '风格标签(JSON)',
+    'coverage': '遮瑕度',
+    'opened_date': '开瓶日期',
+    'expiry_months': '保质期(月)',
+    'remaining': '剩余量(%)',
+    'condition': '状态',
+    'price': '价格(¥)',
+    'image_url': '图片URL',
+    'is_favorite': '是否收藏',
+    'notes': '备注',
+    'created_at': '创建时间',
+    'updated_at': '更新时间',
+  },
+  // user_accessories 个人配饰柜表
+  'user_accessories': {
+    'id': '主键ID',
+    'session_id': '会话ID',
+    'user_id': '用户ID',
+    'name': '配饰名称',
+    'brand': '品牌',
+    'category': '主类别',
+    'material': '材质',
+    'metal_color': '金属色',
+    'gem_color': '宝石色',
+    'shape': '形状',
+    'length': '长度',
+    'face_shape_fit': '适合脸型(JSON)',
+    'neck_length_fit': '适合颈长(JSON)',
+    'skin_tone_fit': '适合肤色(JSON)',
+    'allergy_safe': '防过敏',
+    'allergy_notes': '过敏备注',
+    'occasion_tags': '场合标签(JSON)',
+    'style_tags': '风格标签(JSON)',
+    'season_tags': '季节标签(JSON)',
+    'condition': '成色',
+    'price': '价格(¥)',
+    'image_url': '图片URL',
+    'is_favorite': '是否收藏',
+    'created_at': '创建时间',
+    'updated_at': '更新时间',
+  },
+  // model_configs 3D模型配置表
+  'model_configs': {
+    'id': '主键ID',
+    'name': '模型名称',
+    'icon': '图标',
+    'image_preview': '预览图URL',
+    'description': '描述',
+    'folder': '文件夹路径',
+    'file': '文件名',
+    'source': '来源(游戏名)',
+    'enabled': '是否启用',
+    'exposure': '曝光值',
+    'sort_order': '排序',
+    'scale': '缩放比例',
+    'pos_x': 'X轴位置',
+    'pos_y': 'Y轴位置',
+    'pos_z': 'Z轴位置',
+    'rot_x': 'X轴旋转',
+    'rot_y': 'Y轴旋转',
+    'rot_z': 'Z轴旋转',
+    'camera_distance': '相机距离',
+    'ambient_light': '环境光强度',
+    'created_at': '创建时间',
+    'updated_at': '更新时间',
+  },
+  // deposits 付款凭证表
+  'deposits': {
+    'id': '主键ID',
+    'user_id': '用户ID',
+    'channel': '收款渠道',
+    'amount': '付款金额(元)',
+    'proof_url': '付款截图地址',
+    'status': '审核状态',
+    'admin_note': '审核备注',
+    'created_at': '提交时间',
+    'approved_at': '确认时间',
+  },
+  // creator_works 创作者作品表
+  'creator_works': {
+    'id': '主键ID',
+    'user_id': '作者用户ID',
+    'share_code': '分享码(统计带量用)',
+    'type': '作品类型',
+    'title': '标题',
+    'summary': '简介',
+    'cover_url': '封面图地址',
+    'payload': '提交内容(JSON)',
+    'status': '审核状态',
+    'admin_note': '审核备注',
+    'featured': '是否精选',
+    'heat': '浏览量',
+    'share_views': '分享带量',
+    'created_at': '提交时间',
+    'reviewed_at': '审核时间',
+  },
+  // user_accounts 正式账号表
+  'user_accounts': {
+    'id': '主键ID',
+    'phone': '手机号',
+    'password_hash': '登录密码(加密串)',
+    'user_id': '关联用户ID',
+    'created_at': '注册时间',
+  },
+  // app_settings 键值设置表(收款标价这类后台可改的配置都存这里)
+  'app_settings': {
+    'key': '设置项',
+    'value': '设置值',
+    'updated_at': '更新时间',
+  },
+  // profile_drafts 档案草稿表(用户填一半没提交的内容，按人覆盖)
+  'profile_drafts': {
+    'user_id': '用户ID',
+    'form_json': '表单内容(JSON)',
+    'updated_at': '保存时间',
+  },
+  // payment_orders 在线收款订单表
+  'payment_orders': {
+    'id': '主键ID',
+    'out_trade_no': '我方订单号',
+    'user_id': '用户ID',
+    'description': '商品说明',
+    'amount_fen': '金额(分)',
+    'status': '订单状态',
+    'transaction_id': '渠道流水号',
+    'code_url': '下单返回链接',
+    'paid_at': '到账时间',
+    'notify_raw': '渠道回调原文',
+    'created_at': '下单时间',
+  },
+};
+
+/* 获取字段中文注释 */
+function getColumnComment(tableName, columnName) {
+  var tableComments = COLUMN_COMMENTS[tableName];
+  if (tableComments && tableComments[columnName]) {
+    return tableComments[columnName];
+  }
+  return '';
+}
+
+/* 表名 → 中文显示（无映射时退回原表名兜底，不再附英文原名） */
+function tableLabel(name) {
+  return TABLE_LABELS[name] || name;
+}
+
+/* 列类型 → 中文显示，长度/精度原样保留（VARCHAR(50) → 文本(50)） */
+var TYPE_LABELS = { TEXT: '文本', INTEGER: '整数', REAL: '小数', BLOB: '二进制', NUMERIC: '数值' };
+function columnTypeLabel(type) {
+  var m = /^([A-Za-z]+)\s*(\([\s\d,]+\))?$/.exec(String(type || '').trim());
+  if (!m) return String(type || '');
+  return (TYPE_LABELS[m[1].toUpperCase()] || m[1]) + (m[2] || '');
+}
+
+/**
+ * UTC 时间串 → 北京时间「年-月-日 时:分:秒」
+ * 库里 *_at 一律写 UTC（schema 默认 datetime('now')、代码里 toISOString()），所以固定 +8 不猜时区。
+ * 认不出来就返回 null，让调用方原样显示。
+ */
+function formatUtcAsBeijing(s) {
+  var m = /^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})(?::(\d{2}))?/.exec(String(s));
+  if (!m) return null;
+  var t = new Date(Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +(m[6] || 0)) + 8 * 3600 * 1000);
+  if (isNaN(t.getTime())) return null;
+  function p(n) { return (n < 10 ? '0' : '') + n }
+  return t.getUTCFullYear() + '-' + p(t.getUTCMonth() + 1) + '-' + p(t.getUTCDate()) +
+    ' ' + p(t.getUTCHours()) + ':' + p(t.getUTCMinutes()) + ':' + p(t.getUTCSeconds());
+}
+
+/**
+ * 库里时间串 → 尽量显示成北京时间；认不出来（不是 * 时间格式）就原样返回。
+ * 后台各处 *_at 都该走这个，别各自 slice：数据浏览器（admin-data.js 的时间列分支）
+ * 早就转北京时间了，而审核页/规则徽章那几格还在打原始 UTC —— 北京时间早上 8 点前
+ * 看到的"昨天"其实是今天凌晨发生的事。
+ */
+function beijingOrRaw(s) {
+  if (s === null || s === undefined || s === '') return '';
+  var str = String(s);
+  return formatUtcAsBeijing(str) || str;
+}
+
+/**
+ * 「只认最新一次」加载闸（列表页通用）
+ *
+ * 用法：模块顶层 `var _gate = seqGate();`，每次发请求前 `var tok = _gate.begin();`，
+ * 回调最前面 `if (!_gate.isCurrent(tok)) return;`。
+ * 为什么要：筛选下拉每改一次就发一次请求，而响应回来的先后顺序不保证 —— 带着旧筛选
+ * 条件的那条后到，就会把新结果整页覆盖掉，页面显示的和最后一次的筛选条件不是同一批。
+ */
+function seqGate() {
+  var n = 0;
+  return {
+    begin: function () { n += 1; return n; },
+    isCurrent: function (tok) { return tok === n; },
+  };
+}
+
+/* ── 工具函数 ── */
+
+/** HTML 转义,防 XSS */
+function escapeHtml(s) {
+  if (s === null || s === undefined) return '';
+  if (typeof s === 'object') s = JSON.stringify(s, null, 2);
+  s = String(s);
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+/** 顶部 Toast 提示(3秒自动消失) */
+function showToast(msg, type) {
+  var div = document.createElement('div');
+  div.className = type === 'error' ? 'error-msg' : (type === 'info' ? 'info-msg' : 'success-msg');
+  div.style.cssText = 'position:fixed;top:20px;right:20px;z-index:2000;max-width:400px;animation:fadeIn .2s;';
+  div.textContent = msg;
+  document.body.appendChild(div);
+  setTimeout(function() { div.remove(); }, 3000);
+}
+
+/** 通用 JSON 请求(自动携带 Token,401 自动跳登录) */
+function fetchJSON(url, options) {
+  options = options || {};
+  options.headers = options.headers || {};
+  var token = localStorage.getItem('admin_token');
+  if (token) options.headers['Authorization'] = 'Bearer ' + token;
+  if (options.body && typeof options.body === 'object') {
+    options.headers['Content-Type'] = 'application/json';
+    options.body = JSON.stringify(options.body);
+  }
+  return fetch(url, options).then(function(r) {
+    var ct = r.headers.get('content-type') || '';
+    if (ct.indexOf('application/json') === -1) {
+      throw new Error('服务器返回了非JSON响应(HTTP ' + r.status + '),可能服务未启动或路由不存在');
+    }
+    if (r.status === 401) {
+      localStorage.removeItem('admin_token');
+      window.location.replace('/admin/login');
+      throw new Error('登录已过期');
+    }
+    // 后端失败体是 {success:false, error:{code,message}}，调用方一律读 res.message，在这里补平
+    return r.json().then(function(body) {
+      if (body && body.success === false && body.message === undefined) {
+        body.message = (body.error && (body.error.message || body.error.code)) || ('HTTP ' + r.status);
+      }
+      return body;
+    });
+  });
+}
+
+/** 简化的 API 调用(method + data) */
+function apiCall(url, method, data) {
+  var opts = { method: method || 'GET', headers: {} };
+  var token = localStorage.getItem('admin_token');
+  if (token) opts.headers['Authorization'] = 'Bearer ' + token;
+  if (data) {
+    opts.headers['Content-Type'] = 'application/json';
+    opts.body = JSON.stringify(data);
+  }
+  return fetch(url, opts).then(function(r) {
+    var ct = r.headers.get('content-type') || '';
+    if (ct.indexOf('application/json') === -1) {
+      throw new Error('服务器返回了非JSON响应(HTTP ' + r.status + '),可能服务未启动或路由不存在');
+    }
+    if (r.status === 401) {
+      localStorage.removeItem('admin_token');
+      window.location.replace('/admin/login');
+      throw new Error('登录已过期');
+    }
+    // 后端失败体是 {success:false, error:{code,message}}，调用方一律读 res.message，在这里补平
+    return r.json().then(function(body) {
+      if (body && body.success === false && body.message === undefined) {
+        body.message = (body.error && (body.error.message || body.error.code)) || ('HTTP ' + r.status);
+      }
+      return body;
+    });
+  });
+}
+
+/* ── 导航切换 ── */
+function switchSection(section) {
+  document.querySelectorAll('.nav-btn').forEach(function(b) { b.classList.remove('active'); });
+  var navBtn = document.querySelector('[data-section="' + section + '"]');
+  if (navBtn) navBtn.classList.add('active');
+
+  document.querySelectorAll('#sidebar-functions .sidebar-item').forEach(function(i) { i.classList.remove('active'); });
+  var sideItem = document.querySelector('#sidebar-functions [data-nav="' + section + '"]');
+  if (sideItem) sideItem.classList.add('active');
+
+  document.querySelectorAll('.section').forEach(function(s) { s.classList.remove('active'); });
+  var sec = document.getElementById('section-' + section);
+  if (sec) sec.classList.add('active');
+
+  if (section === 'rules') loadRules();
+  if (section === 'inventory') loadInventory();
+  if (section === 'payments') { loadDeposits(); loadPrice(); }
+  if (section === 'creator') loadCreatorWorks();
+  if (section === 'members') loadAccounts();
+  if (section === 'models') loadModels();
+  if (section === 'tables' && State.tables.length === 0) loadTables();
+  if (section === 'functions' && State.functions.length === 0) loadFunctions();
+  if (section === 'routes') loadRoutes();
+}
+
+/* ── 统计概览 ── */
+function loadStats() {
+  fetchJSON(API_BASE + '/stats').then(function(res) {
+    if (res.success) {
+      Object.keys(res.data).forEach(function(key) {
+        var el = document.getElementById('stat-' + key);
+        if (el) el.textContent = res.data[key];
+      });
+    }
+  }).catch(function(e) { console.error('统计加载失败:', e); });
+}
