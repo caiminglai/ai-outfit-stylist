@@ -12,7 +12,7 @@ const { sendSuccess, sendError } = require('../utils/response')
 const { asText, normalizeItem, projectWardrobeForEngine } = require('../utils/common')
 const { optionalUser, getCurrentUser, getSessionId } = require('../middleware/auth')
 const { rateLimit } = require('../middleware/rateLimit')
-const { gateBody } = require('../middleware/bodyGate')
+const { capJson, gateBody, FORM_BLOB_LIMITS } = require('../middleware/bodyGate')
 const { buildRecommendation } = require('../services/recommendEngine')
 // 报错与告警一律走 utils/logger：console.* 只落 stdout，容器里那份不归本项目留档，
 // 事后按订单号/用户查不到痕迹（判据见 test/loggerDiscipline.test.js）
@@ -164,6 +164,9 @@ router.post('/engine', recommendLimiter, async (req, res) => {
     if (Object.keys(profile).length === 0) {
       return sendError(res, '缺少 profile 数据', 400)
     }
+    // 与表单草稿共用同一把体积尺：先挡住超量输入，再读身份、合并档案、算推荐和落快照。
+    const profileGate = capJson(profile, FORM_BLOB_LIMITS)
+    if (!profileGate.ok) return sendError(res, `profile ${profileGate.reason}`, 400)
 
     const user = optionalUser(req)
     const archive = loadArchive(user ? user.id : null)

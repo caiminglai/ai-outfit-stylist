@@ -215,11 +215,13 @@ function initSeedData() {
       seedAll(db)
       console.log('[种子数据] 导入完成')
     } catch (err) {
-      logErr('[种子数据] 导入失败:', err.message)
-      if (process.env.STYLEAI_TEST_INIT === '1') throw err
+      logErr('[种子数据] 导入失败,拒绝启动:', err.message)
+      throw err
     }
   } else {
-    logWarn('[种子数据] seed.js 不存在,请运行 npm run seed')
+    const message = '[种子数据] seed.js 不存在,拒绝启动'
+    logErr(message)
+    throw new Error(message)
   }
 }
 
@@ -232,17 +234,24 @@ function initRuleSeedIncrement() {
   try {
     const { applyRuleSeeds } = require('./applyRuleSeeds')
     const stat = applyRuleSeeds(db)
-    if (stat.checked === 0) return
-    console.log(
-      `[规则种子] 核对 ${stat.checked} 条:新增 ${stat.inserted} 条,已存在不动 ${stat.existing} 条` +
-        (stat.rejected.length ? `,不合格未入库 ${stat.rejected.length} 条` : ''),
-    )
+    if (stat.checked > 0) {
+      console.log(
+        `[规则种子] 核对 ${stat.checked} 条:新增 ${stat.inserted} 条,已存在不动 ${stat.existing} 条` +
+          (stat.rejected.length ? `,不合格未入库 ${stat.rejected.length} 条` : ''),
+      )
+    }
     for (const reason of stat.rejected) {
       logWarn(`[规则种子] ✗ ${reason}`)
     }
+    // JSON 解析、规则校验和写入失败都会进入 rejected；生产环境不能带着坏种子继续服务。
+    if (process.env.NODE_ENV === 'production' && stat.rejected.length > 0) {
+      const message = `[规则种子] 增量种子校验失败,拒绝启动: ${stat.rejected.join('；')}`
+      logErr(message)
+      throw new Error(message)
+    }
   } catch (err) {
-    logErr('[规则种子] 增量应用失败(不影响启动):', err.message)
-    if (process.env.STYLEAI_TEST_INIT === '1') throw err
+    logErr('[规则种子] 增量应用失败,拒绝启动:', err.message)
+    throw err
   }
 }
 

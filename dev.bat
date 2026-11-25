@@ -68,19 +68,39 @@ if not exist "app\node_modules" (
 
 REM 依赖缺失时只提示按锁文件重装，不自动改 package.json 或 lockfile。
 
-REM ===== 清理端口 =====
-echo [1/3] 清理端口 5000 和 5173...
+REM ===== 检查端口 =====
+echo [1/3] 检查端口 5000 和 5173...
 
-for /f "tokens=5" %%a in ('netstat -ano ^| findstr ":5000" ^| findstr "LISTENING"') do (
-    echo   终止占用 5000 进程 PID=%%a
-    taskkill /F /PID %%a >nul 2>&1
+set "BUSY_PORTS="
+netstat -ano | findstr ":5000" | findstr "LISTENING" >nul && set "BUSY_PORTS=5000"
+netstat -ano | findstr ":5173" | findstr "LISTENING" >nul && set "BUSY_PORTS=%BUSY_PORTS% 5173"
+if defined BUSY_PORTS (
+    echo [错误] 端口%BUSY_PORTS%已被占用，请先停止对应服务再启动。
+    echo   本脚本不会终止任何现有进程。
+    pause
+    exit /b 1
 )
-for /f "tokens=5" %%a in ('netstat -ano ^| findstr ":5173" ^| findstr "LISTENING"') do (
-    echo   终止占用 5173 进程 PID=%%a
-    taskkill /F /PID %%a >nul 2>&1
+echo   端口可用
+echo.
+
+REM ===== 隔离本地开发数据 =====
+set "NODE_ENV=development"
+set "STYLEAI_DB_PATH=%~dp0.tmp\dev\styleai.db"
+set "STYLEAI_UPLOAD_DIR=%~dp0.tmp\dev\uploads"
+set "STYLEAI_LOG_DIR=%~dp0.tmp\dev\logs"
+set "DOTENV_CONFIG_PATH=%~dp0.tmp\dev\disabled.env"
+set "SECRET_KEY=local-dev-only-secret-change-me-32-chars"
+set "ADMIN_PASSWORD=local-dev-only-admin-password"
+if not exist "%~dp0.tmp\dev\uploads" mkdir "%~dp0.tmp\dev\uploads"
+if not exist "%~dp0.tmp\dev\logs" mkdir "%~dp0.tmp\dev\logs"
+if errorlevel 1 (
+    echo [错误] 无法创建 .tmp\dev 开发数据目录。
+    pause
+    exit /b 1
 )
-timeout /t 1 /nobreak >nul 2>&1
-echo   端口已清理
+echo   开发数据库: %STYLEAI_DB_PATH%
+echo   上传目录:   %STYLEAI_UPLOAD_DIR%
+echo   日志目录:   %STYLEAI_LOG_DIR%
 echo.
 
 REM ===== 启动后端 =====

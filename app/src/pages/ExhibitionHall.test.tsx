@@ -22,6 +22,7 @@ const layout = vi.hoisted(() => ({
 }))
 
 const api = vi.hoisted(() => ({
+  ACCOUNT_CHANGE_EVENT: 'style-ai-account-change',
   clearExpiredSession: vi.fn(),
   createCustomerSession: vi.fn(),
   deleteCustomerSession: vi.fn(),
@@ -55,12 +56,15 @@ vi.mock('./exhibition/ServicePanel', () => ({
   ServicePanel: (props: ServicePanelProps) => (
     <div>
       <span>stage:{props.stage}</span>
+      <span>archive:{props.archiveProfile?.height ?? 'none'}</span>
+      <span>tags:{props.profileTags.join(',') || 'none'}</span>
       <button onClick={() => props.onDraft(PROFILE)}>schedule-draft</button>
       <button onClick={() => void props.onSubmit(PROFILE)}>submit</button>
       <button onClick={props.onReset}>reset</button>
       {props.stage === 'report' && <button onClick={props.onDelete}>delete-session</button>}
       {props.stage === 'mode-select' && (
         <>
+          <button onClick={() => props.onSelectMode('personal')}>select-personal</button>
           <button onClick={props.onArchiveDeleteStart}>archive-delete-start</button>
           <button onClick={props.onArchiveCleared}>archive-cleared</button>
         </>
@@ -137,6 +141,114 @@ describe('iframe 可见性', () => {
       { type: 'set-visible', visible: false },
       window.location.origin,
     )
+  })
+})
+
+describe('账号切换隔离', () => {
+  it('切换到 B 账号时先清空 A 的档案和标签，再显示 B 的档案', async () => {
+    api.getProfileArchive.mockResolvedValueOnce({
+      profile: { height: 160 },
+      tags: ['A档案'],
+    })
+    let finishB: ((value: { profile: { height: number }; tags: string[] }) => void) | undefined
+    const bArchive = new Promise<{ profile: { height: number }; tags: string[] }>((resolve) => {
+      finishB = resolve
+    })
+    api.getProfileArchive.mockReturnValueOnce(bArchive)
+    render(<ExhibitionHall />)
+    await act(async () => {
+      await Promise.resolve()
+    })
+    expect(screen.getByText('archive:160')).toBeTruthy()
+    expect(screen.getByText('tags:A档案')).toBeTruthy()
+
+    const bAccount = { phone: '13900139000', sessionId: 'acct_b' }
+    api.getAccount.mockReturnValue(bAccount)
+    act(() => {
+      window.dispatchEvent(
+        new CustomEvent(api.ACCOUNT_CHANGE_EVENT, {
+          detail: { account: bAccount, reason: 'login' },
+        }),
+      )
+    })
+    expect(screen.getByText('archive:none')).toBeTruthy()
+    expect(screen.getByText('tags:none')).toBeTruthy()
+
+    await act(async () => {
+      finishB?.({ profile: { height: 170 }, tags: ['B档案'] })
+      await bArchive
+    })
+    expect(screen.getByText('archive:170')).toBeTruthy()
+    expect(screen.getByText('tags:B档案')).toBeTruthy()
+  })
+
+  it('进入个人表单后，当前账号迟到的档案仍能用于预填', async () => {
+    let finishArchive:
+      ((value: { profile: { height: number }; tags: string[] }) => void) | undefined
+    const archive = new Promise<{ profile: { height: number }; tags: string[] }>((resolve) => {
+      finishArchive = resolve
+    })
+    api.getProfileArchive.mockReturnValueOnce(archive)
+    render(<ExhibitionHall />)
+    fireEvent.click(screen.getByText('select-personal'))
+    expect(screen.getByText('stage:form')).toBeTruthy()
+
+    await act(async () => {
+      finishArchive?.({ profile: { height: 170 }, tags: ['当前账号档案'] })
+      await archive
+    })
+    expect(screen.getByText('archive:170')).toBeTruthy()
+    expect(screen.getByText('tags:当前账号档案')).toBeTruthy()
+  })
+
+  it('A 账号迟到的档案响应不能覆盖已经切换到的 B 账号', async () => {
+    let finishA: ((value: { profile: { height: number }; tags: string[] }) => void) | undefined
+    const aArchive = new Promise<{ profile: { height: number }; tags: string[] }>((resolve) => {
+      finishA = resolve
+    })
+    api.getProfileArchive.mockReturnValueOnce(aArchive)
+    render(<ExhibitionHall />)
+
+    const bAccount = { phone: '13900139000', sessionId: 'acct_b' }
+    api.getAccount.mockReturnValue(bAccount)
+    api.getProfileArchive.mockResolvedValueOnce({
+      profile: { height: 170 },
+      tags: ['B档案'],
+    })
+    await act(async () => {
+      window.dispatchEvent(
+        new CustomEvent(api.ACCOUNT_CHANGE_EVENT, {
+          detail: { account: bAccount, reason: 'login' },
+        }),
+      )
+    })
+    expect(screen.getByText('archive:170')).toBeTruthy()
+
+    await act(async () => {
+      finishA?.({ profile: { height: 160 }, tags: ['A档案'] })
+      await aArchive
+    })
+    expect(screen.getByText('archive:170')).toBeTruthy()
+    expect(screen.getByText('tags:B档案')).toBeTruthy()
+  })
+
+  it('账号切换时取消 A 账号还没到点的草稿，不能写进 B 账号', async () => {
+    render(<ExhibitionHall />)
+    fireEvent.click(screen.getByText('schedule-draft'))
+
+    const bAccount = { phone: '13900139000', sessionId: 'acct_b' }
+    api.getAccount.mockReturnValue(bAccount)
+    act(() => {
+      window.dispatchEvent(
+        new CustomEvent(api.ACCOUNT_CHANGE_EVENT, {
+          detail: { account: bAccount, reason: 'login' },
+        }),
+      )
+    })
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1500)
+    })
+    expect(api.saveProfileArchive).not.toHaveBeenCalled()
   })
 })
 

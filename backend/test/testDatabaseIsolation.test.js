@@ -127,6 +127,55 @@ function assertSeedInitializationFailure(t, modulePath, failureMessage) {
   assert.equal(fs.existsSync(observedPath), false, '初始化失败后不应运行测试探针')
 }
 
+/** 直接加载生产初始化入口；不经过会强开 STYLEAI_TEST_INIT 的测试运行器。 */
+function runProductionInit(t, options = {}) {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'styleai-production-init-test-'))
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }))
+  const backend = path.join(root, 'backend')
+  fs.cpSync(BACKEND, backend, {
+    recursive: true,
+    filter(source) {
+      const name = path.basename(source)
+      if (['node_modules', 'logs', 'uploads', 'test'].includes(name)) return false
+      if (name === '.env' || name.startsWith('.env.')) return false
+      if (name === 'styleai.db' || name.startsWith('styleai.db-')) return false
+      return true
+    },
+  })
+  const runtimeTemp = path.join(root, 'runtime-temp')
+  fs.mkdirSync(runtimeTemp)
+  const env = { ...process.env }
+  delete env.STYLEAI_TEST_INIT
+  delete env.STYLEAI_DB_PATH
+  delete env.STYLEAI_LOG_DIR
+  env.NODE_ENV = 'production'
+  env.STYLEAI_DB_PATH = path.join(root, 'startup.db')
+  env.STYLEAI_LOG_DIR = path.join(root, 'logs')
+  env.STYLEAI_SKIP_MODEL_SCAN = '1'
+  env.DOTENV_CONFIG_PATH = path.join(root, 'disabled.env')
+  env.TEMP = runtimeTemp
+  env.TMP = runtimeTemp
+  env.TMPDIR = runtimeTemp
+  env.NODE_PATH = [path.join(BACKEND, 'node_modules'), env.NODE_PATH]
+    .filter(Boolean)
+    .join(path.delimiter)
+  if (options.beforeRun) options.beforeRun(backend)
+  const run = spawnSync(process.execPath, ['-e', "require('./db/init')"], {
+    cwd: backend,
+    env,
+    encoding: 'utf8',
+    maxBuffer: 10 * 1024 * 1024,
+  })
+  return { run, output: `${run.stdout || ''}\n${run.stderr || ''}` }
+}
+
+function assertProductionInitFails(t, options, expectedMessage) {
+  const { run, output } = runProductionInit(t, options)
+  assert.notEqual(run.status, 0, output)
+  assert.match(output, expectedMessage)
+  assert.doesNotMatch(output, /WAL 定时 checkpoint 已启动/, '种子失败后不能继续后续启动步骤')
+}
+
 test('无运行库时可重建确定性测试库，并注入专用凭据', (t) => {
   const { backend, observedPath, run, output } = makeSandbox(
     t,
@@ -174,9 +223,6 @@ test('测试子进程不继承本机 .env 与真实 AI/支付凭据', (t) => {
     LLM_API_BASE: 'https://inherited-llm.invalid',
     LLM_API_KEY: 'inherited-llm-sentinel',
     LLM_MODEL: 'inherited-model',
-    TRYON_API_URL: 'https://inherited-tryon.invalid',
-    TRYON_API_KEY: 'inherited-tryon-sentinel',
-    TRYON_MODEL: 'inherited-tryon-model',
     WXPAY_MCHID: 'inherited-wechat-sentinel',
     WXPAY_APIV3_KEY: 'inherited-wechat-key-sentinel',
     ALIPAY_APP_ID: 'inherited-alipay-sentinel',
@@ -268,4 +314,62 @@ test('严格测试初始化下基础种子失败会使运行器失败并清理�
 
 test('严格测试初始化下增量种子失败会使运行器失败并清理临时目录', (t) => {
   assertSeedInitializationFailure(t, 'db/applyRuleSeeds.js', 'intentional incremental seed failure')
+})
+
+test('生产环境基础种子失败时拒绝继续启动', (t) => {
+  assertProductionInitFails(
+    t,
+    {
+      beforeRun(backend) {
+        fs.writeFileSync(
+          path.join(backend, 'db', 'seed.js'),
+          "throw new Error('intentional production base seed failure')",
+        )
+      },
+    },
+    /intentional production base seed failure/,
+  )
+})
+
+test('生产环境增量种子失败时拒绝继续启动', (t) => {
+  assertProductionInitFails(
+    t,
+    {
+      beforeRun(backend) {
+        fs.writeFileSync(
+          path.join(backend, 'db', 'applyRuleSeeds.js'),
+          "throw new Error('intentional production incremental seed failure')",
+        )
+      },
+    },
+    /intentional production incremental seed failure/,
+  )
+})
+
+test('生产环境增量种子校验失败时拒绝继续启动', (t) => {
+  assertProductionInitFails(
+    t,
+    {
+      beforeRun(backend) {
+        fs.writeFileSync(
+          path.join(backend, 'db', 'applyRuleSeeds.js'),
+          `exports.applyRuleSeeds = () => ({
+  checked: 1,
+  inserted: 0,
+  existing: 0,
+  rejected: ['rules-broken.json: JSON 解析失败 fixture'],
+})`,
+        )
+      },
+    },
+    /增量种子校验失败.*rules-broken\.json/,
+  )
+})
+
+test('生产环境空库缺少基础种子文件时拒绝继续启动', (t) => {
+  assertProductionInitFails(
+    t,
+    { beforeRun: (backend) => fs.rmSync(path.join(backend, 'db', 'seed.js')) },
+    /seed\.js 不存在/,
+  )
 })

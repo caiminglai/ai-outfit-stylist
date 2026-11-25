@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { Toaster } from 'sonner'
 import { toast } from '../utils/toastOnce'
 import {
+  ACCOUNT_CHANGE_EVENT,
   clearExpiredSession,
   createCustomerSession,
   deleteCustomerSession,
@@ -44,8 +45,14 @@ export default function ExhibitionHall() {
   const isIframeVisible = stage === 'standby' || isSplitScreen || mobilePanel === 'model'
 
   const [profile, setProfile] = useState<CustomerProfile | null>(null)
+  /** 当前账号身份：档案读取必须绑定这一次登录，不能按页面阶段复用上一次请求的结果。 */
+  const [accountSession, setAccountSession] = useState<string | null>(
+    () => getAccount()?.sessionId || null,
+  )
   /** 后端长期档案(含没点生成的草稿),两个模式的表单都拿它预填 */
   const [archiveProfile, setArchiveProfile] = useState<CustomerProfile | null>(null)
+  /** 档案请求的归属代号：切账号、删档案或卸载时作废，⛔ 不随离开选择模式页作废 */
+  const archiveReadGeneration = useRef(0)
   /** 个人模式:本次计算从档案补进来的字段中文名 */
   const [archiveUsed, setArchiveUsed] = useState<string[]>([])
   /** 个人模式:后端按人存下来的形象标签(算完即存) */
@@ -139,16 +146,32 @@ export default function ExhibitionHall() {
   // 预填:在"选择模式"那一屏就把档案读回来.两个表单组件都只在挂载那一刻读一次 initial,
   // 等进了表单页再取已经来不及;门店模式同样复用,因为他不想为同一个人填两遍
   useEffect(() => {
-    if (stage !== 'mode-select' || !getAccount()) return
+    if (stage !== 'mode-select' || !accountSession || getAccount()?.sessionId !== accountSession) {
+      return
+    }
+    const generation = ++archiveReadGeneration.current
     getProfileArchive()
       .then((res) => {
+        if (
+          generation !== archiveReadGeneration.current ||
+          getAccount()?.sessionId !== accountSession
+        ) {
+          return
+        }
         if (res.profile) setArchiveProfile(res.profile)
         if (res.tags) setProfileTags(res.tags)
       })
       .catch(() => {
         /* 档案读取失败不影响正常填写 */
       })
-  }, [stage])
+  }, [stage, accountSession])
+
+  useEffect(
+    () => () => {
+      archiveReadGeneration.current += 1
+    },
+    [],
+  )
 
   // 草稿自动保存:填了一半没点生成也替他记住.游客没有账号可挂,直接不存
   const draftTimer = useRef<number | null>(null)
@@ -212,10 +235,23 @@ export default function ExhibitionHall() {
     setProfileTags([])
   }, [])
 
-  /** 只有“档案已删除”要让旧草稿失效；普通退出仍保留原有自动保存行为。 */
+  /** 档案已删除或账号已切换时，旧草稿都不能继续写。 */
   const handleArchiveCleared = useCallback(() => {
+    archiveReadGeneration.current += 1
     cancelDraft()
     clearArchiveMemory()
+  }, [cancelDraft, clearArchiveMemory])
+
+  useEffect(() => {
+    const onAccountChange = (event: Event) => {
+      const { account } = (event as CustomEvent<{ account: { sessionId: string } | null }>).detail
+      archiveReadGeneration.current += 1
+      setAccountSession(account?.sessionId || null)
+      cancelDraft()
+      clearArchiveMemory()
+    }
+    window.addEventListener(ACCOUNT_CHANGE_EVENT, onAccountChange)
+    return () => window.removeEventListener(ACCOUNT_CHANGE_EVENT, onAccountChange)
   }, [cancelDraft, clearArchiveMemory])
 
   const resetToStandby = useCallback(() => {

@@ -82,6 +82,8 @@ npm run build --prefix app
 mkdir -p .tmp/dev/uploads
 STYLEAI_DB_PATH="$PWD/.tmp/dev/styleai.db" \
 STYLEAI_UPLOAD_DIR="$PWD/.tmp/dev/uploads" \
+STYLEAI_LOG_DIR="$PWD/.tmp/dev/logs" \
+DOTENV_CONFIG_PATH="$PWD/.tmp/dev/disabled.env" \
 NODE_ENV=development \
 SECRET_KEY="local-dev-only-secret-change-me-32-chars" \
 ADMIN_PASSWORD="local-dev-only-admin-password" \
@@ -97,13 +99,15 @@ npm run build --prefix app
 New-Item -ItemType Directory -Force .tmp/dev/uploads | Out-Null
 $env:STYLEAI_DB_PATH = Join-Path $PWD '.tmp/dev/styleai.db'
 $env:STYLEAI_UPLOAD_DIR = Join-Path $PWD '.tmp/dev/uploads'
+$env:STYLEAI_LOG_DIR = Join-Path $PWD '.tmp/dev/logs'
+$env:DOTENV_CONFIG_PATH = Join-Path $PWD '.tmp/dev/disabled.env'
 $env:NODE_ENV = 'development'
 $env:SECRET_KEY = 'local-dev-only-secret-change-me-32-chars'
 $env:ADMIN_PASSWORD = 'local-dev-only-admin-password'
 npm start --prefix backend
 ```
 
-访问 `http://127.0.0.1:5000`。源码开发可另开终端运行 `npm run dev --prefix app`，访问 `http://127.0.0.1:5173`；Vite 代理到 5000。后端安装必须保留 `--ignore-scripts`：npm 会因 `binding.gyp` 自动尝试源码编译，而项目使用包内预编译绑定，不需要 Python 或 node-gyp。
+访问 `http://127.0.0.1:5000`。源码开发可另开终端运行 `npm run dev --prefix app`，访问 `http://127.0.0.1:5173`；Vite 代理到 5000。Windows 也可双击 `dev.bat`：它注入同一套 `.tmp/dev` 隔离环境和仅开发用凭据，不读取本机 `.env`；发现 5000 或 5173 被占用时只报错退出，不会终止现有进程。后端安装必须保留 `--ignore-scripts`：npm 会因 `binding.gyp` 自动尝试源码编译，而项目使用包内预编译绑定，不需要 Python 或 node-gyp。
 可选天气、同步试穿与支付变量见 `.env.example`；`LLM_API_*` 当前仅为预留，不影响也不会增强文案。Windows 使用 Node.js 24 官方安装包即可，`better-sqlite3` 使用包内 Windows 预编译绑定；CI 会在 Windows 上重新安装并验证。
 
 ## 测试与检查
@@ -150,7 +154,8 @@ CI 另含 Docker 构建、Compose 配置校验、`/health` 启动冒烟、格式
 
 ## 安全说明
 
-- 非本地环境缺少 `SECRET_KEY` 或 `ADMIN_PASSWORD`、仍使用仓库公开示例值，或长度低于 32 / 12 位时拒绝启动；开发默认值仅限 `development/test`。
+- 非本地环境缺少 `SECRET_KEY` 或 `ADMIN_PASSWORD`、仍使用仓库公开示例值，或长度低于 32 / 12 位时拒绝启动；开发默认值仅限 `development/test`。生产环境的基础种子导入失败，或增量种子出现 JSON 解析、规则校验、写入失败，也会立即拒绝启动，不带病继续服务。
+- 推荐接口的 `profile` 最多 200 个字段、序列化后最多 64 KB；超限返回 400，不调用规则引擎、不写推荐快照。
 - 密码使用 bcrypt；游客与会员会话默认 30 天，登录/改密轮换会话，管理员改密作废旧 Token。
 - 非公开上传按所有权签发一小时 HMAC URL；匿名直链和可编辑 URL 不能自证归属。
 - 支付回调校验签名、金额、订单状态与商户身份；必需配置缺失返回 503。有效重复回调幂等确认且不重复记账，有效迟到付款可确认到账；坏签名、金额不符和错商户回调均被拒绝。

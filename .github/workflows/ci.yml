@@ -172,9 +172,6 @@ jobs:
             -e LLM_API_BASE= \
             -e LLM_API_KEY= \
             -e LLM_MODEL= \
-            -e TRYON_API_URL= \
-            -e TRYON_API_KEY= \
-            -e TRYON_MODEL= \
             -e WXPAY_MCHID= \
             -e WXPAY_SERIAL_NO= \
             -e WXPAY_APIV3_KEY= \

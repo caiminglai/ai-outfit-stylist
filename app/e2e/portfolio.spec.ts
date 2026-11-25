@@ -12,6 +12,7 @@ type GalleryDebugState = {
 
 type DebugWindow = Window & {
   __portfolioE2EProblems?: string[]
+  __archiveBodyReads?: string[]
   __debug?: { getState: () => GalleryDebugState }
 }
 
@@ -214,6 +215,121 @@ test('付款页重叠游客 401 只注册一次，两个重试和后续请求共
   const expected401Logs = problems.filter((problem) => problem.includes('401 (Unauthorized)'))
   expect(expected401Logs).toHaveLength(2)
   expect(problems.filter((problem) => !problem.includes('401 (Unauthorized)'))).toEqual([])
+})
+
+test('账号 A 切到 B 后只预填 B 的档案，A 的迟到响应不能覆盖', async ({ page }) => {
+  const problems = await captureBrowserProblems(page)
+  await page.addInitScript(() => {
+    localStorage.setItem(
+      'style_ai_account',
+      JSON.stringify({ phone: '13800138000', sessionId: 'acct_A', nickname: null }),
+    )
+    localStorage.setItem('style_ai_session', 'acct_A')
+    const target = window as DebugWindow
+    target.__archiveBodyReads = []
+    const nativeFetch = window.fetch.bind(window)
+    window.fetch = async (input, init) => {
+      const response = await nativeFetch(input, init)
+      const url = new URL(
+        typeof input === 'string' ? input : input instanceof URL ? input.href : input.url,
+        window.location.origin,
+      )
+      const method = (init?.method || 'GET').toUpperCase()
+      if (url.pathname === '/api/analysis/archive' && method === 'GET') {
+        const sessionId = new Headers(init?.headers).get('X-Session-Id') || ''
+        const readJson = response.json.bind(response)
+        response.json = async () => {
+          const body = await readJson()
+          target.__archiveBodyReads?.push(sessionId)
+          return body
+        }
+      }
+      return response
+    }
+  })
+
+  let releaseAccountA!: () => void
+  const accountAReady = new Promise<void>((resolve) => {
+    releaseAccountA = resolve
+  })
+  const archiveCalls: string[] = []
+  await page.route('**/api/analysis/archive', async (route) => {
+    const sessionId = route.request().headers()['x-session-id'] || ''
+    archiveCalls.push(sessionId)
+    if (sessionId === 'acct_A') {
+      await accountAReady
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          success: true,
+          data: {
+            profile: { height: 160 },
+            fields: [],
+            tags: [{ key: 'archive-account', label: '档案归属', value: 'A档案' }],
+          },
+        }),
+      })
+      return
+    }
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        success: true,
+        data: {
+          profile: { height: 170 },
+          fields: [],
+          tags: [{ key: 'archive-account', label: '档案归属', value: 'B档案' }],
+        },
+      }),
+    })
+  })
+  await page.route('**/api/auth/login', async (route) => {
+    expect(JSON.parse(route.request().postData() || '{}')).toEqual({
+      phone: '13900139000',
+      password: 'test-password',
+    })
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        success: true,
+        data: { phone: '13900139000', session_id: 'acct_B', nickname: null, merged: null },
+      }),
+    })
+  })
+
+  await page.goto('/?start=1')
+  await expect(page.getByRole('button', { name: /已登录:138/ })).toBeVisible()
+  await expect.poll(() => archiveCalls.filter((id) => id === 'acct_A').length).toBe(1)
+  await page.getByRole('button', { name: /已登录:138/ }).click()
+  await page.getByRole('button', { name: '退出登录', exact: true }).click()
+
+  await page.getByRole('button', { name: '我的账号', exact: false }).click()
+  await page.getByPlaceholder('手机号').fill('13900139000')
+  await page.getByPlaceholder('密码', { exact: true }).fill('test-password')
+  await page.getByRole('button', { name: '登录', exact: true }).last().click()
+  await expect(page.getByRole('button', { name: /已登录:139/ })).toBeVisible()
+  await expect.poll(() => archiveCalls.filter((id) => id === 'acct_B').length).toBe(1)
+  await page.getByRole('button', { name: /个人深度模式/ }).click()
+  const height = page.getByPlaceholder('cm，如 165')
+  await expect(height).toHaveValue('170')
+  releaseAccountA()
+  await expect
+    .poll(() =>
+      page.evaluate(() => {
+        const target = window as DebugWindow
+        return target.__archiveBodyReads?.includes('acct_A') || false
+      }),
+    )
+    .toBe(true)
+  await expect(height).toHaveValue('170')
+  await expect(height).not.toHaveValue('160')
+  const identity = await page.evaluate(() => localStorage.getItem('style_ai_account'))
+  expect(identity).toContain('acct_B')
+  expect(identity).not.toContain('acct_A')
+  await expectNoBrowserProblems(page, problems)
 })
 
 test('模型页等待 PortfolioBot 真实加载，canvas 有尺寸且无页面错误', async ({ page }) => {

@@ -148,6 +148,42 @@ test.after(() => {
 })
 
 // ============================================================
+// 推荐输入边界：超量请求必须在进引擎和落库前被挡住
+// ============================================================
+
+test('profile 超过 200 个字段 ⇒ 400，且不调用引擎、不写推荐快照', async () => {
+  const profile = Object.fromEntries(
+    Array.from({ length: 201 }, (_, index) => [`extra_${index}`, index]),
+  )
+  const beforeCalls = captured.calls
+  const beforeLogs = memDb.prepare('SELECT COUNT(*) AS n FROM recommendation_logs').get().n
+  const r = await call('POST', '/engine', { profile, mode: 'personal' })
+  assert.strictEqual(r.status, 400)
+  assert.match(r.body.error.message, /字段数/)
+  assert.strictEqual(captured.calls, beforeCalls, '超量输入不能进推荐引擎')
+  assert.strictEqual(
+    memDb.prepare('SELECT COUNT(*) AS n FROM recommendation_logs').get().n,
+    beforeLogs,
+    '被拒绝的输入不能落进快照',
+  )
+})
+
+test('profile 序列化后超过 64 KB ⇒ 400，且不调用引擎、不写推荐快照', async () => {
+  const profile = { gender: 'female', notes: 'x'.repeat(64 * 1024) }
+  const beforeCalls = captured.calls
+  const beforeLogs = memDb.prepare('SELECT COUNT(*) AS n FROM recommendation_logs').get().n
+  const r = await call('POST', '/engine', { profile, mode: 'personal' })
+  assert.strictEqual(r.status, 400)
+  assert.match(r.body.error.message, /64 KB/)
+  assert.strictEqual(captured.calls, beforeCalls, '超大输入不能进推荐引擎')
+  assert.strictEqual(
+    memDb.prepare('SELECT COUNT(*) AS n FROM recommendation_logs').get().n,
+    beforeLogs,
+    '被拒绝的输入不能落进快照',
+  )
+})
+
+// ============================================================
 // §八·9 天气断点（四档：live / 名单外 / 取不到 / 没带）
 // ============================================================
 
