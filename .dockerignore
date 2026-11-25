@@ -9,9 +9,10 @@ app/.tmp/
 **/.tmp/
 
 # ===== 运行时数据（全部走 compose 挂载，不该进镜像）=====
-backend/db/*.db
-backend/db/*.db-shm
-backend/db/*.db-wal
+# backend/db/styleai.db 是公开脱敏演示快照，必须保留；同目录其它数据库/WAL/备份一律排除。
+backend/db/*.db*
+!backend/db/styleai.db
+backend/runtime-db/
 backend/uploads
 backend/logs
 
@@ -30,12 +31,8 @@ backend/logs
 **/certs
 **/certificates
 
-# ===== 模型文件（只允许项目自产 CC0 演示资产；第三方本机模型不进构建上下文）=====
+# ===== 模型文件（仓库不分发人物模型；本机第三方模型不进构建上下文）=====
 models/*
-!models/demo/
-models/demo/*
-!models/demo/PortfolioBot.pmx
-!models/demo/LICENSE.md
 
 # ===== 版本控制与编辑器 =====
 .git
@@ -46,10 +43,12 @@ models/demo/*
 # ===== 容器里用不到的本机脚本与文档 =====
 dev.bat
 npm-patch.js
+docs/
+**/*.pdf
+**/*.xlsx
 **/*.md
 # 许可与来源文件必须随分发资产进入镜像
 !NOTICE.md
-!models/demo/LICENSE.md
 !backend/vendor/makehuman/LICENSE.md
 !backend/vendor/makehuman/PROVENANCE.md
 !backend/vendor/lunar/LICENSE

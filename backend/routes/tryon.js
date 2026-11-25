@@ -86,6 +86,9 @@ router.post(
           resultUrl = await dashscope.virtualTryon(personUrl, garmentUrl)
         }
       } catch (e) {
+        if (e.code === 'TRYON_PUBLIC_URL_UNAVAILABLE') {
+          return sendError(res, e.message, 503, e.code)
+        }
         logWarn('[试穿] DashScope 服务不可用，使用降级模式:', e.message)
       }
 

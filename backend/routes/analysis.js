@@ -17,6 +17,7 @@ const {
   loadTags,
   saveArchive,
   saveDraft,
+  writeArchiveTombstone,
   unrecordedNumCells,
 } = require('../services/profileArchive')
 const { clearFeedback } = require('../services/ruleFeedback')
@@ -24,6 +25,7 @@ const { BODY_COLUMN_ORDER, strictNum, crossCheckErrors } = require('../services/
 const { asId } = require('../utils/common')
 const { isValidFilename, deleteOwnedUpload } = require('../utils/uploads')
 const { DIAGNOSIS_QUESTIONS, diagnoseStyle } = require('../services/styleDiagnosis')
+const { collectPaidReportRetention } = require('../services/paidReportSql')
 
 const router = express.Router()
 
@@ -206,12 +208,26 @@ router.put('/archive', loginRequired, draftLimiter, (req, res) => {
 /**
  * 删除我的全部数据：档案 + 草稿 + 标签 + 反馈 + 样本 + 照片 + 试穿结果 + 衣橱/化妆柜/配饰柜/搭配/心愿单
  * + 创作者作品 + 脸型特征 + 衣物条目（含磁盘文件），一并清掉。
+ * 可选 query.session_id 已停用：门店会话没有账号所有权绑定，不能凭一个高熵号码代删。
+ * 门店数据请由持有该会话号的用户走 DELETE /api/customer/session/:sessionId；账号入口只删服务端认证身份的数据。
+ * 业务提交后文件清理部分失败返回 207（success=true）。
  * 唯独不动 deposits / payment_orders：那是收付款凭证，出纠纷时要靠它对账，不归"清除个人数据"管。
+ * 已付费报告及其复读依据也保留，避免付款人付完钱却在删除当前档案后失去已购交付物；响应会明示数量。
  */
 router.delete('/archive', loginRequired, (req, res) => {
   try {
     const userId = req.user.id
-    const sessionId = req.user.session_id
+    // 门店会话只凭 sess_ 号码授权，和账号没有所有权关系；这里绝不能接收它作为删除范围。
+    const rawStoreSessionId = req.query.session_id
+    if (rawStoreSessionId !== undefined) {
+      if (typeof rawStoreSessionId !== 'string' || !/^sess_[a-f0-9]{32}$/.test(rawStoreSessionId)) {
+        return sendError(res, '门店会话号格式不合法', 400)
+      }
+      return sendError(res, '账号删档不能代删门店会话，请在门店报告页删除', 403)
+    }
+    // 唯一可信范围：登录中间件从 X-Session-Id 查出并绑定到 req.user 的账号会话。
+    const sessionParams = [req.user.session_id]
+    const sessionPlaceholders = '?'
 
     // 只以服务端登记的所有权台账为文件清单；用户可编辑 URL 不能自证归属。
     // 清单必须在删行业务之前取，提交后再逐文件清理，失败时保留对应台账。
@@ -221,11 +237,26 @@ router.delete('/archive', loginRequired, (req, res) => {
       .map((row) => row.filename)
 
     // ★ 三张柜表的 session_id / user_id 两把钥匙都要删，避免只按 user_id 漏掉登录前记录。
-    const bothKeys = (table) => `DELETE FROM ${table} WHERE user_id = ? OR session_id = ?`
+    const bothKeys = (table) =>
+      `DELETE FROM ${table} WHERE user_id = ? OR session_id IN (${sessionPlaceholders})`
+    // 已付费报告是顾客已经付款取得的交付物，不能因“删除当前档案”变成订单仍在、报告却 404。
+    // 报告复读需要它引用的免费依据行；两样都必须保留，并在响应里明确告知这份删除的保留例外。
+    const { paidReports, retainedList } = collectPaidReportRetention(
+      db,
+      'user_id = ? OR session_id IN (?)',
+      [userId, ...sessionParams],
+    )
+    const retainLogsClause = retainedList.length
+      ? ` AND id NOT IN (${retainedList.map(() => '?').join(',')})`
+      : ''
     const delBody = db.prepare('DELETE FROM body_metrics WHERE user_id = ?')
     const delFace = db.prepare('DELETE FROM face_profiles WHERE user_id = ?')
     const delFaceFeatures = db.prepare('DELETE FROM face_features WHERE user_id = ?')
     const delDraft = db.prepare('DELETE FROM profile_drafts WHERE user_id = ?')
+    // item_feedback 外键指向 user_wardrobe，必须先删评分再删衣柜。
+    const delItemFeedback = db.prepare(
+      `DELETE FROM item_feedback WHERE user_id = ? OR session_id IN (${sessionPlaceholders})`,
+    )
     const delTags = db.prepare('DELETE FROM profile_tags WHERE user_id = ?')
     const delRecords = db.prepare('DELETE FROM recommendations WHERE user_id = ?')
     const delTryon = db.prepare('DELETE FROM tryon_results WHERE user_id = ?')
@@ -233,36 +264,46 @@ router.delete('/archive', loginRequired, (req, res) => {
     const delWorks = db.prepare('DELETE FROM creator_works WHERE user_id = ?')
     // 三柜 + 搭配 + 心愿单 + 推荐日志：两把钥匙都可能挂着我的行（见上面的 ★），
     // 原来这六张只按 user_id 删 ⇒ 点「删除我的全部数据」后柜里的东西一条都没少
-    const delLogs = db.prepare(bothKeys('recommendation_logs'))
+    const delLogs = db.prepare(
+      `DELETE FROM recommendation_logs WHERE (user_id = ? OR session_id IN (${sessionPlaceholders}))${retainLogsClause}`,
+    )
     const delWardrobe = db.prepare(bothKeys('user_wardrobe'))
     const delCosmetics = db.prepare(bothKeys('user_cosmetics'))
     const delAccessories = db.prepare(bothKeys('user_accessories'))
     const delOutfits = db.prepare(bothKeys('wardrobe_outfits'))
     const delWishlist = db.prepare(bothKeys('shopping_wishlist'))
     // clothing_items 只认 session_id，没有 user_id 列
-    const delClothing = db.prepare('DELETE FROM clothing_items WHERE session_id = ?')
-    const removed = db.transaction(() => ({
-      body: delBody.run(userId).changes,
-      face: delFace.run(userId).changes,
-      // face_features 外键引用 photos.id，必须排在清照片之前
-      face_features: delFaceFeatures.run(userId).changes,
-      draft: delDraft.run(userId).changes,
-      tags: delTags.run(userId).changes,
-      // 反馈要连带把规则的计数改回来，不能只删行
-      feedback: clearFeedback(userId),
-      logs: delLogs.run(userId, sessionId).changes,
-      // recommendations 与 tryon_results 都外键引用 photos，删除必须排在清照片之前
-      records: delRecords.run(userId).changes,
-      tryon: delTryon.run(userId).changes,
-      photos: delPhotos.run(userId).changes,
-      wardrobe: delWardrobe.run(userId, sessionId).changes,
-      cosmetics: delCosmetics.run(userId, sessionId).changes,
-      accessories: delAccessories.run(userId, sessionId).changes,
-      outfits: delOutfits.run(userId, sessionId).changes,
-      wishlist: delWishlist.run(userId, sessionId).changes,
-      works: delWorks.run(userId).changes,
-      clothing: delClothing.run(sessionId).changes,
-    }))()
+    const delClothing = db.prepare(
+      `DELETE FROM clothing_items WHERE session_id IN (${sessionPlaceholders})`,
+    )
+    const removed = db.transaction(() => {
+      const deleted = {
+        body: delBody.run(userId).changes,
+        face: delFace.run(userId).changes,
+        // face_features 外键引用 photos.id，必须排在清照片之前
+        face_features: delFaceFeatures.run(userId).changes,
+        draft: delDraft.run(userId).changes,
+        item_feedback: delItemFeedback.run(userId, ...sessionParams).changes,
+        tags: delTags.run(userId).changes,
+        // 反馈要连带把规则的计数改回来，不能只删行
+        feedback: clearFeedback(userId),
+        logs: delLogs.run(userId, ...sessionParams, ...retainedList).changes,
+        // recommendations 与 tryon_results 都外键引用 photos，删除必须排在清照片之前
+        records: delRecords.run(userId).changes,
+        tryon: delTryon.run(userId).changes,
+        photos: delPhotos.run(userId).changes,
+        wardrobe: delWardrobe.run(userId, ...sessionParams).changes,
+        cosmetics: delCosmetics.run(userId, ...sessionParams).changes,
+        accessories: delAccessories.run(userId, ...sessionParams).changes,
+        outfits: delOutfits.run(userId, ...sessionParams).changes,
+        wishlist: delWishlist.run(userId, ...sessionParams).changes,
+        works: delWorks.run(userId).changes,
+        clothing: delClothing.run(...sessionParams).changes,
+      }
+      // 先删旧草稿，再落无个人内容的墓碑；顺序反了墓碑会被 delDraft 一起删掉。
+      writeArchiveTombstone(userId)
+      return deleted
+    })()
 
     // 业务事务提交后才碰文件系统；每个文件成功删除（或本来就不存在）才删它的台账。
     // 被保留凭证/库存等其他记录共享的文件不删，台账也保留，避免误删与签名失联。
@@ -281,19 +322,29 @@ router.delete('/archive', loginRequired, (req, res) => {
       }
     }
 
-    if (filesFailed > 0) {
-      return sendError(
-        res,
-        `档案业务记录已删除，但 ${filesFailed} 个上传文件或台账清理失败，请重试或联系管理员`,
-        500,
-        'UPLOAD_CLEANUP_FAILED',
-      )
-    }
-
+    // 文件系统与 SQLite 无法共用一个 ACID 事务，这里明确分成两阶段：业务记录先原子删除，
+    // 文件逐个清理；失败项保留 upload_files 台账，顾客重试 DELETE 即可继续清理。
+    // 只要还有失败项就回 207 Multi-Status（success=true + files_failed），不能回 500 让前端
+    // 误以为整笔档案删除都失败，也不能回 200 把残留照片说成已经清干净。
     return sendSuccess(
       res,
-      { ...removed, files, files_shared: sharedFiles },
-      '您的档案与相关记录已删除',
+      {
+        ...removed,
+        files,
+        files_shared: sharedFiles,
+        files_failed: filesFailed,
+        paid_reports_retained: paidReports.length,
+        report_basis_retained: retainedList.length - paidReports.length,
+      },
+      {
+        status: filesFailed > 0 ? 207 : 200,
+        message:
+          filesFailed > 0
+            ? `档案业务记录已删除；${filesFailed} 个上传文件或台账清理失败，请重试或联系管理员`
+            : paidReports.length > 0
+              ? `档案与相关记录已删除；为保障已购权益，保留了 ${paidReports.length} 份已付费报告及其复读依据`
+              : '您的档案与相关记录已删除',
+      },
     )
   } catch (err) {
     logErr('[分析] 删除长期档案失败:', err)

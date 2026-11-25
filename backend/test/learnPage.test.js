@@ -33,12 +33,8 @@ const ADMIN_HTML = path.join(__dirname, '..', 'templates', 'admin.html')
 const ADMIN_JS = path.join(__dirname, '..', 'routes', 'admin.js')
 const ADMIN_CSS = path.join(__dirname, '..', 'static', 'admin', 'admin.css')
 
-// compose 在仓库外面（本机是 `E:/website/compose/`），本文件头第 15 行自己定的口径是
-// "ext 只判形状 ⛔ 不判在不在盘上——CI 在 Linux 上没有 E: 盘，判存在会造成假红"。
-// 所以这一档改成：路径可注入、不在场就老实 skip，绝不让 `readFileSync` 抛 ENOENT 冒充门禁红灯。
-const COMPOSE_YML =
-  process.env.STYLEAI_COMPOSE_YML || path.join(REPO, '..', 'compose', 'docker-compose.yml')
-const COMPOSE_PRESENT = fs.existsSync(COMPOSE_YML)
+// 门禁默认读仓内真实 compose.yaml；它启用命名卷，CI 也能核挂载段行号，不再 skip。
+const COMPOSE_YML = path.join(REPO, 'compose.yaml')
 
 const html = fs.readFileSync(PAGE, 'utf-8')
 
@@ -186,8 +182,10 @@ test('loc 锚点逐条核：文件在场、行号不越界（本页的信用全�
   const bad = []
   for (const a of list) {
     const [rel, ref] = splitRef(a)
-    if (!/^(backend|app)\//.test(rel) && rel !== 'Dockerfile') {
-      bad.push(`${a}：loc 只准写仓库内路径（backend/…、app/…、Dockerfile），仓外请用 ext`)
+    if (!/^(backend|app)\//.test(rel) && !['Dockerfile', 'compose.yaml'].includes(rel)) {
+      bad.push(
+        `${a}：loc 只准写仓库内路径（backend/…、app/…、Dockerfile、compose.yaml），仓外请用 ext`,
+      )
       continue
     }
     const abs = path.join(REPO, rel)
@@ -215,29 +213,20 @@ test('loc 锚点逐条核：文件在场、行号不越界（本页的信用全�
   )
 })
 
-// 第 7 课讲挂载：compose 的 volumes 段起始行要与教程页引的那一行一致，行号漂了这里先红。
-// compose 在仓库外面 ⇒ 缺席时 skip（写清原因），不再让 ENOENT 冒充门禁红灯（CI 上必红就是这条）。
-test(
-  'compose 挂载段起始行＝教程页 ext 锚点引的那一行（仓外文件，不在场则 skip）',
-  {
-    skip: COMPOSE_PRESENT
-      ? false
-      : `compose 不在盘上：${COMPOSE_YML}（仓外文件，CI 的 Linux 上没有它；本机要跑就用 STYLEAI_COMPOSE_YML 指路）`,
-  },
-  () => {
-    const compose = fs.readFileSync(COMPOSE_YML, 'utf-8')
-    const volLine = compose.split(/\r?\n/).findIndex((l) => /^\s+volumes:\s*$/.test(l)) + 1
-    assert.ok(volLine > 0, 'compose 里找不到 volumes 段')
-    const cited = anchors('ext').find((a) => a.startsWith('E:/website/compose/docker-compose.yml:'))
-    assert.ok(cited, '教程页没引用 compose 的挂载行段')
-    const from = Number(splitRef(cited)[1].split('-')[0])
-    assert.strictEqual(
-      from,
-      volLine,
-      `教程页引用的挂载起始行 ${from} 与 compose 现量 ${volLine} 不符`,
-    )
-  },
-)
+// 第 7 课讲挂载：仓内 compose 的 volumes 段起始行必须与教程页锚点一致，CI 也真跑这条门禁。
+test('compose 挂载段起始行＝教程页 loc 锚点引的那一行', () => {
+  const compose = fs.readFileSync(COMPOSE_YML, 'utf-8')
+  const volLine = compose.split(/\r?\n/).findIndex((l) => /^\s+volumes:\s*$/.test(l)) + 1
+  assert.ok(volLine > 0, 'compose 里找不到 volumes 段')
+  const cited = anchors('loc').find((a) => a.startsWith('compose.yaml:'))
+  assert.ok(cited, '教程页没引用仓内 compose.yaml 的挂载行段')
+  const from = Number(splitRef(cited)[1].split('-')[0])
+  assert.strictEqual(
+    from,
+    volLine,
+    `教程页引用的挂载起始行 ${from} 与 compose 现量 ${volLine} 不符`,
+  )
+})
 
 test('ext 锚点只判形状：一律 E:/website/ 开头，⛔ 不判在不在盘上（CI 的 Linux 没 E: 盘）', () => {
   const list = anchors('ext')

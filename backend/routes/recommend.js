@@ -9,7 +9,12 @@
 const express = require('express')
 const db = require('../db/init')
 const { sendSuccess, sendError } = require('../utils/response')
-const { asText, normalizeItem, projectWardrobeForEngine } = require('../utils/common')
+const {
+  asText,
+  normalizeItem,
+  projectWardrobeForEngine,
+  MAX_WARDROBE_ITEMS,
+} = require('../utils/common')
 const { optionalUser, getCurrentUser, getSessionId } = require('../middleware/auth')
 const { rateLimit } = require('../middleware/rateLimit')
 const { capJson, gateBody, FORM_BLOB_LIMITS } = require('../middleware/bodyGate')
@@ -179,6 +184,9 @@ router.post('/engine', recommendLimiter, async (req, res) => {
     if (!Array.isArray(merged.wardrobe_items) || merged.wardrobe_items.length === 0) {
       const items = loadWardrobeForEngine({ sessionId, userId: user ? user.id : null })
       if (items.length > 0) merged.wardrobe_items = items
+    }
+    if (merged.wardrobe_items?.length > MAX_WARDROBE_ITEMS) {
+      return sendError(res, `wardrobe_items 最多 ${MAX_WARDROBE_ITEMS} 件`, 400)
     }
 
     // 🔴 10-21 第十三阶段·第一步 §四·1（你拍的板：「推荐时现取天气一起带上」）。

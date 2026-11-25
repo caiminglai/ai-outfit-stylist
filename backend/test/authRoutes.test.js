@@ -91,6 +91,9 @@ const { verifyAdminToken, generateAdminToken } = require('../middleware/auth')
 const express = require('express')
 const authRoutes = require('../routes/auth')
 
+const { listItemFeedback } = require('../services/itemFeedback')
+const { writeArchiveTombstone, loadPrefill, saveDraft } = require('../services/profileArchive')
+
 const app = express()
 app.use(express.json())
 app.use('/api/auth', authRoutes)
@@ -311,6 +314,116 @@ test('⑦ 注册那一刻把游客名下的衣橱行过户到新账号，僵尸�
   assert.ok(!usersRow(guestId), '游客那条 users 行没删掉 ⇒ 库里留了个僵尸身份')
 })
 
+test('⑦ 注册过户同步移交 item_feedback 身份，游客评分能按账号读回并清除', async () => {
+  await resetBuckets()
+  const g = await post('/api/auth/guest', {})
+  const guestSid = g.body.data.session_id
+  const guestId = g.body.data.user_id
+  const item = memDb
+    .prepare('INSERT INTO user_wardrobe (session_id, user_id, name, category) VALUES (?, ?, ?, ?)')
+    .run(guestSid, guestId, '有评价的外套', '外套')
+  const guestActor = `u${guestId}`
+  const feedback = memDb
+    .prepare(
+      `INSERT INTO item_feedback
+       (actor_key, user_id, session_id, wardrobe_item_id, signal, aesthetic_score)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+    )
+    .run(guestActor, guestId, guestSid, item.lastInsertRowid, 'up', 4)
+
+  const r = await post(
+    '/api/auth/register',
+    { phone: '13800138005', password: 'abcdef' },
+    { 'x-session-id': guestSid },
+  )
+  assert.strictEqual(r.status, 200, JSON.stringify(r.body))
+  assert.strictEqual(r.body.data.merged.moved.item_feedback, 1)
+  const accountActor = `u${r.body.data.user_id}`
+  assert.deepStrictEqual(
+    memDb
+      .prepare(
+        'SELECT actor_key, user_id, session_id, signal, aesthetic_score FROM item_feedback WHERE id = ?',
+      )
+      .get(feedback.lastInsertRowid),
+    {
+      actor_key: accountActor,
+      user_id: r.body.data.user_id,
+      session_id: r.body.data.session_id,
+      signal: 'up',
+      aesthetic_score: 4,
+    },
+    '评价归属与唯一身份必须一起过户，评分内容不能改写',
+  )
+  assert.deepStrictEqual(
+    listItemFeedback({ userId: r.body.data.user_id, sessionId: r.body.data.session_id }, [
+      item.lastInsertRowid,
+    ]).map((row) => ({ wardrobe_item_id: row.wardrobe_item_id, signal: row.signal })),
+    [{ wardrobe_item_id: item.lastInsertRowid, signal: 'up' }],
+    '注册后必须能按账号身份读回游客期评分',
+  )
+  assert.ok(!usersRow(guestId), 'item_feedback 外键仍引用游客，导致注销/过户无法删除游客身份')
+  assert.deepStrictEqual(memDb.pragma('foreign_key_check'), [], '过户后存在外键悬空')
+})
+
+test('⑦ 登录过户同一衣服时账号已有评分优先，丢弃游客重复行', async () => {
+  await resetBuckets()
+  const g = await post('/api/auth/guest', {})
+  const guestSid = g.body.data.session_id
+  const guestId = g.body.data.user_id
+  const guestItem = memDb
+    .prepare('INSERT INTO user_wardrobe (session_id, user_id, name, category) VALUES (?, ?, ?, ?)')
+    .run(guestSid, guestId, '游客同衣评价', '上衣')
+  const guestActor = `u${guestId}`
+  memDb
+    .prepare(
+      `INSERT INTO item_feedback (actor_key, user_id, session_id, wardrobe_item_id, signal)
+       VALUES (?, ?, ?, ?, 'up')`,
+    )
+    .run(guestActor, guestId, guestSid, guestItem.lastInsertRowid)
+
+  const accountSession = 'acct-item-feedback-distinct-test'
+  const account = memDb.prepare('INSERT INTO users (session_id) VALUES (?)').run(accountSession)
+  const accountId = Number(account.lastInsertRowid)
+  const accountActor = `u${accountId}`
+  memDb
+    .prepare('INSERT INTO user_accounts (phone, password_hash, user_id) VALUES (?, ?, ?)')
+    .run('13800138006', bcrypt.hashSync('abcdef', 10), accountId)
+  memDb
+    .prepare(
+      `INSERT INTO item_feedback (actor_key, user_id, session_id, wardrobe_item_id, signal)
+       VALUES (?, ?, ?, ?, 'down')`,
+    )
+    .run(accountActor, accountId, accountSession, guestItem.lastInsertRowid)
+
+  const r = await post(
+    '/api/auth/login',
+    { phone: '13800138006', password: 'abcdef' },
+    { 'x-session-id': guestSid },
+  )
+  assert.strictEqual(r.status, 200, JSON.stringify(r.body))
+  assert.strictEqual(r.body.data.merged.dropped, 1)
+  assert.strictEqual(r.body.data.merged.moved.item_feedback, undefined)
+  assert.deepStrictEqual(
+    memDb
+      .prepare(
+        `SELECT actor_key, user_id, session_id, signal, wardrobe_item_id
+         FROM item_feedback WHERE wardrobe_item_id = ?`,
+      )
+      .all(guestItem.lastInsertRowid),
+    [
+      {
+        actor_key: accountActor,
+        user_id: accountId,
+        session_id: r.body.data.session_id,
+        signal: 'down',
+        wardrobe_item_id: guestItem.lastInsertRowid,
+      },
+    ],
+    '同衣重复评分必须只保留账号已有那条，不能留下旧 actor_key 的重复样本',
+  )
+  assert.ok(!usersRow(guestId))
+})
+
 const failUploadOwnershipMigration = () =>
   memDb.exec(`
     CREATE TRIGGER fail_upload_ownership_migration
@@ -486,6 +599,76 @@ test('⑩ 登录时 profile_tags 撞唯一键：丢游客那条、留账号那�
     '账号原有那条被游客那条覆盖了 ⇒ 唯一约束分支写反了（口径：账号这份优先）',
   )
   assert.ok(!usersRow(guestId), '并完之后游客行没删干净')
+})
+
+test('游客删档墓碑过户后仍屏蔽账号旧画像，新草稿可继续使用', async () => {
+  await resetBuckets()
+  const account = await post('/api/auth/register', {
+    phone: '13900138003',
+    password: 'abcdef',
+  })
+  assert.strictEqual(account.status, 200, JSON.stringify(account.body))
+  const accountId = account.body.data.user_id
+  const accountSid = account.body.data.session_id
+  memDb
+    .prepare(
+      `INSERT INTO recommendation_logs (session_id, user_id, mode, input_snapshot, result)
+       VALUES (?, ?, 'personal', ?, '{}')`,
+    )
+    .run(accountSid, accountId, JSON.stringify({ height: 170, occasion: '旧画像' }))
+  saveDraft(accountId, { height: 165 })
+
+  const guest = await post('/api/auth/guest', {})
+  const guestId = guest.body.data.user_id
+  writeArchiveTombstone(guestId)
+  const login = await post(
+    '/api/auth/login',
+    { phone: '13900138003', password: 'abcdef' },
+    { 'x-session-id': guest.body.data.session_id },
+  )
+  assert.strictEqual(login.status, 200, JSON.stringify(login.body))
+  assert.strictEqual(login.body.data.merged.dropped, 2, '账号旧草稿与游客墓碑副本都应计入丢弃行')
+  assert.strictEqual(
+    memDb.prepare('SELECT form_json FROM profile_drafts WHERE user_id = ?').get(accountId)
+      .form_json,
+    '{"__archive_deleted__":true}',
+    '账号已有草稿时，游客墓碑不能被唯一键去重直接删掉',
+  )
+  assert.ok(!usersRow(guestId), '过户后游客身份必须删除')
+  assert.deepStrictEqual(loadPrefill(accountId), {}, '墓碑丢失会让删档前旧画像重新成为预填')
+  saveDraft(accountId, { height: 180 })
+  assert.deepStrictEqual(loadPrefill(accountId), { height: 180 }, '墓碑应允许之后新草稿正常预填')
+})
+
+test('账号已有删档墓碑时，游客普通草稿不能覆盖它', async () => {
+  await resetBuckets()
+  const account = await post('/api/auth/register', {
+    phone: '13900138004',
+    password: 'abcdef',
+  })
+  assert.strictEqual(account.status, 200, JSON.stringify(account.body))
+  const accountId = account.body.data.user_id
+  writeArchiveTombstone(accountId)
+
+  const guest = await post('/api/auth/guest', {})
+  saveDraft(guest.body.data.user_id, { height: 180 })
+  const login = await post(
+    '/api/auth/login',
+    { phone: '13900138004', password: 'abcdef' },
+    { 'x-session-id': guest.body.data.session_id },
+  )
+  assert.strictEqual(login.status, 200, JSON.stringify(login.body))
+  assert.strictEqual(login.body.data.merged.dropped, 1)
+  assert.strictEqual(
+    memDb.prepare('SELECT form_json FROM profile_drafts WHERE user_id = ?').get(accountId)
+      .form_json,
+    '{"__archive_deleted__":true}',
+  )
+  assert.deepStrictEqual(
+    loadPrefill(accountId),
+    {},
+    '账号墓碑优先，游客后来填的草稿不能解除删档屏蔽',
+  )
 })
 
 test('⑪⑫ 管理员登录：空密码 400、错密码与不存在的号同一句 401、数字用户名不炸 500', async () => {

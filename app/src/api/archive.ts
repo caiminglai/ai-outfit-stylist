@@ -46,8 +46,12 @@ export async function deleteProfileArchive(): Promise<{
   records: number
   tryon: number
   photos: number
+  item_feedback: number
   files: number
-  files_failed?: number
+  files_shared: number
+  files_failed: number
+  paid_reports_retained: number
+  report_basis_retained: number
 }> {
   const res = await fetchWithTimeout(`${BASE}/analysis/archive`, {
     method: 'DELETE',

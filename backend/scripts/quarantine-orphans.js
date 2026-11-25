@@ -1,11 +1,7 @@
 /**
  * 乱码孤儿文件隔离工具(安全版,不删除只移动)
  *
- * 背景:fix-mojibake.js 能识别"未被任何 PMX 引用的乱码文件",
- *      但其 --delete-orphans 选项是直接 fs.unlinkSync 永久删除,
- *      违反"不永久删除用户文件"的安全红线.
- *
- * 本脚本:扫描 models 目录的乱码孤儿文件,移动到隔离目录,
+ * 本脚本:扫描 models 目录中未被任何 PMX 引用的乱码孤儿文件,移动到隔离目录,
  *        保留可恢复性.隔离目录本身不会被 PMX 扫描(以 _ 开头).
  *
  * 用法:
@@ -35,7 +31,7 @@ function isMojibake(name) {
 }
 
 /**
- * 读取 PMX 文件的纹理引用列表(与 fix-mojibake.js 同逻辑)
+ * 读取 PMX 文件的纹理引用列表
  */
 function readPmxTextures(pmxPath) {
   const buf = fs.readFileSync(pmxPath)

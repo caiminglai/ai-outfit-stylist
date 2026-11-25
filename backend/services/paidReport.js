@@ -13,8 +13,8 @@
  *   3. **后台三张经营读数**（§七）：实收／掉在中段的／漏斗。只读数，⛔ 不改 `/admin/api/stats` 的语义。
  *
  * 🔴 三条不能错的口径：
- *  - `markPaid`（`routes/payment.js:209-236`）在把订单置 `paid` 的同时，**还会往 `deposits` 插一条
- *    `approved` 镜像**（`:228-230`，`proof_url` 写死空串）。所以两张账不能相加，凭证流那一路必须把镜像剔掉；
+ *  - `markPaid`（`routes/payment.js:210-237`）在把订单置 `paid` 的同时，**还会往 `deposits` 插一条
+ *    `approved` 镜像**（`:228-231`，`proof_url` 写死空串）。所以两张账不能相加，凭证流那一路必须把镜像剔掉；
  *    🔴 剔镜像那把尺子**本文件是唯一出处**（`ONLINE_MIRROR` 那段 SQL ＋ 下面 `isOnlineMirror()`），
  *    `routes/payment.js` 的审核口现在反过来调它（`:651`），⛔ 两边各起一把（同层两把尺子是本项目反复清扫的病灶）。
  *  - 库里 `created_at`/`paid_at` 全是 SQLite `datetime('now')`＝**UTC**。窗口比较只在 SQL 里用
@@ -25,6 +25,7 @@
 const db = require('../db/init')
 const { buildRecommendation } = require('./recommendEngine')
 const { beijingTimestamp } = require('../utils/beijingTime')
+const { REPORT_SHAPE_SQL, PAID_REPORT_SQL } = require('./paidReportSql')
 // 报错与告警一律走 utils/logger：console.* 只落 stdout，容器里那份不归本项目留档，
 // 事后按订单号/用户查不到痕迹（判据见 test/loggerDiscipline.test.js）
 const { error: logErr } = require('../utils/logger')
@@ -34,7 +35,7 @@ const { error: logErr } = require('../utils/logger')
  *
  * 🔴 第十四阶段·第一步 组4 的**真钱测单**（2026-10-22 支付宝 0.01 元到账）抓到的洞：
  * 这把尺子原来**只认 `admin_note` 前缀**，而那个前缀是 `markPaid` 写进去的
- * （`routes/payment.js:226-229`），后台审核口 `POST /admin/:id/status`（`routes/payment.js:622-681`）
+ * （`routes/payment.js:229-231`），后台审核口 `POST /admin/:id/status`（`routes/payment.js:654-713`）
  * 却把整列覆盖成后台备注框里的内容——框里没字就覆盖成空串 ⇒ 判据当场失效。
  * 现量：那笔 0.01 元付完、又在后台点了一次「通过」之后，`entitlement` 回
  * `granted 2／paid_orders 1／proof_approved 1`，`claimable_proofs` 里多出 `deposit_id 1`，
@@ -59,8 +60,7 @@ function rpPath(key) {
 }
 // 🔴 外面一律以 `AND (…)` / `AND NOT (…)` 的形式拼接：少了这层括号，
 // `NOT result IS NOT NULL AND …` 会先与 `result IS NOT NULL` 结合，NULL 快照那几行被误当成报告行排除。
-const IS_REPORT =
-  "(result IS NOT NULL AND json_valid(result) AND json_extract(result, '$.paid_report.out_trade_no') IS NOT NULL)"
+const IS_REPORT = REPORT_SHAPE_SQL
 
 /** UTC 串（'YYYY-MM-DD HH:MM:SS'）→ 东八区显示串。空值原样回 null，⛔ 不许回 1970。 */
 function toBeijing(utcStr) {
@@ -163,7 +163,7 @@ function entitlement(userId) {
     // deposits.amount 是 REAL（存"元"），先乘回分再除 100，⛔ 不在服务层用浮点连加
     proof_amount_yuan: Math.round(proof.yuan * 100) / 100,
     created_orders: created.n,
-    // 🔴 第十四阶段·第一步 C1 现量到的漏项：`routes/payment.js:127` 一直在读
+    // 🔴 第十四阶段·第一步 C1 现量到的漏项：`routes/payment.js:129` 一直在读
     // `e.created_amount_yuan`，而这里从来没给过 ⇒ 「待付金额」在顾客端恒为 `undefined`（JSON 直接掉键）。
     created_amount_yuan: Math.round(created.fen) / 100,
     closed_orders: closed.n,
@@ -257,8 +257,8 @@ function findBasis(userId, basisSessionId) {
  * 🔴 第十四阶段·第一步 C1（`docs/依据/22` §十）：`app/public/pay.html:52/64/70` 三处对顾客承诺（10-30 窄屏补正在这三处之前插了 7 行 CSS，原号 45/57/63；按内容回读这三行一字未动。本行**净零加行**，因为 `docs/依据/22` 正按行号引本文件）
  * 「扫备用收款码＋上传截图＋我们人工确认后，就能回展厅「我的报告」领取这份细账」，
  * 而本文件原来**只认 `payment_orders`**（`claimReport` 第一句就是 `SELECT * FROM payment_orders`），
- * 后台审核口（`routes/payment.js:622-681`）又只 `UPDATE deposits`、⛔ 一行订单都不写
- * （`INSERT INTO payment_orders` 全仓只有在线下单那两处：`payment.js:247`/`:371`）。
+ * 后台审核口（`routes/payment.js:654-713`）又只 `UPDATE deposits`、⛔ 一行订单都不写
+ * （`INSERT INTO payment_orders` 全仓只有在线下单那两处：`payment.js:249`/`:386`）。
  * ⇒ 照承诺做了的顾客**必然 404**，而钱是真到账了。这不是文案问题，是账与承诺两套。
  *
  * 两条出路里选了这条窄的：**领取口承认已审核的凭证，但⛔ 不往 `payment_orders` 补一行**。
@@ -266,7 +266,7 @@ function findBasis(userId, basisSessionId) {
  * 那属于 §十一 待裁第 2 条，归他拍。现在这样：钱能领到、账上看得清是人工确认的那笔、营收读数一个字没变。
  *
  * `ONLINE_MIRROR` 那把尺子在这里同样生效：在线支付到账时 `markPaid` 会往 `deposits` 插一条
- * `approved` 镜像（`payment.js:226-229`），那笔钱已经有订单号了，⛔ 不能再按凭证领第二遍。
+ * `approved` 镜像（`payment.js:229-231`），那笔钱已经有订单号了，⛔ 不能再按凭证领第二遍。
  *
  * @returns {{code:number, error:string, reason:string} | {grant:{key:string, amount_fen:number|null,
  *          paid_at:string|null, channel:string, source:string, deposit_id:number|null}}}
@@ -430,7 +430,7 @@ function deliver(grant, { userId, sessionId, basisSessionId }) {
     .get(userId)
 
   // 生成时刻与 `paid_at`、`created_at` 必须同一把轴（都是 SQLite `datetime('now')`＝UTC），
-  // ⛔ 不许在这里塞 `toISOString()` 或东八区串：payment.js:666-668 那条"同一列两种格式、
+  // ⛔ 不许在这里塞 `toISOString()` 或东八区串：payment.js:698-700 那条"同一列两种格式、
   // 按时间排序时 ISO 的 'T' 恒大于空格"的坑就是这么来的。给用户看的东八区由 `toBeijing` 现转。
   const grantedAt = db.prepare("SELECT datetime('now') AS t").get().t
 
@@ -622,7 +622,8 @@ function businessSummary() {
 
 /**
  * S6 滚动清理（10-19 蓝图短期项，10-23 落）：免费场样本保留 90 天，付费报告行**永久豁免**。
- * 判据就是本文件 `:59` 那把 `IS_REPORT`，⛔ 不在别处复制第二份谓词。
+ * 只有本人已到账的报告永久豁免；created/closed/缺失订单与未核过凭证不算交付物。
+ * 判据就是 services/paidReportSql.js 的 PAID_REPORT_SQL，不在本文件复制第二份。
  * 被清掉的是"领取重放用的依据行"：付款人隔了 90 天以上再来领，会得到既有的 409 话术
  * （"请先在展厅生成一次方案"）而不是错拿旧档——报告本体不受影响（它的快照在报告行自己身上，
  * `deliver()` 插入时复制了一份 `input_snapshot`）。
@@ -637,7 +638,7 @@ function pruneOldLogs(days = 90) {
   const info = db
     .prepare(
       'DELETE FROM recommendation_logs WHERE created_at IS NOT NULL AND created_at < ? AND NOT ' +
-        IS_REPORT,
+        PAID_REPORT_SQL,
     )
     .run(cutoff)
   return info.changes
@@ -653,5 +654,6 @@ module.exports = {
   toBeijing,
   ONLINE_MIRROR,
   isOnlineMirror,
+  PAID_REPORT_SQL,
   pruneOldLogs,
 }

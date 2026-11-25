@@ -28,8 +28,11 @@ require.cache[initPath] = {
 }
 
 const { maskQuery } = require('../middleware/logger')
+const { UPLOAD_DIR } = require('../utils/common')
+const { registerUpload } = require('../utils/uploads')
 const { asFilters, stripIdentityFields } = require('../utils/common')
 const { healthBand, gbBand } = require('../services/bmi')
+const { loadPrefill, saveDraft } = require('../services/profileArchive')
 const { colorFit } = require('../services/colorMetrics')
 const { buildFullLook } = require('../services/fullLookAdvisor')
 const { pollTryonResult } = require('../services/dashscopeService')
@@ -133,6 +136,26 @@ function addAccessory(sessionId, extra = {}) {
     )
     .run(...keys.map((k) => cols[k]))
   return memDb.prepare('SELECT * FROM user_accessories ORDER BY id DESC LIMIT 1').get()
+}
+
+function addPaidOrder(outTradeNo, userId, status = 'paid') {
+  memDb
+    .prepare(
+      `INSERT INTO payment_orders (out_trade_no, user_id, description, amount_fen, status, paid_at)
+       VALUES (?, ?, '测试报告', 9900, ?, ?)`,
+    )
+    .run(outTradeNo, userId, status, status === 'paid' ? "datetime('now')" : null)
+}
+
+function addApprovedDeposit(userId) {
+  return Number(
+    memDb
+      .prepare(
+        `INSERT INTO deposits (user_id, channel, amount, proof_url, status, approved_at)
+         VALUES (?, 'wechat', 99, '/uploads/test-proof.png', 'approved', datetime('now'))`,
+      )
+      .run(userId).lastInsertRowid,
+  )
 }
 
 // ============================================================
@@ -723,6 +746,53 @@ test('过期 GET：未同步的会话连同样本一起清掉', () => {
   )
 })
 
+test('过期 GET：未同步门店会话的已付费报告及依据也不能被隐私清理删掉', () => {
+  const sessionId = 'sess_dddddddddddddddddddddddddddddddd'
+  const u = memDb
+    .prepare('INSERT INTO users (nickname, session_id) VALUES (?, ?)')
+    .run('过期门店付款人', sid('expired-store-paid'))
+  const uid = Number(u.lastInsertRowid)
+  addPaidOrder('A3-expired-store', uid)
+  const basis = memDb
+    .prepare(
+      `INSERT INTO recommendation_logs (session_id, mode, input_snapshot, result)
+       VALUES (?, 'store', '{"height":170}', '{}')`,
+    )
+    .run(sessionId)
+  const report = memDb
+    .prepare(
+      `INSERT INTO recommendation_logs (session_id, user_id, mode, input_snapshot, result)
+       VALUES (?, ?, 'store', '{"height":170}', ?)`,
+    )
+    .run(
+      sessionId,
+      uid,
+      JSON.stringify({
+        paid_report: {
+          out_trade_no: 'A3-expired-store',
+          basis_log_id: Number(basis.lastInsertRowid),
+        },
+      }),
+    )
+  memDb
+    .prepare(
+      `INSERT INTO customer_sessions (session_id, profile_data, expires_at, created_at)
+       VALUES (?, '{"height":170}', ?, ?)`,
+    )
+    .run(sessionId, day(-1), day(-2))
+  const res = call(findRoute(customerRouter, 'get', '/session/:sessionId'), {
+    params: { sessionId },
+  })
+  assert.strictEqual(res.statusCode, 404)
+  assert.deepStrictEqual(
+    memDb
+      .prepare('SELECT id FROM recommendation_logs WHERE session_id = ? ORDER BY id')
+      .all(sessionId),
+    [{ id: Number(basis.lastInsertRowid) }, { id: Number(report.lastInsertRowid) }],
+    '过期清理也不能吞掉顾客已付款取得的交付物',
+  )
+})
+
 test('过期 GET：已同步的会话行必须留着（门店要靠它对账）', () => {
   const sessionId = seedSession('exp-synced', { expiresAt: day(-1), synced: 1 })
   const res = call(findRoute(customerRouter, 'get', '/session/:sessionId'), {
@@ -760,29 +830,43 @@ test('过期后再 DELETE：会话行早没了，无主样本仍然被清', () =
 // 十一、「删除我的全部数据」要把只挂 session_id 的柜表也删掉
 // ============================================================
 
-test('analysis DELETE /archive：登录后只按 session_id 存的柜表同样被删', () => {
-  const sessionId = sid('archive-me')
+test('analysis DELETE /archive：账号身份的三柜和心愿单删除，不代删任何门店会话', () => {
+  const accountSessionId = sid('archive-account')
+  const storeSessionId = 'sess_0123456789abcdef0123456789abcdef'
+  const otherSessionId = 'sess_fedcba9876543210fedcba9876543210'
   const u = memDb
     .prepare('INSERT INTO users (nickname, session_id) VALUES (?, ?)')
-    .run('删除我', sessionId)
+    .run('删除我', accountSessionId)
   const uid = u.lastInsertRowid
-  memDb
-    .prepare(
-      `INSERT INTO customer_sessions (session_id, profile_data, expires_at, created_at)
-       VALUES (?, '{}', ?, ?)`,
-    )
-    .run(sessionId, day(1), day(0))
+  const insertSession = memDb.prepare(
+    `INSERT INTO customer_sessions (session_id, profile_data, expires_at, created_at)
+     VALUES (?, '{}', ?, ?)`,
+  )
+  insertSession.run(accountSessionId, day(1), day(0))
+  insertSession.run(storeSessionId, day(1), day(0))
+  insertSession.run(otherSessionId, day(1), day(0))
   // 三柜的 POST 只写 session_id，user_id 一直是 NULL（10-13 现量）
-  addWardrobe(sessionId, { user_id: null })
-  addCosmetic(sessionId, { user_id: null })
-  addAccessory(sessionId, { user_id: null })
+  addWardrobe(accountSessionId, { user_id: null })
+  addCosmetic(accountSessionId, { user_id: null })
+  addAccessory(accountSessionId, { user_id: null })
   memDb
     .prepare(`INSERT INTO shopping_wishlist (session_id, item_name, user_id) VALUES (?, 'x', NULL)`)
-    .run(sessionId)
+    .run(accountSessionId)
+  memDb
+    .prepare(
+      `INSERT INTO clothing_items (session_id, filename, image_url) VALUES (?, 'coat.jpg', '/x')`,
+    )
+    .run(accountSessionId)
+  memDb
+    .prepare(`INSERT INTO wardrobe_outfits (session_id, name, item_ids) VALUES (?, '通勤', '[1]')`)
+    .run(accountSessionId)
+  memDb
+    .prepare(`INSERT INTO recommendation_logs (session_id, mode, result) VALUES (?, 'store', '{}')`)
+    .run(accountSessionId)
 
   const res = call(findRoute(analysisRouter, 'delete', '/archive'), {
-    user: { id: uid, session_id: sessionId },
-    headers: { 'x-session-id': sessionId },
+    user: { id: uid, session_id: accountSessionId },
+    headers: { 'x-session-id': accountSessionId },
   })
   assert.strictEqual(res.statusCode, 200, JSON.stringify(res.body))
   const left = memDb
@@ -791,14 +875,410 @@ test('analysis DELETE /archive：登录后只按 session_id 存的柜表同样�
          (SELECT COUNT(*) FROM user_wardrobe WHERE session_id = ?) AS w,
          (SELECT COUNT(*) FROM user_cosmetics WHERE session_id = ?) AS c,
          (SELECT COUNT(*) FROM user_accessories WHERE session_id = ?) AS a,
-         (SELECT COUNT(*) FROM shopping_wishlist WHERE session_id = ?) AS p`,
+         (SELECT COUNT(*) FROM shopping_wishlist WHERE session_id = ?) AS p,
+         (SELECT COUNT(*) FROM clothing_items WHERE session_id = ?) AS clothing,
+         (SELECT COUNT(*) FROM wardrobe_outfits WHERE session_id = ?) AS outfits,
+         (SELECT COUNT(*) FROM recommendation_logs WHERE session_id = ?) AS logs,
+         (SELECT COUNT(*) FROM customer_sessions WHERE session_id IN (?, ?)) AS cs,
+         (SELECT COUNT(*) FROM customer_sessions WHERE session_id = ?) AS other`,
     )
-    .get(sessionId, sessionId, sessionId, sessionId)
+    .get(
+      accountSessionId,
+      accountSessionId,
+      accountSessionId,
+      accountSessionId,
+      accountSessionId,
+      accountSessionId,
+      accountSessionId,
+      accountSessionId,
+      storeSessionId,
+      otherSessionId,
+    )
   assert.deepStrictEqual(
     left,
-    { w: 0, c: 0, a: 0, p: 0 },
-    '接口回 200 却一条都没删，是最难被发现的那种假承诺',
+    { w: 0, c: 0, a: 0, p: 0, clothing: 0, outfits: 0, logs: 0, cs: 2, other: 1 },
+    '账号数据删净，两张门店表单都不因账号删档被代删',
   )
+  const readBack = call(findRoute(customerRouter, 'get', '/session/:sessionId'), {
+    params: { sessionId: storeSessionId },
+  })
+  assert.strictEqual(readBack.statusCode, 200, '未授权门店会话仍只能由原持有者自行删除')
+})
+
+test('analysis DELETE /archive：门店会话号格式不合法时整笔拒删，不能误删账号会话', () => {
+  const accountSessionId = sid('archive-invalid-query')
+  const u = memDb
+    .prepare('INSERT INTO users (nickname, session_id) VALUES (?, ?)')
+    .run('格式校验', accountSessionId)
+  memDb
+    .prepare(
+      `INSERT INTO customer_sessions (session_id, profile_data, expires_at, created_at)
+       VALUES (?, '{}', ?, ?)`,
+    )
+    .run(accountSessionId, day(1), day(0))
+  const res = call(findRoute(analysisRouter, 'delete', '/archive'), {
+    user: { id: u.lastInsertRowid, session_id: accountSessionId },
+    headers: { 'x-session-id': accountSessionId },
+    query: { session_id: ['sess_not-an-id'] },
+  })
+  assert.strictEqual(res.statusCode, 400)
+  assert.strictEqual(
+    memDb
+      .prepare('SELECT COUNT(*) AS n FROM customer_sessions WHERE session_id = ?')
+      .get(accountSessionId).n,
+    1,
+  )
+})
+
+test('analysis DELETE /archive：账号已付费报告及领取依据保留，只删免费样本', () => {
+  const sessionId = sid('archive-paid-report')
+  const u = memDb
+    .prepare('INSERT INTO users (nickname, session_id) VALUES (?, ?)')
+    .run('付费删除', sessionId)
+  const uid = Number(u.lastInsertRowid)
+  addPaidOrder('A3-paid-account', uid)
+  const insertLog = memDb.prepare(
+    `INSERT INTO recommendation_logs (session_id, user_id, mode, input_snapshot, result)
+     VALUES (?, ?, 'personal', '{"height_cm":170}', ?)`,
+  )
+  const accountBasis = insertLog.run(sessionId, null, '{}')
+  const accountReport = insertLog.run(
+    sessionId,
+    uid,
+    JSON.stringify({
+      paid_report: {
+        out_trade_no: 'A3-paid-account',
+        basis_log_id: Number(accountBasis.lastInsertRowid),
+      },
+    }),
+  )
+  const accountFree = insertLog.run(sessionId, null, '{}')
+
+  const res = call(findRoute(analysisRouter, 'delete', '/archive'), {
+    user: { id: uid, session_id: sessionId },
+    headers: { 'x-session-id': sessionId },
+  })
+  assert.strictEqual(res.statusCode, 200, JSON.stringify(res.body))
+  assert.strictEqual(res.body.data.paid_reports_retained, 1)
+  assert.strictEqual(res.body.data.report_basis_retained, 1)
+  assert.deepStrictEqual(
+    memDb
+      .prepare('SELECT id FROM recommendation_logs WHERE user_id = ? OR session_id = ? ORDER BY id')
+      .all(uid, sessionId),
+    [{ id: Number(accountBasis.lastInsertRowid) }, { id: Number(accountReport.lastInsertRowid) }],
+    '账号付过钱的报告和生成依据都必须可复读',
+  )
+  assert.strictEqual(
+    memDb
+      .prepare('SELECT COUNT(*) AS n FROM recommendation_logs WHERE id = ?')
+      .get(accountFree.lastInsertRowid).n,
+    0,
+  )
+})
+
+test('analysis DELETE /archive：created 与缺失订单的报告形状不豁免删除', () => {
+  const sessionId = sid('archive-unpaid-reports')
+  const u = memDb
+    .prepare('INSERT INTO users (nickname, session_id) VALUES (?, ?)')
+    .run('未到账报告', sessionId)
+  const uid = Number(u.lastInsertRowid)
+  const insertLog = memDb.prepare(
+    `INSERT INTO recommendation_logs (session_id, user_id, mode, input_snapshot, result)
+     VALUES (?, ?, 'personal', '{"height_cm":170}', ?)`,
+  )
+  for (const [name, status] of [
+    ['created', 'created'],
+    ['missing', null],
+  ]) {
+    const no = `A3-unpaid-${name}`
+    if (status) addPaidOrder(no, uid, status)
+    const basis = insertLog.run(sessionId, uid, '{}')
+    insertLog.run(
+      sessionId,
+      uid,
+      JSON.stringify({
+        paid_report: { out_trade_no: no, basis_log_id: Number(basis.lastInsertRowid) },
+      }),
+    )
+  }
+
+  const res = call(findRoute(analysisRouter, 'delete', '/archive'), {
+    user: { id: uid, session_id: sessionId },
+    headers: { 'x-session-id': sessionId },
+  })
+  assert.strictEqual(res.statusCode, 200, JSON.stringify(res.body))
+  assert.strictEqual(res.body.data.paid_reports_retained, 0)
+  assert.strictEqual(res.body.data.report_basis_retained, 0)
+  assert.strictEqual(
+    memDb
+      .prepare('SELECT COUNT(*) AS n FROM recommendation_logs WHERE user_id = ? OR session_id = ?')
+      .get(uid, sessionId).n,
+    0,
+    '报告 JSON 形状不是到账事实，未付款的报告和生成依据都必须可清理',
+  )
+})
+
+test('analysis DELETE /archive：知道他人门店会话号也不能越权删除，整笔零变更', () => {
+  const accountSessionId = sid('archive-owner-a')
+  const foreignStoreId = 'sess_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'
+  const u = memDb
+    .prepare('INSERT INTO users (nickname, session_id) VALUES (?, ?)')
+    .run('账号A', accountSessionId)
+  const uid = Number(u.lastInsertRowid)
+  memDb.prepare('INSERT INTO body_metrics (user_id, height_cm) VALUES (?, 170)').run(uid)
+  memDb
+    .prepare(
+      `INSERT INTO customer_sessions (session_id, profile_data, expires_at, created_at)
+       VALUES (?, '{"height":180}', ?, ?)`,
+    )
+    .run(foreignStoreId, day(1), day(0))
+  addWardrobe(foreignStoreId)
+  memDb
+    .prepare(`INSERT INTO recommendation_logs (session_id, mode, result) VALUES (?, 'store', '{}')`)
+    .run(foreignStoreId)
+
+  const res = call(findRoute(analysisRouter, 'delete', '/archive'), {
+    user: { id: uid, session_id: accountSessionId },
+    headers: { 'x-session-id': accountSessionId },
+    query: { session_id: foreignStoreId },
+  })
+  assert.strictEqual(res.statusCode, 403, JSON.stringify(res.body))
+  assert.strictEqual(
+    memDb.prepare('SELECT COUNT(*) AS n FROM body_metrics WHERE user_id = ?').get(uid).n,
+    1,
+    '越权参数必须在任何账号数据删除之前拒绝',
+  )
+  assert.strictEqual(
+    memDb
+      .prepare('SELECT COUNT(*) AS n FROM customer_sessions WHERE session_id = ?')
+      .get(foreignStoreId).n,
+    1,
+  )
+  assert.strictEqual(
+    memDb
+      .prepare('SELECT COUNT(*) AS n FROM user_wardrobe WHERE session_id = ?')
+      .get(foreignStoreId).n,
+    1,
+  )
+  assert.strictEqual(
+    memDb
+      .prepare('SELECT COUNT(*) AS n FROM recommendation_logs WHERE session_id = ?')
+      .get(foreignStoreId).n,
+    1,
+  )
+})
+
+test('analysis DELETE /archive：衣物评分先于衣柜删除，外键不再让整笔删档回滚', () => {
+  const sessionId = sid('archive-item-feedback')
+  const u = memDb
+    .prepare('INSERT INTO users (nickname, session_id) VALUES (?, ?)')
+    .run('衣物评分', sessionId)
+  const uid = Number(u.lastInsertRowid)
+  const item = addWardrobe(sessionId, { user_id: uid })
+  memDb
+    .prepare(
+      `INSERT INTO item_feedback (actor_key, user_id, session_id, wardrobe_item_id, aesthetic_score)
+       VALUES (?, ?, ?, ?, 5)`,
+    )
+    .run(`u${uid}`, uid, sessionId, item.id)
+
+  const res = call(findRoute(analysisRouter, 'delete', '/archive'), {
+    user: { id: uid, session_id: sessionId },
+  })
+  assert.strictEqual(res.statusCode, 200, JSON.stringify(res.body))
+  assert.strictEqual(res.body.data.item_feedback, 1)
+  assert.strictEqual(res.body.data.wardrobe, 1)
+  assert.strictEqual(
+    memDb.prepare('SELECT COUNT(*) AS n FROM item_feedback WHERE wardrobe_item_id = ?').get(item.id)
+      .n,
+    0,
+  )
+})
+
+test('analysis DELETE /archive：保留的报告不再回放旧画像，新草稿仍可正常使用', () => {
+  const sessionId = sid('archive-prefill-tombstone')
+  const u = memDb
+    .prepare('INSERT INTO users (nickname, session_id) VALUES (?, ?)')
+    .run('删档预填', sessionId)
+  const uid = Number(u.lastInsertRowid)
+  addPaidOrder('A3-tombstone', uid)
+  memDb
+    .prepare('INSERT INTO body_metrics (user_id, height_cm, bust_cm) VALUES (?, 170, 88)')
+    .run(uid)
+  memDb
+    .prepare(
+      `INSERT INTO recommendation_logs (session_id, user_id, mode, input_snapshot, result)
+       VALUES (?, ?, 'personal', ?, ?)`,
+    )
+    .run(
+      sessionId,
+      uid,
+      JSON.stringify({ height: 170, bust: 88, occasion: '上班通勤' }),
+      JSON.stringify({ paid_report: { out_trade_no: 'A3-tombstone', basis_log_id: 1 } }),
+    )
+
+  const res = call(findRoute(analysisRouter, 'delete', '/archive'), {
+    user: { id: uid, session_id: sessionId },
+  })
+  assert.strictEqual(res.statusCode, 200, JSON.stringify(res.body))
+  assert.strictEqual(res.body.data.paid_reports_retained, 1)
+  assert.deepStrictEqual(loadPrefill(uid), {}, '重新进入展厅不能把已删的身体数据和场合回填回来')
+  saveDraft(uid, { height: 180 })
+  assert.deepStrictEqual(
+    loadPrefill(uid),
+    { height: 180 },
+    '顾客重新填写后只预填新内容，不复活旧快照',
+  )
+})
+
+test('customer DELETE /session：门店付费报告及领取依据保留，免费样本仍删除', () => {
+  const sessionId = 'sess_cccccccccccccccccccccccccccccccc'
+  const u = memDb
+    .prepare('INSERT INTO users (nickname, session_id) VALUES (?, ?)')
+    .run('门店凭证付款人', sid('store-deposit-paid'))
+  const uid = Number(u.lastInsertRowid)
+  const depositId = addApprovedDeposit(uid)
+  const basis = memDb
+    .prepare(
+      `INSERT INTO recommendation_logs (session_id, mode, input_snapshot, result)
+       VALUES (?, 'store', '{"height":170}', '{}')`,
+    )
+    .run(sessionId)
+  const report = memDb
+    .prepare(
+      `INSERT INTO recommendation_logs (session_id, user_id, mode, input_snapshot, result)
+       VALUES (?, ?, 'store', '{"height":170}', ?)`,
+    )
+    .run(
+      sessionId,
+      uid,
+      JSON.stringify({
+        paid_report: {
+          out_trade_no: `DEPOSIT-${depositId}`,
+          basis_log_id: Number(basis.lastInsertRowid),
+        },
+      }),
+    )
+  const free = memDb
+    .prepare(
+      `INSERT INTO recommendation_logs (session_id, mode, input_snapshot, result)
+       VALUES (?, 'store', '{"height":170}', '{}')`,
+    )
+    .run(sessionId)
+  memDb
+    .prepare(
+      `INSERT INTO customer_sessions (session_id, profile_data, expires_at, created_at)
+       VALUES (?, '{"height":170}', ?, ?)`,
+    )
+    .run(sessionId, day(1), day(0))
+
+  const res = call(findRoute(customerRouter, 'delete', '/session/:sessionId'), {
+    params: { sessionId },
+  })
+  assert.strictEqual(res.statusCode, 200, JSON.stringify(res.body))
+  assert.strictEqual(res.body.data.deleted, true)
+  assert.strictEqual(res.body.data.paid_reports_retained, 1)
+  assert.strictEqual(res.body.data.report_basis_retained, 1)
+  assert.deepStrictEqual(
+    memDb
+      .prepare('SELECT id FROM recommendation_logs WHERE session_id = ? ORDER BY id')
+      .all(sessionId),
+    [{ id: Number(basis.lastInsertRowid) }, { id: Number(report.lastInsertRowid) }],
+  )
+  assert.strictEqual(
+    memDb
+      .prepare('SELECT COUNT(*) AS n FROM recommendation_logs WHERE id = ?')
+      .get(free.lastInsertRowid).n,
+    0,
+  )
+})
+
+test('analysis DELETE /archive：磁盘清理失败时明确返回部分成功，保留台账可供重试', (t) => {
+  const sessionId = sid('archive-file-retry')
+  const u = memDb
+    .prepare('INSERT INTO users (nickname, session_id) VALUES (?, ?)')
+    .run('文件重试', sessionId)
+  const uid = u.lastInsertRowid
+  memDb.prepare('INSERT INTO body_metrics (user_id, height_cm) VALUES (?, 170)').run(uid)
+  const filename = `archive-retry-${process.pid}-${Date.now()}.txt`
+  const filepath = path.join(UPLOAD_DIR, filename)
+  fs.writeFileSync(filepath, 'fixture')
+  registerUpload(filename, uid, memDb)
+  const originalUnlink = fs.unlinkSync
+  t.mock.method(fs, 'unlinkSync', (target) => {
+    if (target === filepath)
+      throw Object.assign(new Error('fixture delete failure'), { code: 'EACCES' })
+    return originalUnlink(target)
+  })
+
+  try {
+    const first = call(findRoute(analysisRouter, 'delete', '/archive'), {
+      user: { id: uid, session_id: sessionId },
+    })
+    assert.strictEqual(first.statusCode, 207, JSON.stringify(first.body))
+    assert.strictEqual(first.body.success, true)
+    assert.strictEqual(first.body.data.files_failed, 1)
+    assert.strictEqual(first.body.data.body, 1, '业务记录已经删除，不能把部分失败说成整笔回滚')
+    assert.strictEqual(
+      memDb.prepare('SELECT COUNT(*) AS n FROM body_metrics WHERE user_id = ?').get(uid).n,
+      0,
+    )
+    assert.strictEqual(
+      memDb.prepare('SELECT COUNT(*) AS n FROM upload_files WHERE filename = ?').get(filename).n,
+      1,
+      '文件仍在就必须保留所有权台账，重试才清理得到',
+    )
+    assert.strictEqual(fs.existsSync(filepath), true)
+  } finally {
+    t.mock.restoreAll()
+  }
+
+  const retry = call(findRoute(analysisRouter, 'delete', '/archive'), {
+    user: { id: uid, session_id: sessionId },
+  })
+  assert.strictEqual(retry.statusCode, 200, JSON.stringify(retry.body))
+  assert.strictEqual(retry.body.data.files, 1)
+  assert.strictEqual(retry.body.data.files_failed, 0)
+  assert.strictEqual(fs.existsSync(filepath), false)
+  assert.strictEqual(
+    memDb.prepare('SELECT COUNT(*) AS n FROM upload_files WHERE filename = ?').get(filename).n,
+    0,
+  )
+})
+
+test('analysis DELETE /archive：支付凭证引用的上传文件保留，并明示共享数量', () => {
+  const sessionId = sid('archive-shared-file')
+  const u = memDb
+    .prepare('INSERT INTO users (nickname, session_id) VALUES (?, ?)')
+    .run('共享文件', sessionId)
+  const uid = u.lastInsertRowid
+  const filename = `archive-shared-${process.pid}-${Date.now()}.txt`
+  const filepath = path.join(UPLOAD_DIR, filename)
+  fs.writeFileSync(filepath, 'fixture')
+  registerUpload(filename, uid, memDb)
+  memDb
+    .prepare('INSERT INTO deposits (user_id, proof_url) VALUES (?, ?)')
+    .run(uid, `/uploads/${filename}`)
+
+  try {
+    const res = call(findRoute(analysisRouter, 'delete', '/archive'), {
+      user: { id: uid, session_id: sessionId },
+    })
+    assert.strictEqual(res.statusCode, 200, JSON.stringify(res.body))
+    assert.strictEqual(res.body.data.files_shared, 1)
+    assert.strictEqual(res.body.data.files, 0)
+    assert.strictEqual(fs.existsSync(filepath), true)
+    assert.strictEqual(
+      memDb.prepare('SELECT COUNT(*) AS n FROM upload_files WHERE filename = ?').get(filename).n,
+      1,
+    )
+    assert.strictEqual(
+      memDb.prepare('SELECT COUNT(*) AS n FROM deposits WHERE user_id = ?').get(uid).n,
+      1,
+    )
+  } finally {
+    fs.rmSync(filepath, { force: true })
+  }
 })
 
 // ============================================================

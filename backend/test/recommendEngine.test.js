@@ -1,6 +1,6 @@
 /**
  * 推荐引擎端到端测试
- * 依赖真实数据库（backend/db/styleai.db）+ 种子数据（195 规则组）
+ * 依赖测试运行器从 schema 与种子生成的系统临时数据库
  *
  * 覆盖：
  * - buildRecommendation 4 维度输出（穿搭/妆容/发型/配饰）
@@ -9,13 +9,14 @@
  * - 规则优先级（priority 字段）
  * - 隐私模式（incrementHitCount）
  *
- * 运行: npm test  或  node --test test/recommendEngine.test.js
+ * 运行: npm test（由测试运行器注入系统临时库；⛔ 不要直接 node --test）
  *
- * 注意：本测试会 require('../db/init')，触发数据库初始化。
+ * 注意：本测试会 require('../db/init')，触发测试运行器预先准备的临时数据库初始化。
  *      测试用例不写库（incrementHitCount=false），可重复运行。
  */
 const test = require('node:test')
 const assert = require('node:assert')
+const db = require('../db/init')
 const {
   buildRecommendation,
   rankDims,
@@ -172,7 +173,6 @@ test('buildRecommendation: 部分字段缺失不报错', () => {
 })
 
 test('buildRecommendation: incrementHitCount=false 不写库', () => {
-  // 两次调用，hit_count 不应变化（因为 incrementHitCount=false）
   const profile = {
     gender: 'female',
     ageGroup: '18-25',
@@ -180,10 +180,29 @@ test('buildRecommendation: incrementHitCount=false 不写库', () => {
     scene: 'daily',
     skinTone: 'warm',
   }
-  const r1 = buildRecommendation(profile, 'store', false)
-  const r2 = buildRecommendation(profile, 'store', false)
-  // 两次结果结构应一致
-  assert.deepStrictEqual(Object.keys(r1).sort(), Object.keys(r2).sort())
+  const counts = () =>
+    db
+      .prepare(
+        `SELECT COALESCE(SUM(hit_count), 0) AS total,
+                COALESCE(MAX(last_hit_at), '') AS latest
+         FROM rule_groups`,
+      )
+      .get()
+  const before = counts()
+  const realPrepare = db.prepare
+  const hitWrites = []
+  db.prepare = (sql) => {
+    if (/UPDATE\s+rule_groups\s+SET\s+hit_count/i.test(sql)) hitWrites.push(sql)
+    return realPrepare.call(db, sql)
+  }
+  try {
+    buildRecommendation(profile, 'store', false)
+    buildRecommendation(profile, 'store', false)
+  } finally {
+    db.prepare = realPrepare
+  }
+  assert.deepStrictEqual(hitWrites, [], '隐私模式仍走到了 hit_count 写入路径')
+  assert.deepStrictEqual(counts(), before, '隐私模式下 hit_count 或 last_hit_at 发生了变化')
 })
 
 // ============================================================

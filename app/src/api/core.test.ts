@@ -49,7 +49,9 @@ import {
   updateWardrobeItem,
 } from './wardrobe'
 import { getWeatherProfile } from './extras'
-import { saveProfileArchive } from './archive'
+import { deleteProfileArchive, saveProfileArchive } from './archive'
+import { createCustomerSession, getCustomerRecommendation } from './customer'
+import { getEngineRecommendation } from './recommend'
 import type { CustomerProfile } from '../types'
 import type { WardrobeItem } from '../types/wardrobe'
 import type { PutPayload } from './core'
@@ -174,6 +176,14 @@ describe('URL 拼装', () => {
     // 两条并排看才有意义：同一个客户端里两种编码并存。谁要"统一"，先想后端怎么解、`&` 会不会被吃掉。
   })
 
+  it('删除档案：只删服务端认证的账号身份，URL 不携带门店会话号', async () => {
+    stubFetch(() => ok({ item_feedback: 2 }))
+    expect(await deleteProfileArchive()).toEqual({ item_feedback: 2 })
+    expect(calls[0].method).toBe('DELETE')
+    expect(calls[0].url).toBe('/api/analysis/archive')
+    expect(calls[0].headers['x-session-id']).toBeTruthy()
+  })
+
   it('三柜的动词与路径：POST 建、PUT 改带 id、DELETE 删带 id', async () => {
     stubFetch(() => ok({ id: 7 }))
     await addWardrobeItem(SAMPLE)
@@ -274,6 +284,18 @@ describe('unwrap 把后端的各种坏消息折成给人看的那句话', () => 
     expect(await unwrapMsg(new Response('<h1>Bad Request</h1>', { status: 400 }))).toBe(
       '请求异常 (HTTP 400),请查看终端日志',
     )
+  })
+
+  it('207 且 success=true：档案业务已删、文件部分失败时仍返回完整结果供前端展示', async () => {
+    const data = {
+      body: 1,
+      files: 2,
+      files_shared: 1,
+      files_failed: 1,
+      paid_reports_retained: 1,
+      report_basis_retained: 3,
+    }
+    expect(await core.unwrap(json({ success: true, data }, 207))).toEqual(data)
   })
 
   it('2xx 但 success=false：没给 message 时把 error.code 念出来，给了就用原话', async () => {
@@ -451,6 +473,27 @@ describe('超时与断网', () => {
     stubFetch(() => ok({ items: [] }))
     await core.unwrap(await core.fetchWithTimeout('/api/whatever', {}, 20))
     expect(vi.getTimerCount()).toBe(0)
+  })
+
+  it('推荐接口把调用方 signal 一路交给 fetch', async () => {
+    const external = new AbortController()
+    const observed: AbortSignal[] = []
+    stubFetch((_seen, init) => {
+      const signal = init.signal as AbortSignal
+      observed.push(signal)
+      return new Promise<Response>((_resolve, reject) => {
+        signal.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')))
+      })
+    })
+    const pending = [
+      createCustomerSession({} as CustomerProfile, external.signal),
+      getCustomerRecommendation('sess_test', 'store', external.signal),
+      getEngineRecommendation({} as CustomerProfile, 'personal', '西安', external.signal),
+    ]
+    external.abort()
+    await Promise.all(pending.map((p) => expect(p).rejects.toMatchObject({ name: 'AbortError' })))
+    expect(observed).toHaveLength(3)
+    expect(observed.every((signal) => signal.aborted)).toBe(true)
   })
 
   it('saveProfileArchive 把调用方 signal 一路交给 fetch，而不是只停在组件参数上', async () => {

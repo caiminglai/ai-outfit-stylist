@@ -8,7 +8,7 @@ import type { ShoppingWishlistItem, WardrobeGapResult, WardrobeOutfit } from './
  * 付费那份「深度细账」的回执（第十二阶段·第一步，`docs/依据/20` §三 E 节）。
  * 只有付费重放那一路会有这一块；免费路径的响应里这个键根本不出现。
  * 🔴 第十四阶段·第一步 C2：这里原来把价格写死成"99 元那份"——真价在 `app_settings.payment_amount_fen`
- * （`routes/payment.js:45-49` 现算），文案里那个数改一次价就变假话。⛔ 注释也不再写数。
+ * （`routes/payment.js:47-50` 的 `currentPriceFen` 现算），文案里那个数改一次价就变假话。⛔ 注释也不再写数。
  * ⛔ 前端不许据此"推算"任何没给的数——回执说什么就显示什么。
  */
 export interface PaidReportReceipt {
@@ -74,7 +74,7 @@ export interface EngineRecommendation {
      * `manual`＝只有档名／`null`＝肤色整格空着（色彩维必然缺席）。
      * ⛔ 只拆账，不是置信度、不进任何公式。
      * 🔴 落地实录订正：规范原写还有一种 `'archive'`，但路由在进引擎前已把档案并进 profile
-     *（routes/recommend.js:152 mergeWithArchive），引擎内部分不出这一格是本次填的还是档案来的
+     *（routes/recommend.js:178 mergeWithArchive），引擎内部分不出这一格是本次填的还是档案来的
      * ⇒ 这一档不实现，档案来的也记 `'manual'`。
      */
     skin_source?: 'photo_sample' | 'manual' | null

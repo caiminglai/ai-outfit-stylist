@@ -200,7 +200,9 @@ function handlerName(h) {
 
 function collectFromStack(routeStack) {
   const names = routeStack.map((h) => handlerName(h.handle))
-  const srcs = routeStack.map((h) => String(h.handle)).join('\n')
+  // 字段与状态码只看最终业务 handler。loginRequired/upload/gateBody 等中间件也会带
+  // sendSuccess/sendError，把整条 stack 拼进去会把鉴权成功响应误算成业务成功（501 接口尤其如此）。
+  const srcs = routeStack.length ? String(routeStack[routeStack.length - 1].handle) : ''
   const security = []
   for (const n of names) {
     const s = AUTH_NAMES[n]
@@ -388,10 +390,12 @@ function grabStatuses(src, security) {
   if (/sendCreated\s*\(/.test(src)) ok.add(201)
   if (/sendSuccess\s*\(/.test(src)) ok.add(200)
   if (/\.status\(\s*204\s*\)|sendNoContent\s*\(/.test(src)) ok.add(204)
-  if (!ok.size) ok.add(200)
   for (const m of src.matchAll(/sendError\s*\([^)]*,\s*(4\d\d|5\d\d)\s*\)/g)) err.add(Number(m[1]))
   for (const m of src.matchAll(/\.status\(\s*(4\d\d|5\d\d)\s*\)/g)) err.add(Number(m[1]))
   if (security.includes('SessionHeader') || security.includes('AdminBearer')) err.add(401)
+  // 没有 sendSuccess/sendCreated/sendNoContent 就是没有成功分支。未开放接口固定回 501，
+  // 不能为了“每个接口都像能调用”补一个源码里根本不存在的 200。
+  if (!ok.size && !err.has(501)) ok.add(200)
   if (!err.size) err.add(400)
   return { ok: [...ok].sort(), err: [...err].sort() }
 }
@@ -504,6 +508,26 @@ for (const e of entries) {
       },
     }
   }
+  // multer 的文件在 req.files，不在 req.body；通用源码扫描抽不到。这一条是外部 provider
+  // 的明确输入契约：两张照片缺一不可，category 可选。只覆盖已核实的 direct 路由，不猜其他上传口。
+  if (e.method === 'POST' && p === '/api/tryon/direct') {
+    op.requestBody = {
+      required: true,
+      content: {
+        'multipart/form-data': {
+          schema: {
+            type: 'object',
+            required: ['person_image', 'garment_image'],
+            properties: {
+              person_image: { type: 'string', format: 'binary' },
+              garment_image: { type: 'string', format: 'binary' },
+              category: { type: 'string', maxLength: 40, default: 'top' },
+            },
+          },
+        },
+      },
+    }
+  }
   for (const s of statuses.ok) {
     op.responses[String(s)] = {
       description:
@@ -511,14 +535,38 @@ for (const e of entries) {
           ? '创建成功（`data` 为新资源；带 `Location` 的条目见 `x-location`）'
           : s === 204
             ? '成功且无表示体'
-            : '成功，统一信封 `{success:true,data}`',
+            : s === 501
+              ? '功能尚未开放（不是成功响应）'
+              : '成功，统一信封 `{success:true,data}`',
       content: { 'application/json': { schema: { $ref: '#/components/schemas/Success' } } },
     }
   }
   for (const s of statuses.err) {
     op.responses[String(s)] = {
-      description: s === 429 ? '超过限流窗口' : s === 401 ? '缺凭证或凭证无效' : `错误 ${s}`,
+      description:
+        s === 429
+          ? '超过限流窗口'
+          : s === 401
+            ? '缺凭证或凭证无效'
+            : s === 501
+              ? '功能尚未开放（不是成功响应）'
+              : `错误 ${s}`,
       content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } },
+    }
+  }
+  // 删档的 403/207 是安全边界与两阶段成功语义，放在通用响应扫描之后补精确说明。
+  if (e.method === 'DELETE' && p === '/api/analysis/archive') {
+    // 门店号码不是账号所有权证明；这个入口只接受登录中间件绑定的 req.user。
+    op.parameters = (op.parameters || []).filter((q) => q.name !== 'session_id')
+    if (op.parameters.length === 0) delete op.parameters
+    op.responses['403'] = {
+      description: '账号删档不能代删门店会话；请由门店会话持有者在门店报告页单独删除',
+      content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } },
+    }
+    op.responses['207'] = {
+      description:
+        '业务记录已删除，但部分上传文件或所有权台账清理失败；success=true，可按 files_failed 重试',
+      content: { 'application/json': { schema: { $ref: '#/components/schemas/Success' } } },
     }
   }
   if (limiter) {
@@ -556,7 +604,6 @@ const spec = {
       url: 'http://127.0.0.1:5000',
       description: '本机（Docker style-ai-local 或 node server.js）',
     },
-    { url: 'https://style.sparklove.cn', description: '线上（Caddy 反代，⚠️ 需他确认域名）' },
   ],
   tags: [...tagSet].sort().map((t) => ({ name: t })),
   paths,

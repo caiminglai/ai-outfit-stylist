@@ -685,7 +685,8 @@ CREATE TABLE IF NOT EXISTS item_feedback (
   -- 唯一身份。有登录 user_id 就 'u'+id，游客退 's'+session_id，两者都没有＝写入口 400。
   -- ⚠️ 为什么不直接用 user_id 建唯一键：user_wardrobe 现量 10 行里 user_id 只有 1 行非空，
   --    而 SQLite 的 UNIQUE 不把 NULL 当相等 ⇒ 拿它当键会让所有游客的打分互相覆盖或全变重复行。
-  -- ⚠️ 代价如实写进 17 §八 第 2 条：同一人登录前的游客期打分不会并进来（两把键不同）。
+  -- 2026-11-26 订正：游客身份合并到账号时同步重写 actor_key，账号已有同衣评分优先；
+  -- 否则列表按 u<accountId> 读取时，游客期评分会留在旧键下，且协同过滤会重复计数。
   actor_key TEXT NOT NULL,
   user_id INTEGER REFERENCES users(id),
   session_id TEXT,

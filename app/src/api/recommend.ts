@@ -13,6 +13,7 @@ export async function getEngineRecommendation(
    *  ⛔ 不许在前端抄第二份名单。没带 ⇒ 请求与改前逐字节相同；带了且取到了 ⇒ 只当**这一屏**排序的输入，
    *  ⛔ 不落库、⛔ 不进长期档案。⛔ 不做 IP／定位自动猜城（`19` §一 已裁）。 */
   city?: string,
+  signal?: AbortSignal,
 ): Promise<{
   recommendation: EngineRecommendation
   mode: string
@@ -30,6 +31,7 @@ export async function getEngineRecommendation(
     // 不带 city 时这个键**根本不写进 body**（⛔ 写 `city: undefined`——JSON.stringify 会丢掉它，
     // 但显式不拼更稳，也不会让"改前逐字节相同"这条回归锚依赖序列化行为）
     body: JSON.stringify(city ? { profile, mode, city } : { profile, mode }),
+    signal,
   })
   return unwrap(res)
 }

@@ -48,6 +48,7 @@ export default function SkinSampler({ onConfirm, onClear, compact }: SkinSampler
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const objectUrlRef = useRef<string | null>(null)
   const imageRef = useRef<HTMLImageElement | null>(null)
+  const pickGenerationRef = useRef(0)
   const dragRef = useRef<{
     startX: number
     startY: number
@@ -82,6 +83,7 @@ export default function SkinSampler({ onConfirm, onClear, compact }: SkinSampler
   useEffect(() => {
     const canvasAtMount = canvasRef.current
     return () => {
+      pickGenerationRef.current += 1
       if (objectUrlRef.current) URL.revokeObjectURL(objectUrlRef.current)
       objectUrlRef.current = null
       imageRef.current = null
@@ -99,7 +101,16 @@ export default function SkinSampler({ onConfirm, onClear, compact }: SkinSampler
   }, [box, ready])
 
   async function handlePick(file: File | null): Promise<void> {
+    const generation = ++pickGenerationRef.current
     setConfirmed(null)
+    setReady(false)
+    imageRef.current = null
+    if (canvasRef.current) {
+      canvasRef.current.width = 0
+      canvasRef.current.height = 0
+    }
+    if (objectUrlRef.current) URL.revokeObjectURL(objectUrlRef.current)
+    objectUrlRef.current = null
     if (!file) {
       setMessage(null)
       return
@@ -111,7 +122,6 @@ export default function SkinSampler({ onConfirm, onClear, compact }: SkinSampler
       return
     }
     const url = URL.createObjectURL(file)
-    if (objectUrlRef.current) URL.revokeObjectURL(objectUrlRef.current)
     objectUrlRef.current = url
     const img = new Image()
     // 🔴 10-21 真浏览器点验实测：⛔ 不能用 `img.decode()`——Chromium 的 decode() 要等"下一次能出帧"
@@ -126,7 +136,9 @@ export default function SkinSampler({ onConfirm, onClear, compact }: SkinSampler
         if (img.complete && img.naturalWidth > 0) resolve()
       })
       if (!img.naturalWidth || !img.naturalHeight) throw new Error('尺寸为 0')
+      if (generation !== pickGenerationRef.current) return
     } catch {
+      if (generation !== pickGenerationRef.current) return
       URL.revokeObjectURL(url)
       objectUrlRef.current = null
       imageRef.current = null

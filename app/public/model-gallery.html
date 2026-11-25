@@ -3,7 +3,7 @@
 
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"><meta name="description" content="3D 形象展厅：真人比例的穿衣量化演示，先看效果再下单。色彩、版型、体型四条轴各自算分，量不到的写没量到。"><meta property="og:type" content="website"><meta property="og:site_name" content="私人形象定制AI"><meta property="og:title" content="3D形象展示 · AI形象顾问"><meta property="og:description" content="3D 形象展厅：先看效果，再决定要不要做一份属于自己的细账。"><link rel="canonical" href="https://style.sparklove.cn/gallery">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"><meta name="description" content="本机 3D 人物模型展厅：拖拽旋转查看 PMX 形象，仅用于形象展示，不是虚拟试穿模型。"><meta property="og:type" content="website"><meta property="og:site_name" content="私人形象定制AI"><meta property="og:title" content="3D形象展示 · AI形象顾问"><meta property="og:description" content="本机 3D 人物模型展示；PMX 仅用于形象展示，不是虚拟试穿模型。"><link rel="canonical" href="https://style.sparklove.cn/gallery">
   <title>3D形象展示 · AI形象顾问</title>
   <style>
     :root {
@@ -80,6 +80,34 @@
     }
 
     #model-status.hidden {
+      display: none;
+    }
+
+    #model-status.error {
+      width: min(520px, calc(100vw - 32px));
+      white-space: normal;
+      color: #ffb4a8;
+      border-color: #8a3d36;
+      background: rgba(45, 20, 20, 0.94);
+    }
+
+    #model-status.error .spinner {
+      display: none;
+    }
+
+    #model-retry {
+      min-height: 44px;
+      flex-shrink: 0;
+      padding: 0 16px;
+      border: 1px solid var(--accent);
+      border-radius: 20px;
+      background: var(--accent-dim);
+      color: var(--accent);
+      cursor: pointer;
+      font: inherit;
+    }
+
+    #model-retry.hidden {
       display: none;
     }
 
@@ -335,6 +363,8 @@
       transition: all 0.25s ease;
       background: rgba(255, 255, 255, 0.03);
       border: 1px solid var(--line);
+      font: inherit;
+      color: inherit;
     }
 
     .model-card:active {
@@ -544,6 +574,10 @@
       background: rgba(245, 131, 76, 0.25);
     }
 
+    #api-error-overlay .error-retry.hidden {
+      display: none;
+    }
+
     /* ═══ 模型切换淡入淡出 ═══ */
     #canvas-container canvas {
       transition: opacity 0.6s ease;
@@ -602,7 +636,7 @@
   <canvas id="particles-canvas"></canvas>
 
   <!-- 顶部提示 -->
-  <div id="model-hint">3D 形象展示 · 拖拽旋转</div>
+  <div id="model-hint">3D 形象展示 · 本机 PMX 人物模型（非虚拟试穿）· 拖拽旋转</div>
 
   <!-- 3D画布 -->
   <div id="canvas-container"></div>
@@ -614,9 +648,10 @@
   </div>
 
   <!-- 加载提示 -->
-  <div id="model-status">
+  <div id="model-status" role="status" aria-live="polite">
     <div class="spinner"></div>
     <span id="loading-text">加载3D模型中...</span>
+    <button id="model-retry" class="hidden" type="button">重试加载</button>
   </div>
 
   <!-- 控制按钮 -->
@@ -630,7 +665,7 @@
   <!-- 第十四阶段·追加：介绍页入口。⛔ 不能放进上面那个 .controls——
        待机态那段模式切换（`set-mode`）把整列 `display:none` 掉了，而首页 `/` 落地就是待机态，
        放进去等于放了颗看不见的按钮。这里独立定一份，两种模式都常驻可见。 -->
-  <a class="intro-btn" href="/how-it-works.html" target="_blank" rel="noopener" title="这套系统是怎么造的：量化管线 · 依据分档 · 当前底数">🧭 介绍</a>
+  <a class="intro-btn" href="/how-it-works.html" target="_blank" rel="noopener" title="这套系统是怎么造的：量化管线 · 依据分档 · 静态口径">🧭 介绍</a>
 
   <!-- 底部模型选择栏 -->
   <div class="model-bar">
@@ -667,10 +702,164 @@
     }
     </script>
 
+  <!-- 独立于 DOM / Three.js 的加载状态与资源生命周期核心，供页面和定向测试共用。 -->
+  <script id="model-gallery-core">
+    (() => {
+      'use strict';
+
+      const MAX_DOWNLOAD_PROGRESS = 99;
+
+      function loadProgress(loaded, total) {
+        if (!Number.isFinite(loaded) || !Number.isFinite(total) || total <= 0) return null;
+        return Math.min(MAX_DOWNLOAD_PROGRESS, Math.max(0, Math.round((loaded / total) * 100)));
+      }
+
+      function reduceLoadState(state, event) {
+        if (event.type === 'start') {
+          return { status: 'loading', progress: 0, error: null };
+        }
+        // 终态只由真正完成/失败写入；迟到的进度或重复终态不能把界面拉回加载态。
+        if (state.status !== 'loading') return state;
+        if (event.type === 'progress') {
+          const progress = loadProgress(event.loaded, event.total);
+          if (progress === null) return state;
+          return { ...state, progress: Math.max(state.progress, progress) };
+        }
+        if (event.type === 'success') {
+          return { status: 'success', progress: 100, error: null };
+        }
+        if (event.type === 'error') {
+          return { status: 'error', progress: state.progress, error: String(event.message || '加载失败') };
+        }
+        return state;
+      }
+
+      function collectTextureValue(value, textures) {
+        if (!value || typeof value !== 'object') return;
+        if (value.isTexture) {
+          textures.add(value);
+          return;
+        }
+        if (Array.isArray(value)) value.forEach((item) => collectTextureValue(item, textures));
+      }
+
+      function materialTextures(material) {
+        const textures = new Set();
+        if (!material || typeof material !== 'object') return textures;
+        // MMDToonMaterial 的 map/matcap/gradientMap 是访问器，不在 Object.keys 里；必须读 own property names。
+        Object.getOwnPropertyNames(material).forEach((key) => {
+          try {
+            collectTextureValue(material[key], textures);
+          } catch {
+            // r160 的 MMDToonMaterial 有少数暴露了但 uniforms 未提供的访问器，读取会抛错。
+          }
+        });
+        // ShaderMaterial 的真正贴图引用位于 uniforms.*.value，访问器与它指向同一对象。
+        if (material.uniforms && typeof material.uniforms === 'object') {
+          Object.keys(material.uniforms).forEach((key) => collectTextureValue(material.uniforms[key]?.value, textures));
+        }
+        return textures;
+      }
+
+      function collectMeshResources(mesh) {
+        const resources = { geometries: new Set(), materials: new Set(), textures: new Set() };
+        if (!mesh) return resources;
+        const visit = (object) => {
+          if (!object || typeof object !== 'object') return;
+          if (object.geometry && typeof object.geometry.dispose === 'function') resources.geometries.add(object.geometry);
+          const materials = Array.isArray(object.material) ? object.material : [object.material];
+          materials.forEach((material) => {
+            if (!material || typeof material !== 'object') return;
+            resources.materials.add(material);
+            materialTextures(material).forEach((texture) => resources.textures.add(texture));
+          });
+        };
+        if (typeof mesh.traverse === 'function') mesh.traverse(visit);
+        else visit(mesh);
+        return resources;
+      }
+
+      function retainedResources(roots) {
+        const retained = { geometries: new Set(), materials: new Set(), textures: new Set() };
+        roots.forEach((root) => {
+          const resources = collectMeshResources(root);
+          resources.geometries.forEach((resource) => retained.geometries.add(resource));
+          resources.materials.forEach((resource) => retained.materials.add(resource));
+          resources.textures.forEach((resource) => retained.textures.add(resource));
+        });
+        return retained;
+      }
+
+      function clearTextureReference(material, texture) {
+        const clearValue = (container, key) => {
+          try {
+            const value = container[key];
+            if (value === texture) container[key] = null;
+            else if (Array.isArray(value)) {
+              value.forEach((item, index) => { if (item === texture) value[index] = null; });
+            }
+          } catch {
+            // 只读/异常访问器不阻止其余资源释放。
+          }
+        };
+        Object.getOwnPropertyNames(material).forEach((key) => clearValue(material, key));
+        if (material.uniforms && typeof material.uniforms === 'object') {
+          Object.keys(material.uniforms).forEach((key) => clearValue(material.uniforms[key] || {}, 'value'));
+        }
+      }
+
+      function createResourceReleaser() {
+        const released = new WeakSet();
+        const releaseOnce = (resource) => {
+          if (!resource || typeof resource !== 'object' || released.has(resource)) return;
+          released.add(resource); // 先标记再调用，兼容 dispose 同步重入。
+          if (typeof resource.dispose === 'function') resource.dispose();
+        };
+
+        return (mesh, retainedRoots = []) => {
+          if (!mesh) return;
+          const retained = retainedResources(retainedRoots);
+          const visit = (object) => {
+            if (!object || typeof object !== 'object') return;
+            if (object.geometry) {
+              if (!retained.geometries.has(object.geometry)) releaseOnce(object.geometry);
+              object.geometry = null;
+            }
+            const materials = Array.isArray(object.material) ? object.material : [object.material];
+            materials.forEach((material) => {
+              if (!material || typeof material !== 'object' || retained.materials.has(material)) return;
+              materialTextures(material).forEach((texture) => {
+                if (retained.textures.has(texture)) return;
+                clearTextureReference(material, texture);
+                releaseOnce(texture);
+              });
+              releaseOnce(material);
+            });
+            object.material = null;
+          };
+          if (typeof mesh.traverse === 'function') mesh.traverse(visit);
+          else visit(mesh);
+        };
+      }
+
+      globalThis.ModelGalleryCore = Object.freeze({
+        loadProgress,
+        reduceLoadState,
+        collectMeshResources,
+        createResourceReleaser,
+      });
+    })();
+  </script>
+
   <script type="module">
     import * as THREE from 'three';
     import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
     import { MMDLoader } from 'three/addons/loaders/MMDLoader.js';
+
+    const { loadProgress, reduceLoadState, createResourceReleaser } = globalThis.ModelGalleryCore;
+    const releaseMeshResources = createResourceReleaser();
+    let modelLoadState = { status: 'idle', progress: 0, error: null };
+    let galleryDisposed = false;
 
     // ======================== 模型列表 ========================
     // 从后端API动态加载已启用的模型列表
@@ -701,7 +890,6 @@
     let loadTimeoutId = null;      // 模型加载超时计时器
     const LOAD_TIMEOUT_MS = 60000; // 60秒加载超时(含纹理)
     const MODEL_LIST_TIMEOUT_MS = 12000; // 列表请求+响应体读取共用 12 秒上限
-    let isHandlingError = false;   // 防止纹理错误并发触发多次跳转
 
     // iframe 被手机服务页遮住时，连同 Three.js 渲染循环与轮播一起暂停。
     let iframeVisible = true;
@@ -923,19 +1111,18 @@
     }
 
     // 统一模型切换入口
+    function setActiveModelCard(idx) {
+      document.querySelectorAll('.model-card').forEach(card => {
+        const active = Number(card.dataset.index) === idx;
+        card.classList.toggle('active', active);
+        card.setAttribute('aria-pressed', String(active));
+      });
+    }
+
     function selectModel(idx) {
       if (idx < 0 || idx >= MODELS.length || idx === currentModelIndex) return;
-      // 跳过已失效模型
-      if (MODELS[idx] && MODELS[idx].failed) {
-        const next = findNextAvailable(idx, 1);
-        if (next !== idx && next !== -1) {
-          selectModel(next);
-        }
-        return;
-      }
-      document.querySelectorAll('.model-card').forEach(c => c.classList.remove('active'));
-      const card = document.querySelector(`.model-card[data-index="${idx}"]`);
-      if (card) card.classList.add('active');
+      // 显式选择允许重试失败模型；只有轮播/前后切换才跳过失败项。
+      setActiveModelCard(idx);
       loadModel(idx);
     }
 
@@ -965,9 +1152,7 @@
       const next = findNextAvailable(currentModelIndex, 1);
       if (next === -1) return;
       resetCarouselProgress();
-      document.querySelectorAll('.model-card').forEach(c => c.classList.remove('active'));
-      const card = document.querySelector(`.model-card[data-index="${next}"]`);
-      if (card) card.classList.add('active');
+      setActiveModelCard(next);
       loadModel(next);
     }
 
@@ -978,9 +1163,7 @@
       const prev = findNextAvailable(currentModelIndex, -1);
       if (prev === -1) return;
       resetCarouselProgress();
-      document.querySelectorAll('.model-card').forEach(c => c.classList.remove('active'));
-      const card = document.querySelector(`.model-card[data-index="${prev}"]`);
-      if (card) card.classList.add('active');
+      setActiveModelCard(prev);
       loadModel(prev);
     }
 
@@ -1076,209 +1259,185 @@
       });
     }
 
-    // 标记模型失效并隐藏卡片
+    // 标记模型失败但保留卡片：错误可见，用户可点卡片或重试按钮再次加载。
     function markModelFailed(index, reason) {
       const model = MODELS[index];
-      if (!model || model.failed) return;
+      if (!model) return;
       model.failed = true;
-      console.warn(`模型失效: ${model.name} (${reason})`);
+      model.failureReason = reason;
+      console.warn(`模型加载失败: ${model.name} (${reason})`);
       const card = document.querySelector(`.model-card[data-index="${index}"]`);
       if (card) {
-        card.classList.add('hidden-failed');
-        card.classList.remove('active');
+        card.classList.add('load-error');
+        card.title = `${model.name} 加载失败：${reason}；点击可重试`;
+        card.setAttribute('aria-label', card.title);
       }
-      applyFilter();   // 让筛选栏的可见数与卡片轨保持一致
+      applyFilter();
     }
 
-    // 彻底释放 mesh 及其所有资源(几何体+材质+纹理)
-    // ★ 关键:释放 texture 防止显存泄漏,释放 pivot 中所有子节点防止叠加
-    function disposeMesh(mesh) {
-      if (!mesh) return;
-      mesh.traverse((obj) => {
-        // 释放几何体
-        if (obj.geometry) {
-          obj.geometry.dispose();
-          obj.geometry = null;
-        }
-        // 释放材质及其纹理
-        if (obj.material) {
-          const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
-          mats.forEach((m) => {
-            // 释放所有关联的纹理
-            Object.keys(m).forEach((key) => {
-              if (m[key] && m[key].isTexture) {
-                m[key].dispose();
-                m[key] = null;
-              }
-            });
-            m.dispose();
-          });
-          obj.material = null;
-        }
-      });
+    function clearModelFailure(index) {
+      const model = MODELS[index];
+      if (!model) return;
+      model.failed = false;
+      delete model.failureReason;
+      const card = document.querySelector(`.model-card[data-index="${index}"]`);
+      if (card) {
+        card.classList.remove('load-error');
+        card.removeAttribute('title');
+        card.removeAttribute('aria-label');
+      }
+    }
+
+    // 统一释放入口：核心按对象身份去重，并保护 retainedRoots 仍引用的几何体/材质/纹理。
+    function disposeMesh(mesh, retainedRoots = []) {
+      releaseMeshResources(mesh, retainedRoots);
     }
 
     // 强制清空 pivot 组中所有子节点(防止任何残留叠加)
     function clearPivot() {
       if (!pivot) return;
-      // 从后往前移除,确保安全
-      while (pivot.children.length > 0) {
-        const child = pivot.children[pivot.children.length - 1];
-        pivot.remove(child);
-        disposeMesh(child);
-      }
+      const children = [...pivot.children];
+      children.forEach((child) => pivot.remove(child));
+      // 所有子节点一起卸载，彼此共享的纹理由 releaseOnce 只释放一次。
+      children.forEach((child) => disposeMesh(child));
       currentMesh = null;
     }
 
-    // 加载模型(带超时保护)
-    function loadModel(index) {
-      if (index < 0 || index >= MODELS.length) return;
-      // 如果目标模型已失效,自动跳到下一个可用
-      if (MODELS[index].failed) {
-        const next = findNextAvailable(index, 1);
-        if (next !== -1 && next !== index) {
-          loadModel(next);
-        }
-        return;
+    function settleModelLoad(myToken) {
+      if (myToken !== loadToken) return false;
+      if (loadTimeoutId) {
+        clearTimeout(loadTimeoutId);
+        loadTimeoutId = null;
       }
+      isLoading = false;
+      return true;
+    }
 
-      // ★ 版本锁 +1:标记此次加载的唯一令牌
+    function loadErrorMessage(error) {
+      if (error && typeof error.message === 'string' && error.message) return error.message;
+      return String(error || '未知加载错误');
+    }
+
+    function failModelLoad(myToken, index, error) {
+      if (myToken !== loadToken) return;
+      settleModelLoad(myToken);
+      handleModelLoadError(index, loadErrorMessage(error));
+    }
+
+    // 加载模型(带超时保护；成功、失败、同步异常都有唯一终态)
+    function loadModel(index) {
+      if (galleryDisposed || index < 0 || index >= MODELS.length) return;
+      const model = MODELS[index];
+      if (!model) return;
+
+      // 显式加载/重试失败模型；轮播仍通过 findNextAvailable 跳过失败项。
+      clearModelFailure(index);
       const myToken = ++loadToken;
       currentModelIndex = index;
-      isLoading = true;  // ★ 标记加载中
-      const model = MODELS[index];
+      isLoading = true;
+      modelLoadState = reduceLoadState(modelLoadState, { type: 'start' });
 
-      // 清除旧的加载超时
       if (loadTimeoutId) {
         clearTimeout(loadTimeoutId);
         loadTimeoutId = null;
       }
 
-      // 淡出过渡
       const container = document.getElementById('canvas-container');
       container.classList.add('transitioning');
-
       showLoading(`正在加载 ${model.name}...`);
-
-      // ★ 强制清空 pivot 中所有残留 mesh(不仅仅是 currentMesh)
-      // 防止异步竞态留下的叠加 mesh
       clearPivot();
 
-      // ★ 为每次加载创建独立的 MMDLoader 实例
-      // 全局 MMDLoader 在并发加载时会造成内部纹理/资源加载冲突
-      // (如 A 加载纹理时 B 触发 setResourcePath,导致 A 的纹理 URL 错乱)
-      const loader = new MMDLoader();
-
-      // 手动计算 resourcePath,避免 MMDLoader 的 extractUrlBase 因 URL 编码误判
-      // ★ 注意:不要在 URL 中加查询参数,MMDLoader 无法识别带 ? 的扩展名
-      // 缓存破坏通过后端禁用纹理缓存实现
-      const lastSlash = model.file.lastIndexOf('/');
-      const modelDir = lastSlash >= 0 ? model.file.substring(0, lastSlash + 1) : '';
-      const modelFile = lastSlash >= 0 ? model.file.substring(lastSlash + 1) : model.file;
-      const encodedDir = modelDir ? modelDir.split('/').filter(Boolean).map(encodeURIComponent).join('/') + '/' : '';
-      const encodedFile = encodeURIComponent(modelFile);
-      const url = MODEL_BASE + encodedDir + encodedFile;
-      loader.setResourcePath(MODEL_BASE + encodedDir);
-
-      // 加载超时计时器(纹理可能较大,留60秒)
+      // 超时覆盖 loader.load 全链路；回调无论从哪条出口结束，finally 都会清表并复位 isLoading。
       loadTimeoutId = setTimeout(() => {
         loadTimeoutId = null;
-        // ★ 超时也要检查版本锁,避免过期超时误杀新模型
-        if (myToken !== loadToken) return;
-        isLoading = false;  // ★ 超时重置加载状态
-        handleModelLoadError(index, '加载超时');
+        failModelLoad(myToken, index, new Error('加载超时'));
       }, LOAD_TIMEOUT_MS);
 
-      loader.load(url, (mesh) => {
-        // ★ 版本锁检查:如果 token 不匹配,说明这是过期回调,直接丢弃
-        // 例如:用户在 A 加载完成前点了 B,A 的回调到达时 token 已过期
-        if (myToken !== loadToken) {
-          disposeMesh(mesh);  // 释放过期加载的 mesh
-          return;
-        }
+      try {
+        // 每次加载创建独立 MMDLoader，避免并发加载互相污染 resourcePath。
+        const loader = new MMDLoader();
 
-        if (loadTimeoutId) {
-          clearTimeout(loadTimeoutId);
-          loadTimeoutId = null;
-        }
+        // 手动计算 resourcePath，避免 MMDLoader 对 URL 编码路径的误判；不要加查询参数。
+        const lastSlash = model.file.lastIndexOf('/');
+        const modelDir = lastSlash >= 0 ? model.file.substring(0, lastSlash + 1) : '';
+        const modelFile = lastSlash >= 0 ? model.file.substring(lastSlash + 1) : model.file;
+        const encodedDir = modelDir ? modelDir.split('/').filter(Boolean).map(encodeURIComponent).join('/') + '/' : '';
+        const encodedFile = encodeURIComponent(modelFile);
+        const url = MODEL_BASE + encodedDir + encodedFile;
+        loader.setResourcePath(MODEL_BASE + encodedDir);
 
-        isLoading = false;  // ★ 加载完成,重置状态
+        loader.load(url, (mesh) => {
+          if (myToken !== loadToken) {
+            // 过期 mesh 可能与新 mesh 共享纹理；释放前显式保护当前场景资源。
+            disposeMesh(mesh, [currentMesh, ...pivot.children]);
+            return;
+          }
 
-        currentMesh = mesh;
-        // ★ 添加前再次确认 pivot 已清空
-        // (理论上 clearPivot 已做,此处防御性检查)
-        while (pivot.children.length > 0) {
-          const old = pivot.children[pivot.children.length - 1];
-          pivot.remove(old);
-          disposeMesh(old);
-        }
-        pivot.add(currentMesh);
+          try {
+            // 添加前再次清空残留；clearPivot 会把 currentMesh 置空，所以随后立即重赋。
+            clearPivot();
+            currentMesh = mesh;
+            pivot.add(currentMesh);
 
-        // 应用独立曝光值
-        const exposure = model.exposure !== undefined ? model.exposure : 0.3;
-        renderer.toneMappingExposure = exposure;
+            const exposure = model.exposure !== undefined ? model.exposure : 0.3;
+            renderer.toneMappingExposure = exposure;
+            optimizeMaterials(currentMesh);
+            applyBodyShape(currentBody); // 新骨骼实例必须重应用体型，再取景。
+            fitCameraToModel();
 
-        optimizeMaterials(currentMesh);
-        applyBodyShape(currentBody); // 体型驱动：骨骼是新加载的实例，切模后必须重应用一次（先缩放再取景，包围盒才含缩放）
-        fitCameraToModel();
-
-        // 更新模型信息
-        document.getElementById('model-name').textContent = model.name;
-        document.getElementById('model-source').textContent = model.source || '';
-
-        hideLoading();
-        document.getElementById('canvas-container').classList.remove('transitioning');
-      }, (xhr) => {
-        // ★ 进度更新也要检查版本锁,避免过期进度覆盖新进度
-        if (myToken !== loadToken) return;
-        if (xhr.total) {
-          const pct = Math.min(99, Math.max(0, Math.round((xhr.loaded / xhr.total) * 100))); // 🔴 10-22 组2b：原来是裸的 loaded/total*100，实测加载今汐时打出「227%」——MMDLoader 的 onProgress 在贴图阶段把多个文件的 loaded 累加、total 却仍是单个文件的长度，比值能超 1。钳到 99 是因为到 100 会让顾客以为下载完了而迟迟不出画面；真完成由 hideLoading() 负责。
+            document.getElementById('model-name').textContent = model.name;
+            document.getElementById('model-source').textContent = model.source || '';
+            modelLoadState = reduceLoadState(modelLoadState, { type: 'success' });
+            hideLoading();
+            container.classList.remove('transitioning');
+            if (isStandbyMode && shouldAnimate()) startCarousel();
+          } catch (error) {
+            // 成功回调里的优化/取景/UI 异常也不能把 99% 留在屏幕上。
+            try {
+              if (pivot.children.includes(mesh)) pivot.remove(mesh);
+              if (currentMesh === mesh) currentMesh = null;
+              disposeMesh(mesh, [...pivot.children]);
+            } catch (cleanupError) {
+              console.error('失败模型资源清理异常:', cleanupError);
+            }
+            failModelLoad(myToken, index, error);
+          } finally {
+            settleModelLoad(myToken);
+          }
+        }, (xhr) => {
+          if (myToken !== loadToken || !xhr) return;
+          const pct = loadProgress(xhr.loaded, xhr.total);
+          if (pct === null) return;
+          modelLoadState = reduceLoadState(modelLoadState, { type: 'progress', loaded: xhr.loaded, total: xhr.total });
           updateLoadingText(`正在加载 ${model.name}... ${pct}%`);
-        }
-      }, (err) => {
-        // ★ 错误处理也要检查版本锁
-        // 注意:err 回调的第一个参数是 Error,不是 mesh(与 load 成功回调不同)
-        if (myToken !== loadToken) return;
-        if (loadTimeoutId) {
-          clearTimeout(loadTimeoutId);
-          loadTimeoutId = null;
-        }
-        isLoading = false;  // ★ 加载失败,重置状态
-        handleModelLoadError(index, err ? String(err.message || err) : '加载失败');
-      });
+        }, (error) => {
+          failModelLoad(myToken, index, error);
+        });
+      } catch (error) {
+        // MMDLoader 构造、URL 计算或 loader.load 自身同步抛错也走同一错误出口。
+        failModelLoad(myToken, index, error);
+      }
     }
 
-    // 处理模型加载失败:标记失效 + 跳过
+    // 失败时停在明确错误状态：保留卡片、显示原因与重试，不把错误瞬间跳走。
     function handleModelLoadError(index, reason) {
-      if (isHandlingError) return;
-      isHandlingError = true;
       const model = MODELS[index];
+      modelLoadState = reduceLoadState(modelLoadState, { type: 'error', message: reason });
       markModelFailed(index, reason);
-      updateLoadingText(`模型失效: ${model ? model.name : ''}`);
+      pauseCarousel();
+      const status = document.getElementById('model-status');
+      status.classList.remove('hidden');
+      status.classList.add('error');
+      document.getElementById('model-retry').classList.remove('hidden');
+      updateLoadingText(`${model ? model.name : '人物模型'}加载失败：${reason}。可重试或选择其他人物模型。`);
       document.getElementById('canvas-container').classList.remove('transitioning');
-
-      // 尝试加载下一个可用模型
-      const next = findNextAvailable(index, 1);
-      if (next !== -1 && next !== index) {
-        document.querySelectorAll('.model-card').forEach(c => c.classList.remove('active'));
-        const card = document.querySelector(`.model-card[data-index="${next}"]`);
-        if (card) card.classList.add('active');
-        loadModel(next);
-      } else {
-        // 全部失效:显示错误覆盖层
-        hideLoading();
-        showApiError(
-          '模型加载失败',
-          '已尝试加载全部人物模型但均失败,请检查模型文件是否完整.'
-        );
-      }
-      isHandlingError = false;
     }
 
     // ======================== UI 辅助 ========================
     function showLoading(text) {
       const el = document.getElementById('model-status');
-      el.classList.remove('hidden');
+      el.classList.remove('hidden', 'error');
+      document.getElementById('model-retry').classList.add('hidden');
       updateLoadingText(text);
     }
     function hideLoading() {
@@ -1293,10 +1452,18 @@
       const scroll = document.getElementById('model-scroll');
       scroll.innerHTML = '';
       MODELS.forEach((m, idx) => {
-        const card = document.createElement('div');
+        const card = document.createElement('button');
+        card.type = 'button';
         card.className = 'model-card' + (idx === 0 ? ' active' : '');
         card.dataset.index = idx;
-        if (m.failed) card.classList.add('hidden-failed');
+        card.setAttribute('aria-pressed', String(idx === 0));
+        if (m.failed) {
+          card.classList.add('load-error');
+          card.title = `${m.name} 加载失败：${m.failureReason || '未知原因'}；点击可重试`;
+          card.setAttribute('aria-label', `${m.name}，加载失败，点击重试`);
+        } else {
+          card.setAttribute('aria-label', m.source ? `${m.name}，${m.source}` : m.name);
+        }
         // 使用 DOM API 避免 XSS(数据来自管理员输入,不可信)
         const makeIcon = () => {
           const el = document.createElement('div');
@@ -1328,10 +1495,8 @@
         card.append(errorDot, visual, labelDiv, subDiv);
         card.addEventListener('click', () => {
           const modelIdx = parseInt(card.dataset.index, 10);
-          if (currentModelIndex === modelIdx) return;
-          if (MODELS[modelIdx].failed) return;
-          document.querySelectorAll('.model-card').forEach(c => c.classList.remove('active'));
-          card.classList.add('active');
+          if (currentModelIndex === modelIdx && !MODELS[modelIdx]?.failed) return;
+          setActiveModelCard(modelIdx);
           loadModel(modelIdx);
         });
         scroll.appendChild(card);
@@ -1383,7 +1548,7 @@
       let visible = 0;
       document.querySelectorAll('.model-card').forEach((card) => {
         const m = MODELS[parseInt(card.dataset.index, 10)];
-        const ok = !!m && !m.failed && matchesFilter(m);
+        const ok = !!m && matchesFilter(m);
         card.style.display = ok ? '' : 'none';
         if (ok) visible++;
       });
@@ -1418,6 +1583,10 @@
     // ======================== 按钮事件 ========================
     document.getElementById('model-list-retry').addEventListener('click', () => {
       void retryModelList();
+    });
+
+    document.getElementById('model-retry').addEventListener('click', () => {
+      loadModel(currentModelIndex);
     });
 
     document.getElementById('btn-rotate').addEventListener('click', (e) => {
@@ -1494,6 +1663,34 @@
         pauseCarousel();
       }
     }
+    function disposeGallery() {
+      if (galleryDisposed) return;
+      galleryDisposed = true;
+      loadToken += 1;
+      settleModelLoad(loadToken);
+      modelListRequestId += 1;
+      modelListController?.abort();
+      stopCarousel();
+
+      if (animationFrameId !== null) cancelAnimationFrame(animationFrameId);
+      if (particleAnimationFrameId !== null) cancelAnimationFrame(particleAnimationFrameId);
+      animationFrameId = null;
+      particleAnimationFrameId = null;
+      drawParticles = null;
+
+      clearPivot();
+      // pivot 之外的展厅自有资源（地面光环等）也在卸载时释放。
+      if (scene) releaseMeshResources(scene);
+      controls?.dispose?.();
+      renderer?.renderLists?.dispose?.();
+      renderer?.dispose?.();
+      window.removeEventListener('pagehide', handlePageHide);
+    }
+    function handlePageHide(event) {
+      // persisted=true 只是进入 bfcache，页面还会恢复；真正卸载才释放渲染资源。
+      if (!event.persisted) disposeGallery();
+    }
+    window.addEventListener('pagehide', handlePageHide);
     document.addEventListener('visibilitychange', syncAnimation);
 
     // ======================== 从API加载模型列表 ========================
@@ -1523,13 +1720,13 @@
         });
         const data = await Promise.race([request, timeout]);
         if (requestId !== modelListRequestId) return false;
-        if (data.success && data.data && data.data.length > 0) {
+        if (data.success && Array.isArray(data.data)) {
           MODELS = data.data;
           hideApiError();
+          if (MODELS.length === 0) showEmptyModels();
           return true;
         }
-        // 空列表也算异常
-        throw new Error('模型列表为空');
+        throw new Error('模型列表响应无效');
       } catch (e) {
         if (requestId !== modelListRequestId) return false;
         console.error('加载模型列表失败:', e);
@@ -1538,7 +1735,7 @@
           '人物模型列表加载失败',
           timedOut
             ? '模型列表加载超过 12 秒，请点击重试。'
-            : '后端 API 未响应或模型列表为空,请确认服务端已启动并扫描了模型目录.'
+            : '后端 API 未响应或返回无效数据,请确认服务端已启动并扫描了模型目录.'
         );
         return false;
       } finally {
@@ -1555,7 +1752,7 @@
         buildModelBar();
         buildSourceChips();
         applyFilter();
-        loadModel(0);
+        if (MODELS.length > 0) loadModel(0);
       } else {
         hideLoading();
       }
@@ -1567,6 +1764,8 @@
       const overlay = document.getElementById('api-error-overlay');
       document.getElementById('error-title').textContent = title;
       document.getElementById('error-desc').textContent = desc;
+      document.querySelector('#api-error-overlay .error-icon').textContent = '⚠️';
+      document.getElementById('model-list-retry').classList.remove('hidden');
       overlay.classList.add('show');
       // 隐藏模型信息区，并记住原值供重试成功后恢复。
       const elements = [
@@ -1583,8 +1782,18 @@
       });
     }
 
+    function showEmptyModels() {
+      showApiError(
+        '暂无可用模型',
+        '当前环境未配置人物模型，不影响信息填写与搭配报告。'
+      );
+      document.querySelector('#api-error-overlay .error-icon').textContent = '◇';
+      document.getElementById('model-list-retry').classList.add('hidden');
+    }
+
     function hideApiError() {
       document.getElementById('api-error-overlay').classList.remove('show');
+      document.getElementById('model-list-retry').classList.remove('hidden');
       apiErrorHiddenDisplays.forEach((display, el) => { el.style.display = display; });
       apiErrorHiddenDisplays.clear();
     }
@@ -1656,6 +1865,8 @@
         return {
           loadToken,
           currentModelIndex,
+          loadState: { ...modelLoadState },
+          isLoading,
           modelCount: MODELS.length,
           pivot: pivotInfo,
           currentMesh: meshStats,

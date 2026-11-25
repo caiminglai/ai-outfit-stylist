@@ -58,6 +58,102 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
+describe('RecommendationReport 提交期间控件', () => {
+  it('submitting 时禁用天气重算按钮并阻止重复提交', () => {
+    const onRegenerate = vi.fn()
+    renderReport({ weatherCity: '杭州', onRegenerate, submitting: true })
+    const regenerate = screen.getByRole('button', {
+      name: '按「杭州」今天的天气重算这份穿搭',
+    })
+
+    expect((regenerate as HTMLButtonElement).disabled).toBe(true)
+    fireEvent.click(regenerate)
+    expect(onRegenerate).not.toHaveBeenCalled()
+  })
+
+  it('submitting 结束后允许再次提交天气重算', () => {
+    const onRegenerate = vi.fn()
+    const { rerender } = renderReport({ weatherCity: '杭州', onRegenerate, submitting: true })
+    rerender(
+      <RecommendationReport
+        recommendation={recommendation}
+        profile={profile}
+        mode="personal"
+        weatherCity="杭州"
+        onRegenerate={onRegenerate}
+        submitting={false}
+      />,
+    )
+
+    const regenerate = screen.getByRole('button', {
+      name: '按「杭州」今天的天气重算这份穿搭',
+    })
+    expect((regenerate as HTMLButtonElement).disabled).toBe(false)
+    fireEvent.click(regenerate)
+    expect(onRegenerate).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('RecommendationReport 评分保存', () => {
+  it('规则评分保存失败时恢复原值并显示错误，保留另一维已保存评分', async () => {
+    api.postRuleFeedback
+      .mockResolvedValueOnce({ aesthetic_score: 4, fit_score: null })
+      .mockRejectedValueOnce(new Error('规则评分保存失败'))
+    renderReport()
+    const aesthetic = screen.getAllByTitle('这套搭配整体好不好看（主要对着色彩那一维）')
+    const fit = screen.getAllByTitle('上衣穿在身上合不合身（主要对着廓形那一维）')
+
+    fireEvent.click(aesthetic[3])
+    expect(await screen.findByTitle('再点一下取消这好看的星')).toBeTruthy()
+    fireEvent.click(fit[4])
+    expect(await screen.findByText('规则评分保存失败')).toBeTruthy()
+    expect(screen.getByTitle('再点一下取消这好看的星')).toBeTruthy()
+    expect(screen.queryByTitle('再点一下取消这合身的星')).toBeNull()
+    expect(screen.getByText('合身').parentElement!.querySelectorAll('button')[4].textContent).toBe(
+      '☆',
+    )
+  })
+
+  it('衣橱评分保存失败时恢复服务端原值并显示错误', async () => {
+    api.getItemFeedback.mockResolvedValue({
+      items: [{ wardrobe_item_id: 7, aesthetic_score: 4, fit_score: null }],
+    })
+    api.postItemFeedback.mockRejectedValue(new Error('衣橱评分保存失败'))
+    renderReport({
+      recommendation: {
+        ...recommendation,
+        穿搭: [
+          {
+            group_id: 0,
+            group_name: '衣橱上衣',
+            priority: 80,
+            score: 88,
+            source: 'wardrobe',
+            wardrobe_item_id: 7,
+            建议: '选择合身剪裁',
+          },
+        ],
+      },
+    })
+
+    expect(await screen.findByTitle('再点一下取消这好看的星')).toBeTruthy()
+    fireEvent.click(screen.getAllByTitle('上衣穿在身上合不合身（主要对着廓形那一维）')[4])
+    expect(await screen.findByText('衣橱评分保存失败')).toBeTruthy()
+    expect(screen.getByTitle('再点一下取消这好看的星')).toBeTruthy()
+    expect(screen.queryByTitle('再点一下取消这合身的星')).toBeNull()
+    expect(screen.getByText('合身').parentElement!.querySelectorAll('button')[4].textContent).toBe(
+      '☆',
+    )
+    expect(api.postItemFeedback).toHaveBeenCalledWith(
+      7,
+      expect.objectContaining({
+        aesthetic_score: 4,
+        fit_score: 5,
+      }),
+    )
+  })
+})
+
 describe('RecommendationReport 现有报告展示', () => {
   it('解释默认收起，点击展开命中条件，再点收起，且不写推荐或反馈请求', () => {
     const fetchMock = vi.fn()

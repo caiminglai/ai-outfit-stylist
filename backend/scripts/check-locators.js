@@ -37,7 +37,7 @@ const readTracked = () =>
     encoding: 'utf8',
   })
     .split('\0')
-    .filter((f) => f && !/node_modules|package-lock/.test(f))
+    .filter((f) => f && fs.existsSync(path.join(REPO, f)) && !/node_modules|package-lock/.test(f))
 
 // 被指文件只索引 backend/ 与 app/src/ 下的 js/ts（11-03 起再加 app/ 根下那份单层配置，
 // 教程页按行号引 `app/vite.config.ts` 的 proxy 块），外加 11-03 起入门禁的静态页与样式
@@ -309,7 +309,7 @@ const main = () => {
       mdCls.定位不到,
   )
   // 第三向：同一行里裸写的续号。归属＝该裸号之前、行内最近出现且能在仓内定位的那个文件名（不限扩展名，
-  // 因为文档常用「`README.md:55`⇒`:58`」这种 md 引 md 的写法，只索引 js/ts 会把它错归给同行的代码文件）。
+  // 因为文档常用「`README.md:54`⇒`:57`」这种 md 引 md 的写法，只索引 js/ts 会把它错归给同行的代码文件）。
   const NAME = '[A-Za-z0-9._/-]+\\.(?:js|ts|tsx|jsx|md|html|css|json|yml|yaml|sql|sh|cjs|mjs|txt)'
   // 11-04 收掉盲区⑤的第一类：`)` 之后的 `:NNN` 不再当裸续号认领。
   // 判据（可复跑）＝仓根 `git ls-files '*.md' '*.js' '*.ts' | xargs grep -oE "\\):[0-9]{1,5}" | wc -l`

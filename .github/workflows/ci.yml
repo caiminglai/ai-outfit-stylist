@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, master]
   pull_request:
-    branches: [main]
+    branches: [main, master]
 
 permissions:
   contents: read
@@ -82,6 +82,13 @@ jobs:
       - name: Lint
         run: npm run lint
 
+      # server.js 的 staticCacheAndListExempt 真门禁要求 app/dist 在场；先构建前端，避免单测静默 skip。
+      - name: Build frontend assets for backend gates
+        run: |
+          npm ci --no-audit --no-fund
+          npm run build
+        working-directory: app
+
       # 测试运行器从 schema 与种子创建临时 SQLite 库，不读取本机运行库。
       - name: Unit test
         run: npm test
@@ -145,69 +152,102 @@ jobs:
         working-directory: backend
 
   docker-smoke:
-    name: Docker build and health smoke
+    name: Docker Compose build and health smoke
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    env:
+      SMOKE_ENV_FILE: ${{ runner.temp }}/styleai-smoke.env
+      SMOKE_OVERRIDE_FILE: ${{ runner.temp }}/styleai-smoke.compose.yml
 
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
-      - name: Validate Compose configuration
-        run: docker compose config --quiet
-
-      - name: Build production image
-        run: docker build --tag styleai:ci .
-
-      # 镜像只含仓库自有 CC0 演示模型；不挂空模型卷，以免遮住镜像内的演示资产。
-      - name: Start isolated container and probe health and demo model
+      - name: Prepare isolated Compose environment
         run: |
-          docker run -d --name styleai-ci \
-            -p 127.0.0.1:5001:5000 \
-            -e NODE_ENV=production \
-            -e SECRET_KEY="$(openssl rand -hex 32)" \
-            -e ADMIN_PASSWORD="$(openssl rand -base64 24)" \
-            -e STYLEAI_DB_PATH=/tmp/styleai-ci.db \
-            -e STYLEAI_UPLOAD_DIR=/tmp/styleai-ci-uploads \
-            -e DASHSCOPE_API_KEY= \
-            -e LLM_API_BASE= \
-            -e LLM_API_KEY= \
-            -e LLM_MODEL= \
-            -e WXPAY_MCHID= \
-            -e WXPAY_SERIAL_NO= \
-            -e WXPAY_APIV3_KEY= \
-            -e WXPAY_PUBLIC_KEY_ID= \
-            -e WXPAY_PRIVATE_KEY_PATH= \
-            -e WXPAY_PUBLIC_KEY_PATH= \
-            -e WXPAY_NOTIFY_URL= \
-            -e WXPAY_APPID= \
-            -e ALIPAY_APP_ID= \
-            -e ALIPAY_PRIVATE_KEY_PATH= \
-            -e ALIPAY_PUBLIC_KEY_PATH= \
-            -e ALIPAY_NOTIFY_URL= \
-            -e ALIPAY_RETURN_URL= \
-            -e ALIPAY_SELLER_ID= \
-            styleai:ci
-          ready=0
-          for attempt in $(seq 1 30); do
-            if curl --fail --silent --show-error http://127.0.0.1:5001/health; then
-              ready=1
-              break
-            fi
-            sleep 2
+          set -euo pipefail
+          umask 077
+          port=$(node -e "const s=require('net').createServer();s.listen(0,'127.0.0.1',()=>{console.log(s.address().port);s.close()})")
+          {
+            printf 'COMPOSE_PROJECT_NAME=styleai-smoke-%s-%s\n' "$RANDOM" "$$"
+            printf 'SMOKE_PORT=%s\n' "$port"
+            printf 'SMOKE_SECRET_KEY=%s\n' "$(openssl rand -hex 32)"
+            printf 'SMOKE_ADMIN_PASSWORD=%s\n' "$(openssl rand -base64 24)"
+          } > "$SMOKE_ENV_FILE"
+          cat > "$SMOKE_OVERRIDE_FILE" <<'YAML'
+          services:
+            app:
+              env_file: !reset []
+              environment:
+                NODE_ENV: production
+                SECRET_KEY: ${SMOKE_SECRET_KEY}
+                ADMIN_PASSWORD: ${SMOKE_ADMIN_PASSWORD}
+                DASHSCOPE_API_KEY: ""
+                LLM_API_BASE: ""
+                LLM_API_KEY: ""
+                LLM_MODEL: ""
+                WXPAY_MCHID: ""
+                WXPAY_SERIAL_NO: ""
+                WXPAY_APIV3_KEY: ""
+                WXPAY_PUBLIC_KEY_ID: ""
+                WXPAY_PRIVATE_KEY_PATH: ""
+                WXPAY_PUBLIC_KEY_PATH: ""
+                WXPAY_NOTIFY_URL: ""
+                WXPAY_APPID: ""
+                ALIPAY_APP_ID: ""
+                ALIPAY_PRIVATE_KEY_PATH: ""
+                ALIPAY_PUBLIC_KEY_PATH: ""
+                ALIPAY_NOTIFY_URL: ""
+                ALIPAY_RETURN_URL: ""
+                ALIPAY_SELLER_ID: ""
+              ports:
+                - "127.0.0.1:${SMOKE_PORT}:5000"
+          YAML
+          set -a
+          . "$SMOKE_ENV_FILE"
+          set +a
+          # --env-file 阻止 Compose 读取仓库 .env；override 的 !reset 也移除服务的 env_file。
+          docker compose --env-file "$SMOKE_ENV_FILE" -f compose.yaml -f "$SMOKE_OVERRIDE_FILE" config --quiet
+
+      - name: Build and start isolated Compose stack
+        run: |
+          set -euo pipefail
+          set -a
+          . "$SMOKE_ENV_FILE"
+          set +a
+          docker compose --env-file "$SMOKE_ENV_FILE" -f compose.yaml -f "$SMOKE_OVERRIDE_FILE" up -d --build --wait --wait-timeout 90
+          curl --fail --silent --show-error "http://127.0.0.1:${SMOKE_PORT}/health"
+          curl --fail --silent --show-error "http://127.0.0.1:${SMOKE_PORT}/api/models/list" | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{const b=JSON.parse(s);const a=Array.isArray(b)?b:(b.models||b.data||[]);if(!Array.isArray(a)||a.length!==0)process.exit(1);console.log('empty model catalog: ok')})"
+          docker compose --env-file "$SMOKE_ENV_FILE" -f compose.yaml -f "$SMOKE_OVERRIDE_FILE" exec -T app node -e "(async()=>{const fs=require('fs');if(process.env.STYLEAI_DB_PATH!=='/data/db/styleai.db'||process.env.STYLEAI_UPLOAD_DIR!=='/data/uploads')process.exit(1);if(!fs.statSync('/data/db').isDirectory()||!fs.statSync('/data/uploads').isDirectory())process.exit(1);if(fs.readdirSync('/models').length!==0)process.exit(1);const r=await fetch('http://127.0.0.1:5000/api/models/list');if(!r.ok)process.exit(1)})()"
+          for volume in db_data upload_data model_data; do
+            docker volume inspect "${COMPOSE_PROJECT_NAME}_${volume}" >/dev/null
           done
-          if [ "$ready" -ne 1 ]; then
-            docker logs styleai-ci
-            exit 1
-          fi
-          docker exec styleai-ci node -e "(async()=>{const r=await fetch('http://127.0.0.1:5000/api/models/list');const b=await r.json();const list=Array.isArray(b)?b:(b.models||b.data||[]);console.log(JSON.stringify({models:list.length}));if(!r.ok||list.length!==1)process.exit(1)})()"
+          # /app 来自镜像层（没有卷覆盖）：只检查文件名，不读取任何数据库内容。
+          docker compose --env-file "$SMOKE_ENV_FILE" -f compose.yaml -f "$SMOKE_OVERRIDE_FILE" exec -T app sh -c '
+            test ! -e /app/runtime-db &&
+            test -f /app/db/styleai.db &&
+            test -z "$(find /app -type f \( -name "*.db-wal" -o -name "*.db-shm" \) -print -quit)"
+          '
 
-      - name: Show container logs on failure
+      - name: Show Compose logs on failure
         if: failure()
-        run: docker logs styleai-ci || true
+        run: |
+          set -a
+          . "$SMOKE_ENV_FILE"
+          set +a
+          docker compose --env-file "$SMOKE_ENV_FILE" -f compose.yaml -f "$SMOKE_OVERRIDE_FILE" logs --no-color || true
 
-      - name: Remove smoke container
+      - name: Remove isolated Compose stack and volumes
         if: always()
-        run: docker rm -f styleai-ci || true
+        run: |
+          if [ ! -f "$SMOKE_ENV_FILE" ] || [ ! -f "$SMOKE_OVERRIDE_FILE" ]; then
+            rm -f "$SMOKE_ENV_FILE" "$SMOKE_OVERRIDE_FILE"
+            exit 0
+          fi
+          set -a
+          . "$SMOKE_ENV_FILE"
+          set +a
+          docker compose --env-file "$SMOKE_ENV_FILE" -f compose.yaml -f "$SMOKE_OVERRIDE_FILE" down -v --remove-orphans || true
+          rm -f "$SMOKE_ENV_FILE" "$SMOKE_OVERRIDE_FILE"
 
   playwright:
     name: Playwright browser smoke
@@ -250,7 +290,7 @@ jobs:
       - name: Playwright teardown regression
         run: node --test ../scripts/playwright-cleanup.test.cjs
 
-      # 根配置从 schema/种子创建临时库，只登记 PortfolioBot，并使用明显的测试凭据。
+      # 根配置从 schema/种子创建临时空模型库，并使用明显的测试凭据。
       - name: Run browser smoke
         run: npm run test:e2e
 

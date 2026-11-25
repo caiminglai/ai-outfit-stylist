@@ -20,8 +20,8 @@ services:
     volumes:
       - db_data:/data/db
       - upload_data:/data/uploads
-      # Seeded once from /models in the image, then read-only. Host models and
-      # host runtime databases are never bind-mounted into the container.
+      # Empty until the deployer adds authorized PMX files and textures.
+      # Images and this repository do not distribute character models.
       - model_data:/models:ro
     restart: unless-stopped
 

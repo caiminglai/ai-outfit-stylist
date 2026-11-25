@@ -1,4 +1,5 @@
-import { act, cleanup, render, screen } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { useState } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const api = vi.hoisted(() => ({
@@ -15,8 +16,9 @@ vi.mock('../utils/toastOnce', () => ({
 vi.mock('./RecommendationReport', () => ({ default: () => <div>报告正文</div> }))
 
 import PaidReports from './PaidReports'
+import type { MyPaymentInfo } from '../api'
 
-function paymentInfo(left: number) {
+function paymentInfo(left: number): MyPaymentInfo {
   return {
     id: null,
     channel: null,
@@ -61,7 +63,67 @@ beforeEach(() => {
 
 afterEach(() => cleanup())
 
+describe('PaidReports 模态焦点', () => {
+  it('打开聚焦、Tab 困在模态、Escape 关闭并恢复触发焦点', async () => {
+    const info = paymentInfo(0)
+    info.entitlement.reports = [
+      {
+        out_trade_no: 'TEST-REPORT',
+        amount: 100,
+        channel: 'alipay',
+        paid_at: null,
+        granted_at: null,
+        log_id: 1,
+        basis_log_id: 1,
+        report_no: 1,
+        is_platform_order_no: true,
+      },
+    ]
+    api.getPaymentEntitlement.mockResolvedValue(info)
+    function Harness() {
+      const [open, setOpen] = useState(false)
+      return (
+        <>
+          <button onClick={() => setOpen(true)}>打开报告</button>
+          {open && <PaidReports onClose={() => setOpen(false)} />}
+        </>
+      )
+    }
+    render(<Harness />)
+    const trigger = screen.getByRole('button', { name: '打开报告' })
+    trigger.focus()
+    fireEvent.click(trigger)
+
+    const dialog = screen.getByRole('dialog', { name: '我的报告' })
+    const close = screen.getByRole('button', { name: '关闭' })
+    expect(document.activeElement).toBe(close)
+    expect(dialog.getAttribute('aria-modal')).toBe('true')
+    const last = await screen.findByRole('button', { name: '查看' })
+    fireEvent.keyDown(document, { key: 'Tab' })
+    expect(document.activeElement).toBe(close)
+    fireEvent.keyDown(document, { key: 'Tab', shiftKey: true })
+    expect(document.activeElement).toBe(last)
+
+    fireEvent.keyDown(document, { key: 'Escape' })
+    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(document.activeElement).toBe(trigger)
+  })
+})
+
 describe('PaidReports 账号身份', () => {
+  it('认证失效时先关闭报告，避免与重新登录模态叠加争抢焦点', () => {
+    const onClose = vi.fn()
+    render(<PaidReports onClose={onClose} />)
+    act(() => {
+      window.dispatchEvent(
+        new CustomEvent(api.ACCOUNT_CHANGE_EVENT, {
+          detail: { account: null, reason: 'unauthorized' },
+        }),
+      )
+    })
+    expect(onClose).toHaveBeenCalledTimes(1)
+  })
+
   it('账号变化后清空旧身份读数并重新拉取，不把游客提示留在旧快照里', async () => {
     let finishGuest!: (value: ReturnType<typeof paymentInfo>) => void
     api.getPaymentEntitlement.mockResolvedValueOnce(paymentInfo(1)).mockImplementationOnce(

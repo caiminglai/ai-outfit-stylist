@@ -34,12 +34,6 @@ const executable = JSON.stringify(process.execPath);
 const initDatabase = `${executable} -e ${JSON.stringify(
   `const db=require(${JSON.stringify(dbEntry)});db.stopWalCheckpointTimer();db.close()`,
 )}`;
-const seedDemoModel = `${executable} -e ${JSON.stringify(
-  `const db=require(${JSON.stringify(dbEntry)});` +
-    `const existing=db.prepare('SELECT id FROM model_configs WHERE folder = ? AND file = ?').get('demo','PortfolioBot.pmx');` +
-    `if(!existing)db.prepare('INSERT INTO model_configs (name, icon, description, folder, file, source, enabled, exposure, sort_order) VALUES (?, ?, ?, ?, ?, ?, 1, 0.3, 1)').run('PortfolioBot','CC0 Demo','仓库自带 CC0 演示模型','demo','PortfolioBot.pmx','CC0 Demo');` +
-    `db.stopWalCheckpointTimer();db.close()`,
-)}`;
 
 module.exports = defineConfig({
   testDir: path.join(projectRoot, "app", "e2e"),
@@ -73,7 +67,7 @@ module.exports = defineConfig({
   },
   webServer: {
     // The temporary cwd has no .env, so dotenv cannot read local credentials.
-    command: `${initDatabase} && ${seedDemoModel} && ${executable} ${JSON.stringify(backendEntry)}`,
+    command: `${initDatabase} && ${executable} ${JSON.stringify(backendEntry)}`,
     cwd: e2eTempRoot,
     url: `${baseURL}/health`,
     reuseExistingServer: false,

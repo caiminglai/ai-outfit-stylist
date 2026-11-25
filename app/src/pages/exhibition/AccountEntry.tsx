@@ -1,6 +1,6 @@
 // 11-03 大文件拆分轮：这一段从 ExhibitionHall.tsx 逐字搬来（1 个顶层声明，函数体一处未改）。
 // ⛔ 对外入口不变：ExhibitionHall.tsx 仍旧默认导出那个组件，消费方的 import 写法一行不改。
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { toast } from '../../utils/toastOnce'
 import {
   ACCOUNT_CHANGE_EVENT,
@@ -14,6 +14,7 @@ import {
 import type { AccountInfo, ProfileField } from '../../api'
 import type { ProfileTag } from '../../types'
 import { maskPhone } from './maskPhone'
+import { useModalFocus } from '../../lib/useModalFocus'
 
 // ============ 我的账号:登录 / 注册(覆盖在 3D 展示上,不跳页)============
 export function AccountEntry({
@@ -33,6 +34,8 @@ export function AccountEntry({
   const [account, setAccount] = useState<AccountInfo | null>(() => getAccount())
   /** 打开面板时读一次:后端把档案与草稿变成了中文清单,这里只负责列出来 */
   const [stored, setStored] = useState<{ fields: ProfileField[]; tags: ProfileTag[] } | null>(null)
+  const dialogRef = useRef<HTMLDivElement | null>(null)
+  useModalFocus(open, dialogRef, () => setOpen(false))
 
   useEffect(() => {
     if (!open || !account) return
@@ -108,12 +111,12 @@ export function AccountEntry({
     }
   }
 
-  /** 兑现隐私承诺:可随时删掉本机档案与属于本人的全部记录(含上传的照片文件) */
+  /** 兑现隐私承诺:删除可删的业务记录；支付凭证、已购报告与被引用文件按服务端契约保留 */
   const removeArchive = async () => {
     if (busy) return
     if (
       !window.confirm(
-        '将删除你存下的身体档案、面容档案、没点生成的表单草稿、形象标签、点过的建议评价、推荐与搭配记录、试穿结果,以及上传过的照片和它在服务器上的文件.删除后无法恢复,确定继续?',
+        '将删除你登录账号下的身体档案、面容档案、衣橱与衣物评分、搭配和心愿单、没点生成的表单草稿、形象标签、点过的建议评价、推荐与试穿记录,以及没有其他记录引用的上传文件.门店会话不会由账号入口代删,请在门店报告页单独删除.为对账和保障已购权益,支付凭证、已付费报告及其复读依据会保留;其他记录仍在引用的文件也不会删除.删除后无法恢复,确定继续?',
       )
     )
       return
@@ -133,9 +136,17 @@ export function AccountEntry({
         `搭配记录 ${r.records} 条`,
         `试穿结果 ${r.tryon} 条`,
         `照片 ${r.photos} 张`,
+        `衣物评分 ${r.item_feedback} 条`,
       ].join('、')
+      const retained = [
+        r.files_shared ? `${r.files_shared} 个文件仍被其他记录引用` : '',
+        r.paid_reports_retained ? `${r.paid_reports_retained} 份已付费报告已保留` : '',
+        r.report_basis_retained ? `${r.report_basis_retained} 条报告复读依据已保留` : '',
+      ].filter(Boolean)
       toast.success(
-        `已删除:${deleted}${r.files ? `,同时清掉 ${r.files} 个文件` : ''}${r.files_failed ? `;${r.files_failed} 个文件没删掉,请联系管理员` : ''}`,
+        `已删除:${deleted}${r.files ? `,同时清掉 ${r.files} 个文件` : ''}${
+          retained.length ? `;${retained.join('、')}` : ''
+        }${r.files_failed ? `;${r.files_failed} 个文件没删掉,请重试或联系管理员` : ''}`,
       )
       setOpen(false)
       setStored(null)
@@ -186,6 +197,11 @@ export function AccountEntry({
           style={{ zIndex: 100, background: 'rgba(0,0,0,0.65)' }}
         >
           <div
+            ref={dialogRef}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="account-dialog-title"
+            tabIndex={-1}
             onClick={(e) => e.stopPropagation()}
             className="w-full sm:max-w-sm p-5"
             style={{
@@ -195,7 +211,11 @@ export function AccountEntry({
             }}
           >
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-base font-semibold" style={{ color: 'var(--text)' }}>
+              <h3
+                id="account-dialog-title"
+                className="text-base font-semibold"
+                style={{ color: 'var(--text)' }}
+              >
                 我的账号
               </h3>
               <button
@@ -264,7 +284,7 @@ export function AccountEntry({
                   )}
                 </div>
                 <p className="text-xs" style={{ color: '#a8b8c4', lineHeight: '1.6' }}>
-                  下面这项删除的是我们替你记住的身体与面容档案、以及挂在账号下的推荐记录,删完仍可随时重新填写试用.
+                  下面这项删除的是我们替你记住的身体与面容档案、以及挂在账号下的推荐记录;支付凭证、已付费报告及其复读依据、其他记录仍在引用的文件会保留.文件清理失败时可重试,删完仍可随时重新填写试用.
                 </p>
                 <button
                   onClick={removeArchive}

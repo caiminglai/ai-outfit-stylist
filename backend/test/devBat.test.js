@@ -118,10 +118,14 @@ async function portIsFree(port) {
   }
 }
 
-async function startPortSentinel(t) {
+async function findOccupiedDevPort() {
   for (const port of [5000, 5173]) {
-    if (!(await portIsFree(port))) t.skip(`端口 ${port} 已被现有服务占用，跳过占用保护测试`)
+    if (!(await portIsFree(port))) return port
   }
+  return null
+}
+
+async function startPortSentinel(t) {
   const child = spawn(
     process.execPath,
     [
@@ -151,6 +155,12 @@ setInterval(() => {}, 1000)`,
 }
 
 test('dev.bat 给后端注入隔离开发环境并创建项目内目录', WINDOWS_TEST, async (t) => {
+  const occupiedPort = await findOccupiedDevPort()
+  if (occupiedPort !== null) {
+    return t.skip(
+      `端口 ${occupiedPort} 已被现有服务占用；dev.bat 启动契约需空闲端口，CI 干净环境会真跑`,
+    )
+  }
   const sandbox = makeDevSandbox(t)
   const run = runDevBat(sandbox)
   assert.equal(run.status, 0, `${run.stdout || ''}\n${run.stderr || ''}`)
@@ -169,6 +179,10 @@ test('dev.bat 给后端注入隔离开发环境并创建项目内目录', WINDOW
 })
 
 test('dev.bat 遇到占用端口时退出且不终止现有进程', WINDOWS_TEST, async (t) => {
+  const occupiedPort = await findOccupiedDevPort()
+  if (occupiedPort !== null) {
+    return t.skip(`端口 ${occupiedPort} 已被现有服务占用，跳过占用保护测试`)
+  }
   const sentinel = await startPortSentinel(t)
   const sandbox = makeDevSandbox(t)
   const run = runDevBat(sandbox)

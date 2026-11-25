@@ -36,7 +36,7 @@ const {
 const router = express.Router()
 
 // models 目录绝对路径
-const MODELS_DIR = path.join(__dirname, '..', '..', 'models')
+const MODELS_DIR = require('../utils/model-paths').getModelDir()
 
 // ============================================================
 // 已禁用模型的下载闸门

@@ -166,7 +166,50 @@ test('每个 {param} 都声明为 path 参数且 required', () => {
   assert.deepStrictEqual(bad, [], '悬空路径参数（客户端生成器会直接报错）：' + bad.join(' | '))
 })
 
-test('每个操作都有 summary、至少一个 2xx、至少一个错误响应', () => {
+test('未开放接口只声明真实 501，不伪造 2xx 成功响应', () => {
+  for (const p of ['/api/tryon', '/api/analysis/face']) {
+    const op = spec.paths[p]?.post
+    assert.ok(op, `${p} 必须在说明书里`)
+    assert.deepStrictEqual(
+      Object.keys(op.responses).filter((c) => /^2\d\d$/.test(c)),
+      [],
+    )
+    assert.ok(op.responses['501'], `${p} 必须明确声明尚未开放`)
+  }
+})
+
+test('直接试穿声明两张必传二进制照片与可选类别', () => {
+  const op = spec.paths['/api/tryon/direct']?.post
+  assert.ok(op, '直接试穿路由必须在说明书里')
+  assert.equal(op.requestBody.required, true)
+  const schema = op.requestBody.content['multipart/form-data'].schema
+  assert.deepStrictEqual(schema.required.slice().sort(), ['garment_image', 'person_image'])
+  assert.deepStrictEqual(schema.properties.person_image, { type: 'string', format: 'binary' })
+  assert.deepStrictEqual(schema.properties.garment_image, { type: 'string', format: 'binary' })
+  assert.ok(schema.properties.category)
+})
+
+test('删档契约只允许认证账号身份，不接收门店会话参数，并声明 403 与 207', () => {
+  const op = spec.paths['/api/analysis/archive']?.delete
+  assert.ok(op, '删档路由必须在说明书里')
+  assert.ok(
+    !op.parameters?.some((p) => p.name === 'session_id' && p.in === 'query'),
+    '门店号码不能成为账号删档范围',
+  )
+  assert.match(op.responses['403'].description, /不能代删门店会话/)
+  assert.match(op.responses['207'].description, /业务记录已删除/)
+  assert.ok(op.responses['200'])
+  assert.ok(op.responses['400'])
+})
+
+test('公开说明书只列可复现的本机服务地址', () => {
+  assert.deepStrictEqual(
+    spec.servers.map((s) => s.url),
+    ['http://127.0.0.1:5000'],
+  )
+})
+
+test('每个操作都有 summary、至少一个可执行响应（2xx 或未开放 501）、至少一个错误响应', () => {
   const bad = []
   for (const [p, ops] of Object.entries(spec.paths)) {
     for (const [m, o] of Object.entries(ops)) {
@@ -174,7 +217,7 @@ test('每个操作都有 summary、至少一个 2xx、至少一个错误响应',
       const ok = codes.filter((c) => /^2\d\d$/.test(c))
       const err = codes.filter((c) => /^[45]\d\d$/.test(c))
       if (!o.summary || !o.summary.trim()) bad.push(`${m} ${p} 缺 summary`)
-      if (!ok.length) bad.push(`${m} ${p} 没有 2xx`)
+      if (!ok.length && !o.responses['501']) bad.push(`${m} ${p} 没有可执行响应`)
       if (!err.length) bad.push(`${m} ${p} 没有任何错误码`)
     }
   }

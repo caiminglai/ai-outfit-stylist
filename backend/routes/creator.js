@@ -20,6 +20,7 @@ const {
   filenameFromUploadReference,
   isOwnedUpload,
   deleteOwnedUpload,
+  countUnreferencedUploads,
 } = require('../utils/uploads')
 const { rateLimit } = require('../middleware/rateLimit')
 // 报错与告警一律走 utils/logger：console.* 只落 stdout，容器里那份不归本项目留档，
@@ -267,6 +268,11 @@ router.post('/cover', loginRequired, submitLimiter, upload.single('file'), (req,
   try {
     const validation = validateImage(req.file)
     if (!validation.valid) return sendError(res, validation.error, 400)
+    // 封面上传与作品提交是两个请求，中间会留下未关联文件。给每名作者最多 20 份，
+    // 防止脚本用同一个账号无限堆磁盘；关联到作品后不再占这份配额。
+    if (countUnreferencedUploads(req.user.id) >= 20) {
+      return sendError(res, '未关联作品的封面已达 20 份，请先提交作品或删除不再需要的封面', 429)
+    }
 
     const ext = path.extname(req.file.originalname).toLowerCase()
     const filename = `${generateUUID()}${ext}`

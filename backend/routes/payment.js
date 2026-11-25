@@ -533,7 +533,7 @@ router.get('/my', loginRequired, (req, res) => {
         const basisSessionId = /^[A-Za-z0-9_-]{8,64}$/.test(rawBasis) ? rawBasis : null
         const identity = {
           userId: req.user.id,
-          // 报告行的归属串＝本次请求的身份（`utils/common.js:92` 那把唯一尺子），
+          // 报告行的归属串＝本次请求的身份（`utils/common.js:105-112` 的 `getSessionId` 那把唯一尺子），
           // 取不到再退回 users.session_id；两个都没有 ⇒ 服务层回 400，⛔ 不落一条归属不明的行
           sessionId: getSessionId(req) || req.user.session_id || '',
           basisSessionId,

@@ -25,7 +25,7 @@
  * 多选的是**衣柜里已有的单品**（`items` 由衣橱页传进来），不接受手填 ID：
  * 后端 POST/PUT 会逐条校验归属，塞别人的 ID 直接 400，这里提前把选择面收在自有衣物上。
  */
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from '../utils/toastOnce'
 import type { WardrobeItem, WardrobeOutfit } from '../types'
 import {
@@ -160,6 +160,7 @@ export default function WardrobeDiary({ items, compact }: WardrobeDiaryProps) {
   // 「取今天」那一路：城市输入框只在点按钮时用一次，⛔ 不写进任何一格的默认值
   const [city, setCity] = useState('')
   const [fetchingWeather, setFetchingWeather] = useState(false)
+  const loadGenerationRef = useRef(0)
 
   const nameById = useMemo(() => {
     const m = new Map<number, string>()
@@ -171,20 +172,28 @@ export default function WardrobeDiary({ items, compact }: WardrobeDiaryProps) {
   // 四处的「存完／删完再取一次」由各自的事件处理器置真，读到的画面与从前一致。
   // promise 链而不是 `try/await/catch` 的成因见 `AccessoryTab.tsx` 里同一段注释。
   const load = useCallback(() => {
+    const generation = ++loadGenerationRef.current
     return listWardrobeOutfits()
       .then((r) => {
+        if (generation !== loadGenerationRef.current) return
         setRows(r.outfits ?? [])
         setOccasions(r.occasions ?? [])
         setWeatherLevels(r.weather_levels ?? [])
       })
       .catch((e: unknown) => {
+        if (generation !== loadGenerationRef.current) return
         toast.error(e instanceof Error ? e.message : '日记读取失败')
       })
-      .finally(() => setLoading(false))
+      .finally(() => {
+        if (generation === loadGenerationRef.current) setLoading(false)
+      })
   }, [])
 
   useEffect(() => {
     void load()
+    return () => {
+      loadGenerationRef.current += 1
+    }
   }, [load])
 
   const toggleItem = (id?: number) => {

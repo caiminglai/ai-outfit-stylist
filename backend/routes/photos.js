@@ -142,7 +142,7 @@ router.delete('/:id', loginRequired, (req, res) => {
       return sendError(res, '照片不存在或不属于当前用户', 404)
     }
 
-    // 三张表的 photo_id 外键引用 photos(id)（schema.sql:44/138/148），而 db/init.js:44 开着
+    // 三张表的 photo_id 外键引用 photos(id)（schema.sql:52/62/166），而 db/init.js:49 开着
     // `PRAGMA foreign_keys = ON` ⇒ 不清子行就 DELETE 必抛 FOREIGN KEY constraint failed，
     // 于是"分析过／推荐过／试穿过"的照片在页面上永远删不掉（每点一次 500）。
     // face_features.photo_id 是 NOT NULL，只能连行一起删（它本来就是这张照片的分析结果）；

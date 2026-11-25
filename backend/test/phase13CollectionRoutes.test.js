@@ -83,12 +83,14 @@ engine.buildRecommendation = (...args) => {
 
 const express = require('express')
 const recommendRoutes = require('../routes/recommend')
+const wardrobeRoutes = require('../routes/wardrobe')
 const { saveArchive, loadArchive } = require('../services/profileArchive')
 const { actorKeyOf } = require('../services/itemFeedback')
 
 const app = express()
 app.use(express.json())
 app.use('/api/recommend', recommendRoutes)
+app.use('/api/wardrobe', wardrobeRoutes)
 
 const SESS_A = 'sess-phase13-a'
 const SESS_B = 'sess-phase13-b'
@@ -182,6 +184,51 @@ test('profile 序列化后超过 64 KB ⇒ 400，且不调用引擎、不写推�
     '被拒绝的输入不能落进快照',
   )
 })
+
+// ============================================================
+// 衣橱件数边界：请求自带衣橱与衣橱推荐口共用同一上限，先挡住再组合、落库
+// ============================================================
+
+const wardrobeAtLimit = Array.from({ length: 200 }, (_, index) => ({
+  id: index + 1,
+  name: `测试上衣 ${index + 1}`,
+  category: '上衣',
+  color: '白色',
+}))
+
+for (const [label, route] of [
+  ['/engine', '/engine'],
+  ['/wardrobe/recommend', '/../wardrobe/recommend'],
+]) {
+  test(`${label}：201 件自带衣橱 ⇒ 400，且不调用引擎、不写推荐快照`, async () => {
+    const beforeCalls = captured.calls
+    const beforeLogs = memDb.prepare('SELECT COUNT(*) AS n FROM recommendation_logs').get().n
+    const items = [...wardrobeAtLimit, { id: 201, name: '第 201 件', category: '上衣' }]
+    const r = await call('POST', route, {
+      profile: route === '/engine' ? { ...PROFILE, wardrobe_items: items } : PROFILE,
+      mode: 'personal',
+      ...(route === '/engine' ? {} : { wardrobe_items: items }),
+    })
+    assert.strictEqual(r.status, 400, JSON.stringify(r.body).slice(0, 300))
+    assert.match(r.body.error.message, /200/)
+    assert.strictEqual(captured.calls, beforeCalls, '超量衣橱不能进入指数组合与推荐引擎')
+    assert.strictEqual(
+      memDb.prepare('SELECT COUNT(*) AS n FROM recommendation_logs').get().n,
+      beforeLogs,
+      '被拒绝的输入不能落进快照',
+    )
+  })
+
+  test(`${label}：200 件自带衣橱是允许的边界`, async () => {
+    const r = await call('POST', route, {
+      profile: route === '/engine' ? { ...PROFILE, wardrobe_items: wardrobeAtLimit } : PROFILE,
+      mode: 'personal',
+      ...(route === '/engine' ? {} : { wardrobe_items: wardrobeAtLimit }),
+    })
+    assert.strictEqual(r.status, 200, JSON.stringify(r.body).slice(0, 300))
+    assert.strictEqual(captured.profile.wardrobe_items.length, 200)
+  })
+}
 
 // ============================================================
 // §八·9 天气断点（四档：live / 名单外 / 取不到 / 没带）

@@ -35,7 +35,9 @@ function buildFields(folderField) {
   //    根本不需要删文件，所以只备份、不删除，出问题随时能用这个备份回滚。）
   if (fs.existsSync(DB_PATH)) {
     const backupPath = DB_PATH + '.backup-' + Date.now()
-    fs.copyFileSync(DB_PATH, backupPath)
+    // SQLite 的 WAL 改动可能还没合并进主库；copyFileSync 只复制主文件，
+    // 会在并发写入时漏掉最新事务。用 SQLite 在线备份 API 获取一致快照。
+    await db.backup(backupPath)
     console.log('已备份旧数据库到: ' + backupPath)
   } else {
     console.log('警告: ' + DB_PATH + ' 不存在,将按 schema 新建后再改模型表')

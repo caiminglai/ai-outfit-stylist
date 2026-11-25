@@ -104,6 +104,7 @@ export function ServicePanel(props: ServicePanelProps) {
         {stage !== 'mode-select' && (
           <button
             onClick={onReset}
+            disabled={submitting}
             className="ghost-btn text-xs px-2 py-1"
             style={{ color: 'var(--muted)' }}
           >
@@ -385,6 +386,7 @@ export function ServicePanel(props: ServicePanelProps) {
               onBack={onBack}
               synced={synced}
               syncing={syncing}
+              submitting={submitting}
               compact={compact}
               weatherCity={weatherCity}
               weatherSource={weatherOutcome?.source ?? null}

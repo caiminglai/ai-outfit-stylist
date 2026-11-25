@@ -9,6 +9,7 @@
 // 报错与告警一律走 utils/logger：console.* 只落 stdout，容器里那份不归本项目留档，
 // 事后按订单号/用户查不到痕迹（判据见 test/loggerDiscipline.test.js）
 const { log: logMsg, warn: logWarn } = require('../utils/logger')
+const { signUploadUrl } = require('../utils/uploads')
 
 /**
  * 获取 DashScope API Key
@@ -16,6 +17,53 @@ const { log: logMsg, warn: logWarn } = require('../utils/logger')
  */
 function getApiKey() {
   return process.env.DASHSCOPE_API_KEY || ''
+}
+
+/**
+ * 外部试穿 provider 使用的公网 origin 只能来自服务端配置。
+ * 仅接受站点 origin（可带末尾 /），避免路径前缀把 /uploads 拼到错误位置。
+ */
+function getTryonPublicOrigin() {
+  const raw = String(process.env.PUBLIC_BASE_URL || '').trim()
+  const unavailable = (message) =>
+    Object.assign(new Error(message), { status: 503, code: 'TRYON_PUBLIC_URL_UNAVAILABLE' })
+  if (!raw) {
+    throw unavailable('虚拟试穿公网地址未配置，请管理员设置 PUBLIC_BASE_URL 后重试')
+  }
+
+  let base
+  try {
+    base = new URL(raw)
+  } catch {
+    throw unavailable('PUBLIC_BASE_URL 格式无效，请配置为站点公网 origin')
+  }
+  const nodeEnv = process.env.NODE_ENV || 'development'
+  const production = nodeEnv !== 'development' && nodeEnv !== 'test'
+  if (production && base.protocol !== 'https:') {
+    throw unavailable('生产环境 PUBLIC_BASE_URL 必须使用 HTTPS 公网地址')
+  }
+  if (base.protocol !== 'https:' && base.protocol !== 'http:') {
+    throw unavailable('PUBLIC_BASE_URL 必须使用 HTTP 或 HTTPS 协议')
+  }
+  if (base.username || base.password || base.pathname !== '/' || base.search || base.hash) {
+    throw unavailable('PUBLIC_BASE_URL 必须是不含路径、凭据、查询串或片段的站点 origin')
+  }
+  return base.origin
+}
+
+/** 私有实拍图只签发限时 URL；不改成 public- 文件或永久公开。 */
+function toAbsoluteTryonImageUrl(uploadPath, publicOrigin) {
+  const match =
+    typeof uploadPath === 'string'
+      ? /^\/uploads\/([A-Za-z0-9][A-Za-z0-9._-]*)$/.exec(uploadPath)
+      : null
+  if (!match) {
+    throw Object.assign(new Error('试穿图片必须是本服务的单层 /uploads/ 路径'), {
+      status: 500,
+      code: 'TRYON_IMAGE_URL_INVALID',
+    })
+  }
+  return new URL(signUploadUrl(match[1]), `${publicOrigin}/`).href
 }
 
 /**
@@ -272,6 +320,7 @@ async function pollTryonResult(apiKey, taskId, maxRetries = 30, interval = 2000)
  * @param {string} photoUrl - 用户照片URL
  * @param {string|null} garmentUrl - 服装图片URL（可选）
  * @returns {Promise<string>} 生成的试穿图片URL
+ * @throws {Error} 真实提交的公网配置无效时拒绝，错误码 TRYON_PUBLIC_URL_UNAVAILABLE
  */
 async function virtualTryon(photoUrl, garmentUrl = null) {
   const apiKey = getApiKey()
@@ -283,6 +332,11 @@ async function virtualTryon(photoUrl, garmentUrl = null) {
     )
     return photoUrl
   }
+
+  // 校验与签名放在 try 外：配置错误不能被 catch 洗成"原图降级"。
+  const publicOrigin = getTryonPublicOrigin()
+  const personImageUrl = toAbsoluteTryonImageUrl(photoUrl, publicOrigin)
+  const garmentImageUrl = toAbsoluteTryonImageUrl(garmentUrl, publicOrigin)
 
   try {
     const url = 'https://dashscope.aliyuncs.com/api/v1/services/aigc/image-generation/generation'
@@ -297,8 +351,8 @@ async function virtualTryon(photoUrl, garmentUrl = null) {
       body: JSON.stringify({
         model: 'virtual-try-on',
         input: {
-          person_image_url: photoUrl,
-          garment_image_url: garmentUrl,
+          person_image_url: personImageUrl,
+          garment_image_url: garmentImageUrl,
         },
         parameters: {},
       }),

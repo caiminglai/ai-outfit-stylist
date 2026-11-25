@@ -25,7 +25,7 @@ npm ci --prefix backend --ignore-scripts
 
 ## 临时数据库与开发启动
 
-本地开发和测试不得使用运行库、部署卷或真实业务数据。仓库跟踪的 `backend/db/styleai.db` 是公开脱敏演示快照，只含规则、库存分类和 `PortfolioBot` 登记，不是可写运行库。后端单测及 Playwright 会自动在系统临时目录重建 SQLite 库，并在正常退出时清理；异常终止后的残留目录须确认属于本次测试后再删除。
+本地开发和测试不得使用运行库、部署卷或真实业务数据。仓库跟踪的 `backend/db/styleai.db` 是公开脱敏演示快照，只含规则和库存分类，不是可写运行库。后端单测及 Playwright 会自动在系统临时目录重建 SQLite 库，并在正常退出时清理；异常终止后的残留目录须确认属于本次测试后再删除。
 
 修改 schema 或种子后，按需刷新公开快照；生成器只允许替换已经通过校验的演示库：
 
@@ -37,9 +37,11 @@ node backend/scripts/generate-demo-db.js --check
 手动启动后端时显式指定临时路径，且不得读取或提交 `.env`：
 
 ```bash
-mkdir -p .tmp/dev/uploads
+mkdir -p .tmp/dev/uploads .tmp/dev/logs
 STYLEAI_DB_PATH="$PWD/.tmp/dev/styleai.db" \
 STYLEAI_UPLOAD_DIR="$PWD/.tmp/dev/uploads" \
+STYLEAI_LOG_DIR="$PWD/.tmp/dev/logs" \
+DOTENV_CONFIG_PATH="$PWD/.tmp/dev/disabled.env" \
 NODE_ENV=development \
 SECRET_KEY="local-dev-only-secret-change-me-32-chars" \
 ADMIN_PASSWORD="local-dev-only-admin-password" \
@@ -81,14 +83,14 @@ npm run test:e2e --prefix app
 
 - **规则修改必须同步种子和测试**：同一 PR 更新对应的 `backend/db/seed/rules*.json` 与 `backend/test/` 回归用例；涉及基础快照时保持 `rules.json` 与增量种子一致。新增规则使用唯一的 `source_key`，从空临时库验证匹配、开关、依据分档和反馈计数，不得只改运行库。
 - **28 个预览与模型不动**：`app/public/model-previews/` 下 28 个预览图及本机 `models/` 下 28 个模型目录保持原样，不删除、改名、覆盖、重新生成或提交。模型功能 PR 不得夹带这些资产变更；确需调整须先开 Issue 单独讨论。
-- 第三方 PMX、纹理及模型目录仅留本机；仓库只允许分发项目自有且授权清晰的演示模型。
+- 第三方 PMX、纹理及模型目录仅留本机或部署卷；仓库和 Docker 镜像不分发人物模型。
 
 ## 禁止提交的内容
 
 - 真实运行数据库及伴生/备份文件，例如通过 `STYLEAI_DB_PATH` 创建的 `*.db`、`*.db-wal`、`*.db-shm`、`*.bak`。唯一例外是仓库内由生成器维护的脱敏演示快照 `backend/db/styleai.db`。
 - `.env`、`.env.local`、密钥、证书、Token 和真实凭据；只参考 `.env.example`。
 - 用户上传与运行产物，例如 `backend/uploads/`、`upload_data/`、日志和临时数据库。
-- 任何第三方 PMX 模型；演示模型也必须具备明确授权与来源说明。
+- 任何第三方 PMX 模型及未经明确授权的预览、纹理；仓库当前不分发人物模型。
 - 论文、国标、出版物扫描件等原文，包括 `docs/依据/papers/`；仅提交可公开的引用、摘要或自有说明。
 - 构建产物、浏览器缓存、测试报告及依赖目录。
 

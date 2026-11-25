@@ -5,11 +5,9 @@ const fs = require('node:fs')
 const path = require('node:path')
 const Database = require('better-sqlite3')
 
-const ROOT = path.join(__dirname, '..', '..')
 const BACKEND = path.join(__dirname, '..')
 const DEFAULT_OUTPUT = path.join(BACKEND, 'db', 'styleai.db')
 const SCHEMA_PATH = path.join(BACKEND, 'db', 'schema.sql')
-const MODEL_PATH = path.join(ROOT, 'models', 'demo', 'PortfolioBot.pmx')
 const PUBLIC_TABLES = new Set([
   'inventory_categories',
   'model_configs',
@@ -17,19 +15,13 @@ const PUBLIC_TABLES = new Set([
   'rule_conditions',
   'rule_groups',
 ])
-const EXPECTED_MODEL = {
-  folder: 'demo',
-  file: 'PortfolioBot.pmx',
-  name: 'PortfolioBot',
-  source: '项目演示',
-}
 
 function usage() {
   console.log(
-    '用法：node backend/scripts/generate-demo-db.cjs [--output <path>] [--replace] [--check]\n' +
+    '用法：node backend/scripts/generate-demo-db.js [--output <path>] [--replace] [--check]\n' +
       '默认输出 backend/db/styleai.db；已有文件默认拒绝覆盖。\n' +
       '--replace 只允许刷新已通过校验的脱敏演示库；--check 只校验不写入。\n' +
-      '生成内容仅含项目规则、库存分类和 CC0 PortfolioBot 演示模型配置。',
+      '生成内容仅含项目规则和库存分类，不登记任何人物模型。',
   )
 }
 
@@ -85,13 +77,8 @@ function validateDatabase(db) {
   for (const table of ['rule_groups', 'rule_conditions', 'rule_actions', 'inventory_categories']) {
     if (count(db, table) === 0) throw new Error(`公开演示库缺少种子数据：${table}`)
   }
-  if (count(db, 'model_configs') !== 1) {
-    throw new Error('公开演示库必须且只能包含一个 PortfolioBot 模型配置')
-  }
-
-  const model = db.prepare('SELECT folder, file, name, source FROM model_configs').get()
-  for (const [key, value] of Object.entries(EXPECTED_MODEL)) {
-    if (model[key] !== value) throw new Error(`演示模型配置不正确：${key}`)
+  if (count(db, 'model_configs') !== 0) {
+    throw new Error('公开演示库不得包含人物模型配置')
   }
 }
 
@@ -121,8 +108,6 @@ function generate(outputPath, { replace = false } = {}) {
       throw new Error(`输出路径带 SQLite 伴生文件，拒绝生成：${outputPath + suffix}`)
     }
   }
-  if (!fs.existsSync(MODEL_PATH)) throw new Error(`演示模型不存在：${MODEL_PATH}`)
-
   fs.mkdirSync(path.dirname(outputPath), { recursive: true })
   const tempPath = `${outputPath}.tmp-${process.pid}`
   let db
@@ -134,19 +119,6 @@ function generate(outputPath, { replace = false } = {}) {
     db.exec(fs.readFileSync(SCHEMA_PATH, 'utf8'))
     require('../db/seed').seedAll(db)
     require('../db/applyRuleSeeds').applyRuleSeeds(db)
-    db.prepare(
-      `INSERT INTO model_configs
-        (name, icon, image_preview, description, folder, file, source, enabled, exposure, sort_order)
-       VALUES (?, ?, ?, ?, ?, ?, ?, 1, 0.3, 1)`,
-    ).run(
-      EXPECTED_MODEL.name,
-      '',
-      '',
-      '项目自产 CC0 演示模型，用于本地开发和贡献者验证',
-      EXPECTED_MODEL.folder,
-      EXPECTED_MODEL.file,
-      EXPECTED_MODEL.source,
-    )
     validateDatabase(db)
     db.pragma('journal_mode = DELETE')
     db.close()

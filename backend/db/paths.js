@@ -14,4 +14,16 @@ const DB_PATH = process.env.STYLEAI_DB_PATH
   ? path.resolve(process.env.STYLEAI_DB_PATH)
   : DEFAULT_DB_PATH
 
-module.exports = { DB_PATH }
+/**
+ * backend/db/styleai.db 是公开脱敏快照，不是运行库。
+ * 没显式指定 STYLEAI_DB_PATH 就拒绝打开，挡在 new Database 之前，避免 schema、管理员和模型扫描写坏快照。
+ */
+function assertRuntimeDbPath() {
+  if (!process.env.STYLEAI_DB_PATH && path.resolve(DB_PATH) === path.resolve(DEFAULT_DB_PATH)) {
+    throw new Error(
+      '拒绝写入公开演示快照 backend/db/styleai.db；请通过 STYLEAI_DB_PATH 指向独立运行库',
+    )
+  }
+}
+
+module.exports = { DB_PATH, DEFAULT_DB_PATH, assertRuntimeDbPath }

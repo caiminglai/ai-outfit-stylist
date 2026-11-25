@@ -291,19 +291,31 @@ test('S6：真实形状——rank 只挂在穿搭，其余四类没 rank 时名�
 })
 
 test('S6：pruneOldLogs 只清 90 天外的免费样本；报告行与新鲜行不动', () => {
+  const uid = Number(mkUser('prune-old-log'))
+  memDb
+    .prepare(
+      `INSERT INTO payment_orders (out_trade_no, user_id, description, amount_fen, status, paid_at)
+       VALUES ('O-20261023', ?, '测试报告', 9900, 'paid', datetime('now'))`,
+    )
+    .run(uid)
   const mk = (ageDays, resultObj, sid) =>
     memDb
       .prepare(
         `INSERT INTO recommendation_logs (session_id, user_id, mode, input_snapshot, result, created_at)
-         VALUES (?, 1, 'store', '{}', ?, datetime('now', ?))`,
+         VALUES (?, ?, 'store', '{}', ?, datetime('now', ?))`,
       )
-      .run(sid, JSON.stringify(resultObj), `-${ageDays} days`).lastInsertRowid
+      .run(sid, uid, JSON.stringify(resultObj), `-${ageDays} days`).lastInsertRowid
   const oldFree = mk(120, { _log_slim: 2, shown: {}, snap: [] }, 'sid-old-free')
   const freshFree = mk(10, { _log_slim: 2, shown: {}, snap: [] }, 'sid-fresh-free')
   const oldReport = mk(
     200,
     { paid_report: { out_trade_no: 'O-20261023' }, 穿搭: [] },
     'sid-old-report',
+  )
+  const oldUnpaid = mk(
+    200,
+    { paid_report: { out_trade_no: 'O-20261023-CREATED' }, 穿搭: [] },
+    'sid-old-unpaid-report',
   )
   const noTimestamp = memDb
     .prepare(
@@ -312,7 +324,7 @@ test('S6：pruneOldLogs 只清 90 天外的免费样本；报告行与新鲜行�
     )
     .run().lastInsertRowid
   const removed = pruneOldLogs(90)
-  assert.strictEqual(removed, 1, `应只删 1 行（90 天外的免费样本），实测 ${removed}`)
+  assert.strictEqual(removed, 2, `应删免费样本与未到账报告共 2 行，实测 ${removed}`)
   assert.strictEqual(
     memDb.prepare('SELECT COUNT(*) n FROM recommendation_logs WHERE id = ?').get(oldFree).n,
     0,
@@ -324,6 +336,11 @@ test('S6：pruneOldLogs 只清 90 天外的免费样本；报告行与新鲜行�
   assert.strictEqual(
     memDb.prepare('SELECT COUNT(*) n FROM recommendation_logs WHERE id = ?').get(oldReport).n,
     1,
+  )
+  assert.strictEqual(
+    memDb.prepare('SELECT COUNT(*) n FROM recommendation_logs WHERE id = ?').get(oldUnpaid).n,
+    0,
+    '只有报告 JSON、没有本人到账订单时，不属于永久交付物',
   )
   assert.strictEqual(
     memDb.prepare('SELECT COUNT(*) n FROM recommendation_logs WHERE id = ?').get(noTimestamp).n,

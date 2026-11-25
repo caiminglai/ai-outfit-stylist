@@ -12,6 +12,8 @@ export interface RecommendationReportProps {
   onBack?: () => void
   synced?: boolean
   syncing?: boolean
+  /** 正在生成/重算时禁用会启动另一次推荐的控件，避免旧结果覆盖新结果。 */
+  submitting?: boolean
   compact?: boolean
   /** 🔴 §四·1：顾客在天气卡里选了哪个城市（上一份报告算的时候用的是哪一个） */
   weatherCity?: string | null

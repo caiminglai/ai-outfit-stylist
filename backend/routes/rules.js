@@ -478,7 +478,7 @@ router.post('/groups', adminLoginRequired, (req, res) => {
     }
 
     // priority 落在 INTEGER 列，原来只挡对象/数组，字符串原样绑进去：
-    // SQLite 排序里 TEXT 恒大于 INTEGER ⇒ `ORDER BY priority DESC`(:313) 整体失真，
+    // SQLite 排序里 TEXT 恒大于 INTEGER ⇒ `ORDER BY priority DESC`（本文件:367）整体失真，
     // 一条 "priority":"abc" 的脏数据就能把门店端的建议顺序永远顶到最前。
     const priorityNum =
       priority === undefined || priority === null || priority === ''
@@ -646,8 +646,8 @@ router.delete('/groups/:id', adminLoginRequired, (req, res) => {
     if (!existing) {
       return sendError(res, '规则组不存在', 404)
     }
-    // feedback_events.group_id 是 NOT NULL 外键指向 rule_groups(id)（schema.sql:301），
-    // 而 db/init.js:44 开着 `PRAGMA foreign_keys = ON` ⇒ 有人点过"有用/不准"的规则
+    // feedback_events.group_id 是 NOT NULL 外键指向 rule_groups(id)（schema.sql:321），
+    // 而 db/init.js:49 开着 `PRAGMA foreign_keys = ON` ⇒ 有人点过"有用/不准"的规则
     // 直接 DELETE 必抛约束失败，页面只回一句"删除失败"，而且永远删不掉。
     // 这里不改成"连反馈一起删"：那是顾客的评价数据，删规则的正当出口是下面那条 toggle（enabled=0）。
     const rated = db

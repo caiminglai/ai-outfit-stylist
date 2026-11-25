@@ -75,13 +75,7 @@ function assertSanitizedDemoDatabase(dbPath) {
     assert.ok(db.prepare('SELECT COUNT(*) AS count FROM rule_actions').get().count > 0)
     assert.ok(db.prepare('SELECT COUNT(*) AS count FROM inventory_categories').get().count > 0)
 
-    assert.equal(db.prepare('SELECT COUNT(*) AS count FROM model_configs').get().count, 1)
-    assert.deepEqual(db.prepare('SELECT folder, file, name, source FROM model_configs').get(), {
-      folder: 'demo',
-      file: 'PortfolioBot.pmx',
-      name: 'PortfolioBot',
-      source: '项目演示',
-    })
+    assert.equal(db.prepare('SELECT COUNT(*) AS count FROM model_configs').get().count, 0)
   } finally {
     db.close()
   }

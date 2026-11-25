@@ -18,6 +18,7 @@ import { toast } from '../utils/toastOnce'
 import { ACCOUNT_CHANGE_EVENT, claimPaidReport, getPaymentEntitlement, getAccount } from '../api'
 import type { AccountInfo, MyPaymentInfo, PaidReportPayload } from '../api'
 import type { BeyondTopN, EngineRecommendation } from '../types'
+import { useModalFocus } from '../lib/useModalFocus'
 
 const RecommendationReport = lazy(() => import('./RecommendationReport'))
 
@@ -260,6 +261,8 @@ export default function PaidReports({ onClose }: { onClose: () => void }) {
   const [busy, setBusy] = useState<string>('')
   const [error, setError] = useState('')
   const bodyRef = useRef<HTMLDivElement | null>(null)
+  const dialogRef = useRef<HTMLDivElement | null>(null)
+  useModalFocus(true, dialogRef, onClose)
   const requestGeneration = useRef(0)
   // 游客付的款只挂在这台浏览器的 session 上（§八 第 6 条）⇒ 顶部那条提示按登录态显示
   const [account, setAccount] = useState<AccountInfo | null>(() => getAccount())
@@ -292,7 +295,12 @@ export default function PaidReports({ onClose }: { onClose: () => void }) {
 
   useEffect(() => {
     const onAccountChange = (event: Event) => {
-      const next = (event as CustomEvent<{ account: AccountInfo | null }>).detail.account
+      const detail = (event as CustomEvent<{ account: AccountInfo | null; reason?: string }>).detail
+      const next = detail.account
+      // 认证失效时 AccountEntry 会打开登录模态；先关报告，避免两个焦点陷阱同时响应键盘。
+      if (next === null && detail.reason === 'unauthorized') {
+        onClose()
+      }
       // 权益、已打开的报告和错误都属于当前身份，切换时不能留着上一账号的数据。
       requestGeneration.current += 1
       setAccount(next)
@@ -305,7 +313,7 @@ export default function PaidReports({ onClose }: { onClose: () => void }) {
     }
     window.addEventListener(ACCOUNT_CHANGE_EVENT, onAccountChange)
     return () => window.removeEventListener(ACCOUNT_CHANGE_EVENT, onAccountChange)
-  }, [reload])
+  }, [reload, onClose])
 
   // 🔴 第十四阶段·第一步 C1：到账有两条来路（在线订单号／人工已核凭证 id），共用这一个领取口。
   // `busy` 存的是**带前缀的键**，⛔ 用裸 id：凭证 id 与订单尾号可能同为小数字，会互相顶掉禁用态。
@@ -607,6 +615,11 @@ export default function PaidReports({ onClose }: { onClose: () => void }) {
       {/* 打印时只留报告体：这一段样式随组件走，⛔ 不动全局 CSS */}
       <style>{`@media print { body * { visibility: hidden; } .paid-report-body, .paid-report-body * { visibility: visible; } .paid-report-body { position: absolute; left: 0; top: 0; width: 100%; } }`}</style>
       <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="paid-reports-dialog-title"
+        tabIndex={-1}
         onClick={(e) => e.stopPropagation()}
         className="w-full sm:max-w-2xl p-5"
         style={{
@@ -618,7 +631,11 @@ export default function PaidReports({ onClose }: { onClose: () => void }) {
         }}
       >
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-base font-semibold" style={{ color: 'var(--text)' }}>
+          <h3
+            id="paid-reports-dialog-title"
+            className="text-base font-semibold"
+            style={{ color: 'var(--text)' }}
+          >
             我的报告
           </h3>
           <button

@@ -20,6 +20,8 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
+      // 静态展厅真实集成测试必须与浏览器 importmap 使用同一份 vendored Three r160。
+      three: path.resolve(__dirname, './public/three/build/three.module.js'),
     },
   },
   test: {

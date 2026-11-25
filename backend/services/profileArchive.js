@@ -102,6 +102,19 @@ const FACE_FIELDS = [
  */
 const CLEARABLE_KEYS = ['birth_date', 'birth_hour']
 
+// 删档后仍必须保留已购报告，而报告快照不能继续充当“上次填的表单”。
+// 墓碑长期保留：它只屏蔽删档前的历史快照，不妨碍之后的新草稿和新档案回填。
+const ARCHIVE_TOMBSTONE = JSON.stringify({ __archive_deleted__: true })
+
+function writeArchiveTombstone(userId) {
+  if (!userId) return
+  db.prepare(
+    `INSERT INTO profile_drafts (user_id, form_json) VALUES (?, ?)
+     ON CONFLICT(user_id) DO UPDATE SET
+       form_json = excluded.form_json, updated_at = datetime('now')`,
+  ).run(userId, ARCHIVE_TOMBSTONE)
+}
+
 /** 判断"这次真的填了"：空串、null、undefined、NaN 都算没填 */
 function isFilled(val) {
   if (val === null || val === undefined) return false
@@ -246,12 +259,16 @@ function saveDraft(userId, form) {
   if (!userId) return 0
   const draft = {}
   for (const [key, val] of Object.entries(form || {})) {
-    if (key === 'nickname' || key === 'phone') continue
+    if (key === 'nickname' || key === 'phone' || key === '__archive_deleted__') continue
     if (!isFilled(val)) continue
     draft[key] = typeof val === 'string' ? val.slice(0, 200) : val
   }
   const columns = Object.keys(draft)
   if (columns.length === 0) return 0
+  // 删档墓碑必须跨后续草稿保留：它只负责屏蔽删档前的历史快照，
+  // 新草稿和之后明确保存的档案仍正常回填，不能因为覆盖草稿就把旧画像重新放出来。
+  const previous = loadDraft(userId)
+  if (previous.__archive_deleted__ === true) draft.__archive_deleted__ = true
   db.prepare(
     `INSERT INTO profile_drafts (user_id, form_json) VALUES (?, ?)
      ON CONFLICT(user_id) DO UPDATE SET
@@ -298,7 +315,13 @@ function describeProfile(profile) {
  * @returns {object}
  */
 function loadPrefill(userId) {
-  const prefill = { ...loadLastForm(userId), ...loadDraft(userId), ...loadArchive(userId) }
+  if (!userId) return {}
+  const draft = loadDraft(userId)
+  if (draft.__archive_deleted__ === true) {
+    const { __archive_deleted__: _deleted, ...currentDraft } = draft
+    return { ...currentDraft, ...loadArchive(userId) }
+  }
+  const prefill = { ...loadLastForm(userId), ...draft, ...loadArchive(userId) }
   // 档案里已撤销的选填项要连样本快照里那份旧值一起压掉，否则清空了下次进来又冒出来
   if (userId) {
     const body = db
@@ -587,6 +610,7 @@ module.exports = {
   loadLastForm,
   loadDraft,
   saveDraft,
+  writeArchiveTombstone,
   describeProfile,
   loadPrefill,
   unrecordedNumCells,

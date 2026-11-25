@@ -154,9 +154,27 @@ function hasUploadReference(filename, database) {
   return Boolean(db.prepare(`SELECT 1 WHERE ${clauses.join(' OR ')}`).get(...params))
 }
 
+/** 统计当前用户尚未关联任何业务记录的上传；封面接口用它阻止无限堆孤儿文件。 */
+function countUnreferencedUploads(userId, database, stopAfter = 20) {
+  if (!Number.isSafeInteger(userId) || userId <= 0) return 0
+  const db = database || require('../db/init')
+  const rows = db
+    .prepare('SELECT filename FROM upload_files WHERE user_id = ? ORDER BY created_at, filename')
+    .all(userId)
+  let count = 0
+  for (const { filename } of rows) {
+    if (!hasUploadReference(filename, db)) {
+      count += 1
+      if (count > stopAfter) break
+    }
+  }
+  return count
+}
+
 /**
  * 删除本人所有且已无业务引用的文件与台账。
- * 文件系统先于台账删除：unlink 失败时调用方事务可回滚业务行与台账，不能假报成功。
+ * 文件系统先于台账删除：unlink 失败时台账必须保留，调用方明确报告部分成功并允许重试。
+ * SQLite 与磁盘无法共用 ACID 事务；这里不假装文件失败会让已提交的业务记录回滚。
  * 返回值 shared=true 表示文件仍被其他记录使用，业务行可删，但文件与台账必须保留。
  */
 function deleteOwnedUpload(filename, userId, database) {
@@ -211,5 +229,6 @@ module.exports = {
   filenameFromUploadReference,
   deleteOwnedUpload,
   hasUploadReference,
+  countUnreferencedUploads,
   PUBLIC_UPLOAD_QUERIES,
 }

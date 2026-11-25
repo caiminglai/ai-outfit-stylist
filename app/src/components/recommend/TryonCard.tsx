@@ -3,7 +3,7 @@
  *
  * 上传人物照片和衣服照片，选择衣服类别后调用虚拟试穿接口，展示试穿结果
  */
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { TryonResult } from '../../types'
 import { directTryon } from '../../api'
 import { UPLOAD_ACCEPT, checkPickedImage } from '../../lib/imagePick'
@@ -23,19 +23,38 @@ export default function TryonCard() {
   const [result, setResult] = useState<TryonResult | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const requestGenerationRef = useRef(0)
+
+  useEffect(
+    () => () => {
+      requestGenerationRef.current += 1
+    },
+    [],
+  )
+
+  function invalidateInput() {
+    requestGenerationRef.current += 1
+    setResult(null)
+    setLoading(false)
+    setError(null)
+  }
 
   async function handleTryon(): Promise<void> {
-    if (!personImage || !garmentImage) return
+    if (loading || !personImage || !garmentImage) return
+    const generation = ++requestGenerationRef.current
+    setResult(null)
     setLoading(true)
     setError(null)
     try {
       const r = await directTryon(personImage, garmentImage, category)
+      if (generation !== requestGenerationRef.current) return
       setResult(r)
     } catch (e: unknown) {
+      if (generation !== requestGenerationRef.current) return
       setError(e instanceof Error ? e.message : '试穿失败')
       setResult(null)
     } finally {
-      setLoading(false)
+      if (generation === requestGenerationRef.current) setLoading(false)
     }
   }
 
@@ -48,6 +67,10 @@ export default function TryonCard() {
         </h3>
       </div>
       <div className="space-y-2">
+        <p className="text-xs" style={{ color: 'var(--muted)', lineHeight: 1.6 }}>
+          人物与衣服图片会私有保存；仅部署启用外部试穿时，才把必要图片提供给外部服务，未启用则返回人物原图。
+          删除档案仅清理无其他记录引用的文件，支付凭证、已付费报告及其复读依据保留，清理失败可重试。
+        </p>
         <div className="text-xs">
           <label className="block mb-1" style={{ color: 'var(--muted)' }}>
             人物照片
@@ -57,12 +80,13 @@ export default function TryonCard() {
             accept={UPLOAD_ACCEPT}
             onChange={(e) => {
               const file = e.target.files?.[0] ?? null
+              invalidateInput()
               // 本机先挡一道：gif/heic/超 10MB 传上去也是被后端 400 打回，还白占一次试穿限流额度
               const err = file ? checkPickedImage(file, '人物照片') : null
               if (err) setError(err)
-              else setError(null)
               setPersonImage(err ? null : file)
             }}
+            disabled={loading}
             className="form-input text-xs"
             style={{ padding: '4px' }}
           />
@@ -76,11 +100,12 @@ export default function TryonCard() {
             accept={UPLOAD_ACCEPT}
             onChange={(e) => {
               const file = e.target.files?.[0] ?? null
+              invalidateInput()
               const err = file ? checkPickedImage(file, '衣服照片') : null
               if (err) setError(err)
-              else setError(null)
               setGarmentImage(err ? null : file)
             }}
+            disabled={loading}
             className="form-input text-xs"
             style={{ padding: '4px' }}
           />
@@ -91,7 +116,11 @@ export default function TryonCard() {
           </label>
           <select
             value={category}
-            onChange={(e) => setCategory(e.target.value)}
+            onChange={(e) => {
+              invalidateInput()
+              setCategory(e.target.value)
+            }}
+            disabled={loading}
             className="form-select text-xs"
             style={{ padding: '6px 10px' }}
           >
@@ -108,7 +137,11 @@ export default function TryonCard() {
           className="gradient-btn text-xs w-full py-2"
         >
           {loading ? (
-            <span className="flex items-center justify-center gap-2">
+            <span
+              role="status"
+              aria-live="polite"
+              className="flex items-center justify-center gap-2"
+            >
               <span className="spinner" style={{ width: '12px', height: '12px' }}></span>
               试穿生成中...
             </span>

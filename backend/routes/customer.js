@@ -19,6 +19,7 @@ const { stripIdentityFields } = require('../utils/common')
 const { capJson, FORM_BLOB_LIMITS } = require('../middleware/bodyGate')
 const { buildRecommendation } = require('../services/recommendEngine')
 const { writeRecommendationLog } = require('../services/profileArchive')
+const { collectPaidReportRetention } = require('../services/paidReportSql')
 // 报错与告警一律走 utils/logger：console.* 只落 stdout，容器里那份不归本项目留档，
 // 事后按订单号/用户查不到痕迹（判据见 test/loggerDiscipline.test.js）
 const { error: logErr } = require('../utils/logger')
@@ -82,10 +83,18 @@ function parseProfileData(val) {
  */
 function dropExpiredSession(sessionId) {
   const delSession = db.prepare('DELETE FROM customer_sessions WHERE session_id = ? AND synced = 0')
-  const delLogs = db.prepare('DELETE FROM recommendation_logs WHERE session_id = ?')
   return db.transaction(() => {
     const gone = delSession.run(sessionId)
-    if (gone.changes > 0) delLogs.run(sessionId)
+    if (gone.changes > 0) {
+      const { retainedList } = collectPaidReportRetention(db, 'session_id = ?', [sessionId])
+      const retainClause = retainedList.length
+        ? ` AND id NOT IN (${retainedList.map(() => '?').join(',')})`
+        : ''
+      db.prepare(`DELETE FROM recommendation_logs WHERE session_id = ?${retainClause}`).run(
+        sessionId,
+        ...retainedList,
+      )
+    }
     return gone.changes
   })()
 }
@@ -286,20 +295,32 @@ router.delete('/session/:sessionId', (req, res) => {
   try {
     const { sessionId } = req.params
     const delSession = db.prepare('DELETE FROM customer_sessions WHERE session_id = ?')
-    const delLogs = db.prepare('DELETE FROM recommendation_logs WHERE session_id = ?')
-    // 删会话必须连带删日志,否则画像快照会留在库里。
-    // ★ 日志要无条件删：过期时 GET 会先把会话行删掉（本文件 141 行），等顾客/门店再发
-    // DELETE 时 deleted.changes=0 ⇒ 原来这句 if 直接跳过，那份 input_snapshot 就永久留下了
-    // （10-13 现量：过期 GET 之后库里剩 1 条无主日志）。两边都删不到才算"会话不存在"。
+    // 删会话必须连带删日志；已付费报告及其生成依据是交付物，两个入口都保留。
     const result = db.transaction(() => {
       const deleted = delSession.run(sessionId)
-      const logs = delLogs.run(sessionId)
-      return { changes: deleted.changes + logs.changes }
+      const { paidReports, retainedList } = collectPaidReportRetention(db, 'session_id = ?', [
+        sessionId,
+      ])
+      const retainClause = retainedList.length
+        ? ` AND id NOT IN (${retainedList.map(() => '?').join(',')})`
+        : ''
+      const logs = db
+        .prepare(`DELETE FROM recommendation_logs WHERE session_id = ?${retainClause}`)
+        .run(sessionId, ...retainedList)
+      return {
+        changes: deleted.changes + logs.changes,
+        paidReportsRetained: paidReports.length,
+        reportBasisRetained: retainedList.length - paidReports.length,
+      }
     })()
     if (result.changes === 0) {
       return sendError(res, '会话不存在', 404)
     }
-    return sendSuccess(res, { deleted: true })
+    return sendSuccess(res, {
+      deleted: true,
+      paid_reports_retained: result.paidReportsRetained,
+      report_basis_retained: result.reportBasisRetained,
+    })
   } catch (err) {
     logErr('[顾客] 删除失败:', err)
     return sendError(res, '删除失败', 500)

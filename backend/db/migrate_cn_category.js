@@ -84,7 +84,7 @@ for (const [en, cn] of Object.entries(actionMap)) {
   if (result.changes > 0) console.log(`  action_type: ${en} → ${cn} (${result.changes}条)`)
   actionChanged += result.changes
 }
-console.log(`  ✓ action_type ���共更新 ${actionChanged} 条\n`)
+console.log(`  ✓ action_type 共计更新 ${actionChanged} 条\n`)
 
 // ===== 4. 验证 =====
 console.log('=== 验证结果 ===')

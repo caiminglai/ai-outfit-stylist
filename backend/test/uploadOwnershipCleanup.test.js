@@ -288,7 +288,7 @@ test('封面文件删除失败返回 500 并保留作品、台账和文件', asy
   }
 })
 
-test('整个档案文件删除失败返回 500，不回成功并保留失败文件台账', async () => {
+test('整个档案文件删除失败返回 207 部分成功，并保留失败文件台账', async () => {
   addPhoto('archive-unlink-fail.png')
   const realUnlink = fs.unlinkSync
   fs.unlinkSync = (file) => {
@@ -299,8 +299,9 @@ test('整个档案文件删除失败返回 500，不回成功并保留失败文�
   }
   try {
     const result = await remove('/api/analysis/archive')
-    assert.equal(result.status, 500, JSON.stringify(result.body))
-    assert.equal(result.body.success, false)
+    assert.equal(result.status, 207, JSON.stringify(result.body))
+    assert.equal(result.body.success, true)
+    assert.ok(result.body.data.files_failed > 0)
     assert.equal(db.prepare('SELECT COUNT(*) AS n FROM photos WHERE user_id = ?').get(userId).n, 0)
     assert.ok(fs.existsSync(path.join(uploadDir, 'archive-unlink-fail.png')))
     assert.ok(owned('archive-unlink-fail.png'))
@@ -387,14 +388,17 @@ test('整个档案事务失败返回 500，不进入文件清理', async () => {
   }
 })
 
-test('整个档案所有权台账删除失败返回 500，不报告清理成功', async () => {
+test('整个档案台账清理失败返回 207 部分成功，业务已删且台账保留可重试', async () => {
   addPhoto('archive-ledger-fail.png')
   db.exec(`CREATE TRIGGER fail_ledger_delete BEFORE DELETE ON upload_files
            BEGIN SELECT RAISE(ABORT, 'forced ledger failure'); END`)
   try {
     const result = await remove('/api/analysis/archive')
-    assert.equal(result.status, 500, JSON.stringify(result.body))
+    assert.equal(result.status, 207, JSON.stringify(result.body))
+    assert.equal(result.body.success, true)
+    assert.ok(result.body.data.files_failed > 0)
     assert.ok(owned('archive-ledger-fail.png'))
+    assert.equal(db.prepare('SELECT 1 FROM photos WHERE user_id = ?').get(userId), undefined)
   } finally {
     db.exec('DROP TRIGGER fail_ledger_delete')
   }

@@ -310,7 +310,7 @@ app.get(['/gallery', '/gallery/'], (req, res) => {
 })
 
 // ===== 3D 模型文件静态服务(带路径遍历防护 + 预压缩支持)=====
-const modelsDir = path.join(__dirname, '..', 'models')
+const modelsDir = require('./utils/model-paths').getModelDir()
 if (fs.existsSync(modelsDir)) {
   app.use(
     '/models',

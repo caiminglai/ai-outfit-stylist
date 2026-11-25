@@ -77,21 +77,33 @@ export default function CabinetManager({ profile, compact }: CabinetManagerProps
       {/* 内容区 —— 已访问过的 Tab 保持挂载（保留数据），未访问的不挂载（减少首屏请求）
           每个 Tab 包裹独立 ErrorBoundary，单个 Tab 崩溃不影响其他 Tab */}
       {visited.has('wardrobe') && (
-        <div style={{ display: activeTab === 'wardrobe' ? 'block' : 'none' }}>
+        <div
+          style={{ display: activeTab === 'wardrobe' ? 'block' : 'none' }}
+          aria-hidden={activeTab !== 'wardrobe'}
+          inert={activeTab !== 'wardrobe'}
+        >
           <ErrorBoundary>
             <WardrobeTab profile={profile} compact={compact} />
           </ErrorBoundary>
         </div>
       )}
       {visited.has('cosmetic') && (
-        <div style={{ display: activeTab === 'cosmetic' ? 'block' : 'none' }}>
+        <div
+          style={{ display: activeTab === 'cosmetic' ? 'block' : 'none' }}
+          aria-hidden={activeTab !== 'cosmetic'}
+          inert={activeTab !== 'cosmetic'}
+        >
           <ErrorBoundary>
             <CosmeticTab profile={profile} compact={compact} />
           </ErrorBoundary>
         </div>
       )}
       {visited.has('accessory') && (
-        <div style={{ display: activeTab === 'accessory' ? 'block' : 'none' }}>
+        <div
+          style={{ display: activeTab === 'accessory' ? 'block' : 'none' }}
+          aria-hidden={activeTab !== 'accessory'}
+          inert={activeTab !== 'accessory'}
+        >
           <ErrorBoundary>
             <AccessoryTab profile={profile} compact={compact} />
           </ErrorBoundary>

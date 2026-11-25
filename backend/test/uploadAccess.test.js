@@ -226,6 +226,45 @@ async function postJson(route, body, headers = {}) {
   return { res, body: await res.json() }
 }
 
+test('未关联作品封面达到 20 份后拒绝继续上传，不增加文件和台账', async () => {
+  const prefix = 'cover-quota-'
+  const quotaFiles = Array.from({ length: 20 }, (_, i) => `${prefix}${i}.png`)
+  let uploadedFilename = null
+  try {
+    for (const filename of quotaFiles) registerUpload(filename, 1, db)
+    const form = new FormData()
+    form.append('file', new Blob([FILE_BYTES], { type: 'image/png' }), 'new-cover.png')
+    const res = await fetch(`${base}/api/creator/cover`, {
+      method: 'POST',
+      headers: { 'x-session-id': SESSION },
+      body: form,
+    })
+    const body = await res.json()
+    uploadedFilename = String(body.data?.url || '').match(/^\/uploads\/([^?]+)/)?.[1] || null
+    assert.strictEqual(res.status, 429, JSON.stringify(body))
+    assert.strictEqual(body.success, false)
+    assert.strictEqual(
+      db.prepare("SELECT COUNT(*) AS n FROM upload_files WHERE filename LIKE 'cover-quota-%'").get()
+        .n,
+      20,
+    )
+    assert.deepEqual(
+      fs.readdirSync(uploadDir).filter((name) => name.startsWith(prefix)),
+      [],
+      '配额满时不应把新封面先写盘再拒绝',
+    )
+  } finally {
+    for (const filename of quotaFiles) {
+      fs.rmSync(path.join(uploadDir, filename), { force: true })
+      db.prepare('DELETE FROM upload_files WHERE filename = ?').run(filename)
+    }
+    if (uploadedFilename) {
+      fs.rmSync(path.join(uploadDir, uploadedFilename), { force: true })
+      db.prepare('DELETE FROM upload_files WHERE filename = ?').run(uploadedFilename)
+    }
+  }
+})
+
 test('HMAC 令牌绑定文件名和过期时间，过期边界拒绝', () => {
   const signed = signUploadUrl(PRIVATE)
   const { expires, signature } = tokenParts(PRIVATE)
@@ -301,19 +340,25 @@ test('公开引用查询走文件名索引，不退回全表扫描', () => {
 })
 
 test('私有直链、缺签名、缺过期时间与过期签名一律 401', async () => {
-  const { expires, signature } = tokenParts(PRIVATE)
-  const expired = tokenParts(PRIVATE, 0)
-  const queries = [
-    '',
-    `?expires=${expires}`,
-    `?signature=${signature}`,
-    `?expires=${expired.expires}&signature=${expired.signature}`,
-  ]
-  for (const query of queries) {
-    const { res, body } = await getUpload(PRIVATE, query)
-    assert.strictEqual(res.status, 401, `query=${query}`)
-    assert.strictEqual(body.success, false)
-    assert.strictEqual(body.error.code, 'UNAUTHORIZED')
+  const originalNow = nowSeconds
+  try {
+    const { expires, signature } = tokenParts(PRIVATE)
+    nowSeconds += 2
+    const expired = tokenParts(PRIVATE, 0)
+    const queries = [
+      '',
+      `?expires=${expires}`,
+      `?signature=${signature}`,
+      `?expires=${expired.expires}&signature=${expired.signature}`,
+    ]
+    for (const query of queries) {
+      const { res, body } = await getUpload(PRIVATE, query)
+      assert.strictEqual(res.status, 401, `query=${query}`)
+      assert.strictEqual(body.success, false)
+      assert.strictEqual(body.error.code, 'UNAUTHORIZED')
+    }
+  } finally {
+    nowSeconds = originalNow
   }
 })
 

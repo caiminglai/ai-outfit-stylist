@@ -31,6 +31,32 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 
+describe('AccountEntry 模态焦点', () => {
+  it('打开聚焦、Tab 双向困在模态、Escape 关闭并恢复触发焦点', () => {
+    api.getAccount.mockReturnValue(null)
+    render(<AccountEntry />)
+    const trigger = screen.getByRole('button', { name: /我的账号/ })
+    trigger.focus()
+    fireEvent.click(trigger)
+
+    const dialog = screen.getByRole('dialog', { name: '我的账号' })
+    const close = screen.getByRole('button', { name: '关闭' })
+    expect(document.activeElement).toBe(close)
+    expect(dialog.getAttribute('aria-modal')).toBe('true')
+
+    const password = screen.getByPlaceholderText('密码')
+    password.focus()
+    fireEvent.keyDown(document, { key: 'Tab' })
+    expect(document.activeElement).toBe(close)
+    fireEvent.keyDown(document, { key: 'Tab', shiftKey: true })
+    expect(document.activeElement).toBe(password)
+
+    fireEvent.keyDown(document, { key: 'Escape' })
+    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(document.activeElement).toBe(trigger)
+  })
+})
+
 describe('AccountEntry 认证失效', () => {
   it('收到受保护请求的 401 事件后退出旧账号并打开重新登录面板', () => {
     render(<AccountEntry />)
@@ -135,8 +161,12 @@ describe('AccountEntry 删除档案', () => {
           records: number
           tryon: number
           photos: number
+          item_feedback: number
           files: number
           files_failed: number
+          files_shared: number
+          paid_reports_retained: number
+          report_basis_retained: number
         }) => void)
       | undefined
     api.deleteProfileArchive.mockImplementation(
@@ -157,7 +187,11 @@ describe('AccountEntry 删除档案', () => {
     fireEvent.click(screen.getByRole('button', { name: /已登录/ }))
     fireEvent.click(screen.getByRole('button', { name: '删除我的形象档案与记录' }))
 
+    expect(window.confirm).toHaveBeenCalledWith(
+      expect.stringMatching(/支付凭证.*已付费报告.*其他记录仍在引用/),
+    )
     expect(api.deleteProfileArchive).toHaveBeenCalledTimes(1)
+    expect(api.deleteProfileArchive).toHaveBeenCalledWith()
     expect(onArchiveDeleteStart).toHaveBeenCalledTimes(1)
     expect(onArchiveDeleteStart.mock.invocationCallOrder[0]).toBeLessThan(
       api.deleteProfileArchive.mock.invocationCallOrder[0],
@@ -175,11 +209,20 @@ describe('AccountEntry 删除档案', () => {
         records: 0,
         tryon: 0,
         photos: 0,
-        files: 0,
-        files_failed: 0,
+        item_feedback: 2,
+        files: 2,
+        files_failed: 1,
+        files_shared: 3,
+        paid_reports_retained: 4,
+        report_basis_retained: 5,
       })
       await Promise.resolve()
     })
     expect(onArchiveCleared).toHaveBeenCalledTimes(1)
+    expect(toast.success).toHaveBeenCalledWith(
+      expect.stringMatching(
+        /照片 0 张.*衣物评分 2 条.*清掉 2 个文件.*3 个文件仍被其他记录引用.*4 份已付费报告.*1 个文件没删掉/,
+      ),
+    )
   })
 })

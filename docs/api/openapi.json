@@ -9,10 +9,6 @@
     {
       "url": "http://127.0.0.1:5000",
       "description": "本机（Docker style-ai-local 或 node server.js）"
-    },
-    {
-      "url": "https://style.sparklove.cn",
-      "description": "线上（Caddy 反代，⚠️ 需他确认域名）"
     }
   ],
   "tags": [
@@ -1035,16 +1031,6 @@
         ],
         "x-fields-confidence": "heuristic",
         "responses": {
-          "200": {
-            "description": "成功，统一信封 `{success:true,data}`",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Success"
-                }
-              }
-            }
-          },
           "401": {
             "description": "缺凭证或凭证无效",
             "content": {
@@ -1066,7 +1052,7 @@
             }
           },
           "501": {
-            "description": "错误 501",
+            "description": "功能尚未开放（不是成功响应）",
             "content": {
               "application/json": {
                 "schema": {
@@ -1466,8 +1452,8 @@
         "tags": [
           "analysis"
         ],
-        "summary": "删除我的全部数据：档案 + 草稿 + 标签 + 反馈 + 样本 + 照片 + 试穿结果 + 衣橱/化妆柜/配饰柜/搭配/心愿单 + 创作者作品 + 脸型特征 + 衣物条目（含磁盘文件），一并清掉。 唯独不动 deposits / payme",
-        "description": "删除我的全部数据：档案 + 草稿 + 标签 + 反馈 + 样本 + 照片 + 试穿结果 + 衣橱/化妆柜/配饰柜/搭配/心愿单 + 创作者作品 + 脸型特征 + 衣物条目（含磁盘文件），一并清掉。 唯独不动 deposits / payment_orders：那是收付款凭证，出纠纷时要靠它对账，不归\"清除个人数据\"管。 /",
+        "summary": "可选 query.session_id 已停用：门店会话没有账号所有权绑定，不能凭一个高熵号码代删。 门店数据请由持有该会话号的用户走 DELETE /api/customer/session/:sessionId；账号入口只删服务端认证身",
+        "description": "可选 query.session_id 已停用：门店会话没有账号所有权绑定，不能凭一个高熵号码代删。 门店数据请由持有该会话号的用户走 DELETE /api/customer/session/:sessionId；账号入口只删服务端认证身份的数据。 业务提交后文件清理部分失败返回 207（success=true）。 唯独不动 deposits / payment_orders：那是收付款凭证，",
         "operationId": "delete__api_analysis_archive",
         "security": [
           {
@@ -1486,8 +1472,38 @@
               }
             }
           },
+          "207": {
+            "description": "业务记录已删除，但部分上传文件或所有权台账清理失败；success=true，可按 files_failed 重试",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Success"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "错误 400",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
           "401": {
             "description": "缺凭证或凭证无效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "账号删档不能代删门店会话；请由门店会话持有者在门店报告页单独删除",
             "content": {
               "application/json": {
                 "schema": {
@@ -2247,12 +2263,30 @@
           }
         },
         "requestBody": {
-          "required": false,
+          "required": true,
           "content": {
             "multipart/form-data": {
               "schema": {
                 "type": "object",
-                "properties": {}
+                "required": [
+                  "person_image",
+                  "garment_image"
+                ],
+                "properties": {
+                  "person_image": {
+                    "type": "string",
+                    "format": "binary"
+                  },
+                  "garment_image": {
+                    "type": "string",
+                    "format": "binary"
+                  },
+                  "category": {
+                    "type": "string",
+                    "maxLength": 40,
+                    "default": "top"
+                  }
+                }
               }
             }
           }
@@ -2279,16 +2313,6 @@
         ],
         "x-fields-confidence": "heuristic",
         "responses": {
-          "200": {
-            "description": "成功，统一信封 `{success:true,data}`",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Success"
-                }
-              }
-            }
-          },
           "401": {
             "description": "缺凭证或凭证无效",
             "content": {
@@ -2310,7 +2334,7 @@
             }
           },
           "501": {
-            "description": "错误 501",
+            "description": "功能尚未开放（不是成功响应）",
             "content": {
               "application/json": {
                 "schema": {

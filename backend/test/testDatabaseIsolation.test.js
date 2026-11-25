@@ -37,7 +37,7 @@ function makeSandbox(t, probeSource, options = {}) {
   fs.writeFileSync(path.join(testDir, 'isolation-probe.test.js'), probeSource)
 
   // 本机模型资产不应改变测试库内容；放一个假 PMX 让扫描分支无所遁形。
-  const modelDir = path.join(root, 'models', 'demo')
+  const modelDir = path.join(root, 'models', 'fixture')
   fs.mkdirSync(modelDir, { recursive: true })
   fs.writeFileSync(path.join(modelDir, 'demo.pmx'), 'test fixture')
 

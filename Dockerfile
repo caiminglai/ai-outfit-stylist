@@ -36,10 +36,6 @@ COPY --from=frontend-builder /app-frontend/dist ./dist
 # server.js 的 /gallery 路由读的是 /app/public/model-gallery.html，不在 dist 里
 COPY --from=frontend-builder /app-frontend/public/model-gallery.html ./public/model-gallery.html
 
-# 只复制项目自产的 CC0 演示模型；第三方本机模型由 .dockerignore 排除。
-COPY models/demo/ /models/demo/
-COPY scripts/generate-demo-model.cjs ./scripts/generate-demo-model.cjs
-
 ENV NODE_ENV=production
 ENV PORT=5000
 ENV HOST=0.0.0.0

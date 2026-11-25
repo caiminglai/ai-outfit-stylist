@@ -37,24 +37,3 @@ export interface InventoryProduct {
   season_tags?: string[]
   description?: string
 }
-
-/** 风格诊断题目 */
-export interface StyleOption {
-  text: string
-  scores: Record<string, number>
-}
-
-export interface StyleQuestion {
-  id: string
-  question: string
-  options: StyleOption[]
-}
-
-export interface StyleDiagnosisResult {
-  primary: string
-  primary_name: string
-  secondary: string | null
-  secondary_name: string | null
-  scores: Record<string, number>
-  desc: string
-}

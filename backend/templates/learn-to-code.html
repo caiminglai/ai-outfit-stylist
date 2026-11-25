@@ -1013,10 +1013,10 @@ tail -6 E:/website/files/learn-l6-test.log</code></pre>
             <tr>
               <td>③ 容器 5000</td>
               <td>
-                <code>docker compose -f E:/website/compose/docker-compose.yml up -d style-ai</code>
+                <code>docker compose up -d --build app</code>
               </td>
-              <td>挂载进去的 <code>backend/db</code></td>
-              <td>日常访问、也是现在你看到的这个 5000。</td>
+              <td>命名卷 <code>/data/db</code> 与 <code>/data/uploads</code></td>
+              <td>容器冒烟与本地验证；默认端口 127.0.0.1:5000。</td>
             </tr>
           </table>
           <p>
@@ -1026,10 +1026,13 @@ tail -6 E:/website/files/learn-l6-test.log</code></pre>
             <code>STYLEAI_DB_PATH</code> 指过去时，如果那个文件不存在，服务会当场建一个空库给你（不是坏消息，但你会以为数据丢了，别慌：那只是个新文件）。
           </p>
 
-          <h3>容器只挂了四个目录，这是本课最要紧的一条</h3>
+          <h3>仓内 Compose 只挂运行数据与空模型卷，这是本课最要紧的一条</h3>
           <p>
-            看 <span class="ext">E:/website/compose/docker-compose.yml:29-42</span>：<code>backend/db</code>、<code>backend/uploads</code>、<code>models</code>、<code>.env</code>，加上两个证书目录。
-            就这些。也就是说：
+            看 <span class="loc">compose.yaml:20-25</span>：<code>db_data</code> 映射到
+            <code>/data/db</code>，<code>upload_data</code> 映射到 <code>/data/uploads</code>，
+            <code>model_data</code> 以只读方式映射到 <code>/models</code>，初始为空。
+            仓内这份只启动 <code>app</code> 一个服务；本机那套含 Caddy 的多容器部署配置仍在仓外
+            <span class="ext">E:/website/compose/docker-compose.yml</span>，两者不要混用。也就是说：
           </p>
           <ul>
             <li>
@@ -1040,8 +1043,8 @@ tail -6 E:/website/files/learn-l6-test.log</code></pre>
             </li>
             <li>
               所以：改了后台页面、模板、后端路由 ⇒ 必须
-              <code>docker compose -f E:/website/compose/docker-compose.yml build style-ai</code> 再
-              <code>up -d style-ai</code>。改数据库内容不用（那是挂载的）。
+              <code>docker compose build app</code> 再
+              <code>docker compose up -d app</code>。改数据库内容不用（那是命名卷里的）。
             </li>
             <li>
               这条正好解释了你今天可能撞上的事：这份教材是 5000
@@ -1050,10 +1053,10 @@ tail -6 E:/website/files/learn-l6-test.log</code></pre>
           </ul>
 
           <h3>现在就做：先看，不动（10 分钟）</h3>
-          <pre><button class="cp">复制</button><code>docker compose -f E:/website/compose/docker-compose.yml ps
-docker compose -f E:/website/compose/docker-compose.yml logs --tail 20 style-ai</code></pre>
+          <pre><button class="cp">复制</button><code>docker compose ps
+docker compose logs --tail 20 app</code></pre>
           <p>
-            第一条列出五个容器（<code>style-ai-local</code> 在跑、端口 127.0.0.1:5000）；第二条读最近
+            第一条列出仓内 Compose 的服务（只有 <code>app</code>，端口 127.0.0.1:5000）；第二条读最近
             20 行日志——<b>以后你排任何后端问题，第一件事就是看日志，不是猜。</b>
           </p>
 
@@ -1063,7 +1066,7 @@ docker compose -f E:/website/compose/docker-compose.yml logs --tail 20 style-ai<
           >
           <label class="chk"
             ><input type="checkbox" data-k="L7b" />跑过 <code>docker compose ps</code>
-            与 <code>logs --tail 20 style-ai</code>，并从日志里认出至少一行</label
+            与 <code>docker compose logs --tail 20 app</code>，并从日志里认出至少一行</label
           >
           <label class="chk"
             ><input type="checkbox" data-k="L7c" />能解释为什么改了 templates 里的页面，5000

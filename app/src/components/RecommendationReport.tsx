@@ -33,6 +33,7 @@ export default function RecommendationReport({
   onBack,
   synced,
   syncing,
+  submitting = false,
   compact,
   weatherCity,
   weatherSource,
@@ -93,7 +94,8 @@ export default function RecommendationReport({
     if (feedbackBusy !== 0) return
     setFeedbackBusy(groupId)
     setFeedbackError('')
-    const st = stars ?? myStars[groupId] ?? {}
+    const previousStars = myStars[groupId] ?? {}
+    const st = stars ?? previousStars
     const extras: Parameters<typeof postRuleFeedback>[3] = { rank: item.rank ?? null }
     // 没碰过的星不给键（undefined＝这次不动这一格），碰过的连"改成空"一起送
     if ('aesthetic' in st) extras.aesthetic_score = st.aesthetic ?? null
@@ -114,6 +116,9 @@ export default function RecommendationReport({
         },
       }))
     } catch (err) {
+      if (stars) {
+        setMyStars((prev) => ({ ...prev, [groupId]: previousStars }))
+      }
       setFeedbackError(err instanceof Error ? err.message : '反馈没存上，再点一次')
     } finally {
       setFeedbackBusy(0)
@@ -252,7 +257,8 @@ export default function RecommendationReport({
     if (itemBusy !== 0) return
     setItemBusy(itemId)
     setFeedbackError('')
-    const next = { ...(itemStars[itemId] || {}), [kind]: value }
+    const previousStars = itemStars[itemId] ?? {}
+    const next = { ...previousStars, [kind]: value }
     setItemStars((prev) => ({ ...prev, [itemId]: next }))
     const extras: Parameters<typeof postItemFeedback>[1] = { rank: item.rank ?? null }
     if ('aesthetic' in next) extras.aesthetic_score = next.aesthetic ?? null
@@ -265,6 +271,7 @@ export default function RecommendationReport({
       }))
       setItemSaved((prev) => ({ ...prev, [itemId]: true }))
     } catch (err) {
+      setItemStars((prev) => ({ ...prev, [itemId]: previousStars }))
       setFeedbackError(err instanceof Error ? err.message : '这件的分没存上，再点一次')
     } finally {
       setItemBusy(0)
@@ -331,7 +338,11 @@ export default function RecommendationReport({
       />
       {city && onRegenerate && (
         <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
-          <button onClick={onRegenerate} className="ghost-btn text-xs px-2 py-1">
+          <button
+            onClick={onRegenerate}
+            disabled={submitting}
+            className="ghost-btn text-xs px-2 py-1"
+          >
             按「{city}」今天的天气重算这份穿搭
           </button>
           <span style={{ color: 'var(--muted)' }}>

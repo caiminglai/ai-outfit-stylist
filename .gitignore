@@ -20,8 +20,9 @@ app/dist/
 !backend/db/styleai.db
 *.bak
 *.bak.*
+backend/db/*.backup-*
 
-# backend/db/styleai.db 不是运行库：只含规则、库存分类和 PortfolioBot 演示登记。
+# backend/db/styleai.db 不是运行库：只含规则和库存分类，不登记人物模型。
 # 本地开发、测试和部署必须用 STYLEAI_DB_PATH 指向独立运行库；测试库在系统临时目录重建。
 # 更新公开快照用 node backend/scripts/generate-demo-db.js --replace，随后必须 --check。
 
@@ -35,13 +36,9 @@ backend/scripts/scan-report.json
 *.log
 backend/logs/
 
-# 模型文件(体积大,不纳入 git,本地存放即可；仅放行项目自产 CC0 演示资产)
+# 模型文件(体积大,不纳入 git,本地存放即可)
 models/*
 !models/.gitkeep
-!models/demo/
-models/demo/*
-!models/demo/PortfolioBot.pmx
-!models/demo/LICENSE.md
 
 # 构建产物日志
 build-out.log

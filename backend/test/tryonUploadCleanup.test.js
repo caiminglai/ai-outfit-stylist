@@ -23,6 +23,8 @@ require.cache[initPath] = { id: initPath, filename: initPath, loaded: true, expo
 
 const dashscope = require('../services/dashscopeService')
 const realVirtualTryon = dashscope.virtualTryon
+const { verifyUploadToken } = require('../utils/uploads')
+const realFetch = globalThis.fetch
 const express = require('express')
 const tryonRoutes = require('../routes/tryon')
 
@@ -44,6 +46,7 @@ before(async () => {
   dashscope.virtualTryon = async (personUrl) => personUrl
 
   const app = express()
+  app.set('trust proxy', 1)
   app.use('/api/tryon', tryonRoutes)
   app.use((err, _req, res, _next) => {
     res.status(err.status || 500).json({ success: false, error: { message: err.message } })
@@ -74,12 +77,12 @@ function uploadNames() {
   return fs.readdirSync(uploadDir).sort()
 }
 
-async function directTryon(sessionId) {
+async function directTryon(sessionId, extraHeaders = {}) {
   const form = new FormData()
   form.append('person_image', new Blob([PNG], { type: 'image/png' }), 'person.png')
   form.append('garment_image', new Blob([PNG], { type: 'image/png' }), 'garment.png')
   form.append('category', 'top')
-  const headers = sessionId ? { 'x-session-id': sessionId } : {}
+  const headers = { ...(sessionId ? { 'x-session-id': sessionId } : {}), ...extraHeaders }
   const res = await fetch(`${base}/api/tryon/direct`, { method: 'POST', headers, body: form })
   return { status: res.status, body: await res.json() }
 }
@@ -156,5 +159,94 @@ test('第二张图写盘失败返回 500 并清理第一张已写文件', async 
     assert.equal(db.prepare('SELECT COUNT(*) AS n FROM upload_files').get().n, 0)
   } finally {
     fs.writeFileSync = realWriteFileSync
+  }
+})
+
+test('真实提交忽略 Host/X-Forwarded-Host，使用配置的 www 绝对签名 URL', async () => {
+  const saved = {
+    apiKey: process.env.DASHSCOPE_API_KEY,
+    publicBaseUrl: process.env.PUBLIC_BASE_URL,
+    nodeEnv: process.env.NODE_ENV,
+  }
+  dashscope.virtualTryon = realVirtualTryon
+  process.env.DASHSCOPE_API_KEY = 'sk-offline-route-test'
+  process.env.PUBLIC_BASE_URL = 'https://www.public.test/'
+  process.env.NODE_ENV = 'production'
+  let submitted
+  globalThis.fetch = async (url, options) => {
+    if (!url.startsWith('https://dashscope.aliyuncs.com/')) return realFetch(url, options)
+    submitted = JSON.parse(options.body).input
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({ output: { results: [{ url: 'https://provider.test/result.png' }] } }),
+    }
+  }
+  try {
+    const result = await directTryon(SESSION, {
+      host: 'attacker.test',
+      'x-forwarded-host': 'attacker.test',
+      'x-forwarded-for': '203.0.113.10',
+    })
+    assert.equal(result.status, 200, JSON.stringify(result.body))
+    for (const [field, filename] of [
+      ['person_image_url', path.basename(result.body.data.person_image)],
+      ['garment_image_url', path.basename(result.body.data.garment_image)],
+    ]) {
+      const url = new URL(submitted[field])
+      assert.equal(url.origin, 'https://www.public.test')
+      assert.equal(url.pathname, `/uploads/${filename}`)
+      assert.ok(
+        verifyUploadToken(
+          filename,
+          `${url.searchParams.get('expires')}.${url.searchParams.get('signature')}`,
+        ),
+      )
+    }
+  } finally {
+    globalThis.fetch = realFetch
+    dashscope.virtualTryon = async (personUrl) => personUrl
+    for (const [key, value] of [
+      ['DASHSCOPE_API_KEY', saved.apiKey],
+      ['PUBLIC_BASE_URL', saved.publicBaseUrl],
+      ['NODE_ENV', saved.nodeEnv],
+    ]) {
+      if (value === undefined) delete process.env[key]
+      else process.env[key] = value
+    }
+  }
+})
+
+test('真实提交缺少公网配置返回 503，不联网、不降级、不落盘落库', async () => {
+  const saved = {
+    apiKey: process.env.DASHSCOPE_API_KEY,
+    publicBaseUrl: process.env.PUBLIC_BASE_URL,
+  }
+  dashscope.virtualTryon = realVirtualTryon
+  process.env.DASHSCOPE_API_KEY = 'sk-offline-route-test'
+  delete process.env.PUBLIC_BASE_URL
+  let calls = 0
+  globalThis.fetch = async (url, options) => {
+    if (!url.startsWith('https://dashscope.aliyuncs.com/')) return realFetch(url, options)
+    calls += 1
+    throw new Error('配置缺失时绝不允许联网')
+  }
+  try {
+    const result = await directTryon(SESSION, { 'x-forwarded-for': '203.0.113.11' })
+    assert.equal(result.status, 503, JSON.stringify(result.body))
+    assert.equal(result.body.error.code, 'TRYON_PUBLIC_URL_UNAVAILABLE')
+    assert.match(result.body.error.message, /PUBLIC_BASE_URL/)
+    assert.equal(calls, 0)
+    assert.deepEqual(uploadNames(), [])
+    assert.equal(db.prepare('SELECT COUNT(*) AS n FROM photos').get().n, 0)
+    assert.equal(db.prepare('SELECT COUNT(*) AS n FROM tryon_results').get().n, 0)
+    assert.equal(db.prepare('SELECT COUNT(*) AS n FROM upload_files').get().n, 0)
+  } finally {
+    globalThis.fetch = realFetch
+    dashscope.virtualTryon = async (personUrl) => personUrl
+    for (const [key, value] of Object.entries(saved)) {
+      if (value === undefined) delete process.env[key]
+      else process.env[key] = value
+    }
   }
 })

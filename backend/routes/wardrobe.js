@@ -26,6 +26,7 @@ const {
   firstBadScalar,
   asId,
   projectWardrobeForEngine,
+  MAX_WARDROBE_ITEMS,
 } = require('../utils/common')
 const { gateBody } = require('../middleware/bodyGate')
 // 个人推荐那条排序口要认当前用户：只准用 getCurrentUser（读），⛔ 不用 optionalUser（会给游客建档）
@@ -677,6 +678,9 @@ router.post(
       }
 
       const profileWithWardrobe = { ...profile, wardrobe_items: wardrobeItems }
+      if (wardrobeItems.length > MAX_WARDROBE_ITEMS) {
+        return sendError(res, `wardrobe_items 最多 ${MAX_WARDROBE_ITEMS} 件`, 400)
+      }
 
       // 调用规则引擎（personal 模式）
       // 第四参数＝这个人的身份，只用来现算隐性偏好乘子（穿搭日记 → ±5%，日记 0 条时恰好是 1）。

@@ -76,14 +76,11 @@ const MERGE_BY_USER_UNIQUE = [
   ['face_profiles', null],
   ['profile_tags', 'tag_key'],
   ['feedback_events', 'group_id'],
-  // 表单草稿每人一行(user_id 主键)。不并则:过户后账号读 GET /archive 看不到游客期攒的草稿,
-  // 且这条外键挡住游客行删除,库里留下一个谁也不并的僵尸身份
-  ['profile_drafts', null],
 ]
 
 // 这些表把 session_id 当归属键。users.session_id 轮换时必须在同一事务里迁移，
 // 否则新 session 登得上，却读不到原衣橱/照片/推荐记录。
-// item_feedback 只改 session_id；actor_key 是打分时的身份快照，必须原样保留。
+// item_feedback 同时有 user_id 外键与 session_id；明确的游客→账号合并会同步重写 actor_key。
 const SESSION_OWNED_TABLES = [
   'user_wardrobe',
   'wardrobe_outfits',
@@ -118,13 +115,33 @@ function rotateUserSession(userId, oldSessionId, newSessionId) {
       .run(newSessionId, userId, oldSessionId)
     if (changed.changes !== 1) throw new Error('会话已被其他请求轮换，请重试')
     for (const table of SESSION_OWNED_TABLES) {
-      db.prepare(`UPDATE ${table} SET session_id = ? WHERE session_id = ?`).run(
-        newSessionId,
-        oldSessionId,
-      )
+      if (table === 'item_feedback') {
+        db.prepare(
+          `UPDATE item_feedback SET session_id = ?, user_id = ?
+           WHERE session_id = ? OR user_id = ?`,
+        ).run(newSessionId, userId, oldSessionId, userId)
+      } else {
+        db.prepare(`UPDATE ${table} SET session_id = ? WHERE session_id = ?`).run(
+          newSessionId,
+          oldSessionId,
+        )
+      }
     }
   })
   rotate()
+}
+
+/**
+ * 草稿里的删档墓碑不是普通业务字段：任一侧有墓碑，合并后都必须保留，
+ * 否则历史 recommendation_logs 快照会重新成为预填来源。
+ */
+function isArchiveTombstone(row) {
+  if (!row) return false
+  try {
+    return JSON.parse(row.form_json)?.__archive_deleted__ === true
+  } catch {
+    return false
+  }
 }
 
 /**
@@ -153,7 +170,34 @@ function mergeGuestIntoAccount(guestSessionId, accountUserId, accountSessionId) 
       if (r.changes) moved[table] = r.changes
     }
 
+    // 草稿每人一行，但不能走上面的“账号已有就丢游客”：游客可能刚删过档，
+    // 它的墓碑必须覆盖账号旧草稿；反过来账号已有墓碑时也不能被游客普通草稿解除。
+    const guestDraft = db
+      .prepare('SELECT form_json FROM profile_drafts WHERE user_id = ?')
+      .get(guest.id)
+    const accountDraft = db
+      .prepare('SELECT form_json FROM profile_drafts WHERE user_id = ?')
+      .get(accountUserId)
+    if (guestDraft) {
+      if (!accountDraft) {
+        const r = db
+          .prepare('UPDATE profile_drafts SET user_id = ? WHERE user_id = ?')
+          .run(accountUserId, guest.id)
+        if (r.changes) moved.profile_drafts = r.changes
+      } else {
+        if (isArchiveTombstone(guestDraft) && !isArchiveTombstone(accountDraft)) {
+          db.prepare(
+            `UPDATE profile_drafts SET form_json = ?, updated_at = datetime('now')
+             WHERE user_id = ?`,
+          ).run(guestDraft.form_json, accountUserId)
+          dropped += 1
+        }
+        dropped += db.prepare('DELETE FROM profile_drafts WHERE user_id = ?').run(guest.id).changes
+      }
+    }
+
     for (const [table, hasUserColumn] of MERGE_BY_SESSION) {
+      if (table === 'item_feedback') continue
       const sql = hasUserColumn
         ? `UPDATE ${table} SET session_id = ?, user_id = ? WHERE session_id = ? OR user_id = ?`
         : `UPDATE ${table} SET session_id = ? WHERE session_id = ?`
@@ -162,6 +206,30 @@ function mergeGuestIntoAccount(guestSessionId, accountUserId, accountSessionId) 
         : db.prepare(sql).run(accountSessionId, guestSessionId)
       if (r.changes) moved[table] = r.changes
     }
+
+    // item_feedback 的唯一键是 (actor_key, wardrobe_item_id)。游客与账号合并后，
+    // 必须把唯一身份一并迁到账号，否则列表仍按 u<accountId> 查，游客期评分永远读不回。
+    // 同一件衣服账号已有评分时保留账号那条；游客重复行先删，避免改键撞唯一约束。
+    const accountActor = `u${accountUserId}`
+    dropped += db
+      .prepare(
+        `DELETE FROM item_feedback AS guest
+         WHERE (guest.user_id = ? OR guest.session_id = ?)
+           AND EXISTS (
+             SELECT 1 FROM item_feedback AS account
+             WHERE account.actor_key = ?
+               AND account.wardrobe_item_id = guest.wardrobe_item_id
+               AND (account.user_id = ? OR account.session_id = ?)
+           )`,
+      )
+      .run(guest.id, guestSessionId, accountActor, accountUserId, accountSessionId).changes
+    const feedback = db
+      .prepare(
+        `UPDATE item_feedback SET actor_key = ?, session_id = ?, user_id = ?
+         WHERE session_id = ? OR user_id = ?`,
+      )
+      .run(accountActor, accountSessionId, accountUserId, guestSessionId, guest.id)
+    if (feedback.changes) moved.item_feedback = feedback.changes
 
     for (const table of MERGE_BY_USER) {
       const r = db

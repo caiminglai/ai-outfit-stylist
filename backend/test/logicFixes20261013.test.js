@@ -42,7 +42,7 @@ const Database = require('better-sqlite3')
 
 const memDb = new Database(':memory:')
 memDb.exec(fs.readFileSync(path.join(__dirname, '..', 'db', 'schema.sql'), 'utf-8'))
-// db/init.js:44 在真库上开着外键，替身必须一样开，否则第 4 组断言测的是另一回事
+// db/init.js:49 在真库上开着外键，替身必须一样开，否则第 4 组断言测的是另一回事
 memDb.pragma('foreign_keys = ON')
 const initPath = require.resolve('../db/init')
 require.cache[initPath] = {
@@ -151,7 +151,7 @@ test('topFitBody：r1 后仍小于 25 时条纹修正照常保留', () => {
 })
 
 test('topFitBody：闸门与打分侧对同一批体重的判定不再分叉', () => {
-  // 打分侧 stripeOn = measure.bmi < 25（:529）。逐个体重把两边判据对一遍，
+  // 打分侧 stripeOn = measure.bmi < 25（services/topFit/scoring.js:115）。逐个体重把两边判据对一遍，
   // 改之前 24.95≤原始<25.00 那段两边相反。
   const stripeMax = 25
   for (let w = 68; w <= 78; w += 0.01) {

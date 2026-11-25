@@ -27,6 +27,8 @@ const {
 // 目录名送进来，图标列就会写进一个函数。
 const { ownValue } = require('../utils/common')
 const { backfillUploadOwnership } = require('./backfillUploadOwnership')
+const { collectPaidReportRetention } = require('../services/paidReportSql')
+const { getModelDir } = require('../utils/model-paths')
 
 // 报错与告警一律走 utils/logger。db/ 下的建库与迁移脚本按 eslint 口径允许直接打 stdout
 // （stdout 就是它们的交付物，判据见 backend/eslint.config.js 的 db/** override），
@@ -35,8 +37,10 @@ const { backfillUploadOwnership } = require('./backfillUploadOwnership')
 const { error: logErr, warn: logWarn } = require('../utils/logger')
 
 // 数据库路径唯一出口是 ./paths(在这里再拼一次属于历史遗留,拼错会静默开一个空库)
-const { DB_PATH } = require('./paths')
+const { DB_PATH, assertRuntimeDbPath } = require('./paths')
 const SCHEMA_PATH = path.join(__dirname, 'schema.sql')
+
+assertRuntimeDbPath()
 
 // 打开数据库(同时设置 WAL 模式)
 const db = new Database(DB_PATH)
@@ -290,7 +294,7 @@ function initAdminUser() {
  * 扫描 models 目录,将新发现的 3D 模型自动入库
  */
 function initModelConfigs() {
-  const modelsDir = path.join(__dirname, '..', '..', 'models')
+  const modelsDir = getModelDir()
   if (!fs.existsSync(modelsDir)) {
     console.log('[模型初始化] models 目录不存在,跳过')
     return
@@ -346,7 +350,7 @@ function initModelConfigs() {
  * @returns {{ removedBroken: number, removedMissing: number }}
  */
 function cleanupMissingModels() {
-  const modelsDir = path.join(__dirname, '..', '..', 'models')
+  const modelsDir = getModelDir()
   let removedBroken = 0
   let removedMissing = 0
 
@@ -403,11 +407,34 @@ function cleanupMissingModels() {
  */
 function cleanupExpiredSessions() {
   const now = new Date().toISOString()
-  const result = db
-    .prepare(`DELETE FROM customer_sessions WHERE expires_at < ? AND synced = 0`)
-    .run(now)
-  if (result.changes > 0) {
-    console.log(`[隐私清理] 已删除 ${result.changes} 条过期顾客会话数据`)
+  // 会话与推荐日志必须同一事务清理：只删 customer_sessions 会把 input_snapshot 里的
+  // 身高、三围等画像快照继续留在库里。付费报告永久豁免，避免清掉顾客已购交付物。
+  const result = db.transaction(() => {
+    const sessions = db
+      .prepare(`SELECT session_id FROM customer_sessions WHERE expires_at < ? AND synced = 0`)
+      .all(now)
+    const deleteSession = db.prepare(
+      `DELETE FROM customer_sessions WHERE session_id = ? AND expires_at < ? AND synced = 0`,
+    )
+    let logs = 0
+    let removed = 0
+    for (const { session_id: sessionId } of sessions) {
+      // 报告与 basis_log_id 指向的生成依据必须一起保留；只豁免报告行会让复读依据被清掉。
+      const { retainedList } = collectPaidReportRetention(db, 'session_id = ?', [sessionId])
+      const retainClause = retainedList.length
+        ? ` AND id NOT IN (${retainedList.map(() => '?').join(',')})`
+        : ''
+      logs += db
+        .prepare(`DELETE FROM recommendation_logs WHERE session_id = ?${retainClause}`)
+        .run(sessionId, ...retainedList).changes
+      removed += deleteSession.run(sessionId, now).changes
+    }
+    return { removed, logs }
+  })()
+  if (result.removed > 0) {
+    console.log(
+      `[隐私清理] 已删除 ${result.removed} 条过期顾客会话及 ${result.logs} 条推荐画像快照`,
+    )
   }
 }
 

@@ -34,34 +34,48 @@ export function getCustomerSessionId(): string {
 
 export async function createCustomerSession(
   profileData: CustomerProfile,
+  signal?: AbortSignal,
 ): Promise<CustomerSession> {
   const res = await fetchWithTimeout(`${BASE}/customer/session`, {
     method: 'POST',
     headers: headers(),
     body: JSON.stringify({ profile_data: profileData, store: getStoreName() }),
+    signal,
   })
   const session = await unwrap<CustomerSession>(res)
-  // 记一次门店会话号：只给「我的报告」领取时回指用，见 getCustomerSessionId 注释
-  if (session.session_id) localStorage.setItem(CUSTOMER_SESSION_KEY, session.session_id)
+  // 取消后的迟到响应不能改写当前账号领取报告时使用的会话回指。
+  if (!signal?.aborted && session.session_id) {
+    localStorage.setItem(CUSTOMER_SESSION_KEY, session.session_id)
+  }
   return session
 }
 
 export async function syncCustomerToCloud(
   sessionId: string,
+  signal?: AbortSignal,
 ): Promise<CustomerSession & { synced_at: string }> {
   const res = await fetchWithTimeout(`${BASE}/customer/session/${sessionId}/sync`, {
     method: 'POST',
     headers: headers(),
+    signal,
   })
   return unwrap(res)
 }
 
-export async function deleteCustomerSession(sessionId: string): Promise<{ deleted: boolean }> {
+export async function deleteCustomerSession(sessionId: string): Promise<{
+  deleted: boolean
+  paid_reports_retained: number
+  report_basis_retained: number
+}> {
   const res = await fetchWithTimeout(`${BASE}/customer/session/${sessionId}`, {
     method: 'DELETE',
     headers: headers(),
   })
-  const out = await unwrap<{ deleted: boolean }>(res)
+  const out = await unwrap<{
+    deleted: boolean
+    paid_reports_retained: number
+    report_basis_retained: number
+  }>(res)
   // 这次删的正是一直记着的那个号 ⇒ 回指跟着没，留着只会让领取时查一条已不存在的会话
   if (getCustomerSessionId() === sessionId) localStorage.removeItem(CUSTOMER_SESSION_KEY)
   return out
@@ -70,6 +84,7 @@ export async function deleteCustomerSession(sessionId: string): Promise<{ delete
 export async function getCustomerRecommendation(
   sessionId: string,
   mode: 'store' | 'personal' = 'store',
+  signal?: AbortSignal,
 ): Promise<{
   recommendation: EngineRecommendation
   mode: string
@@ -80,6 +95,7 @@ export async function getCustomerRecommendation(
     method: 'POST',
     headers: headers(),
     body: JSON.stringify({ mode }),
+    signal,
   })
   return unwrap(res)
 }

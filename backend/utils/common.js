@@ -7,6 +7,9 @@ const path = require('path')
 const fs = require('fs')
 const { beijingMonth } = require('./beijingTime')
 
+/** 一次推荐最多组合的衣橱件数；与数据库候选读取上限一致，防止请求体绕过体积闸造成指数组合 */
+const MAX_WARDROBE_ITEMS = 200
+
 /** 生成 UUID v4 */
 function generateUUID() {
   if (crypto.randomUUID) {
@@ -65,6 +68,7 @@ function parsePagination(query) {
 }
 
 module.exports = {
+  MAX_WARDROBE_ITEMS,
   generateUUID,
   UPLOAD_DIR,
   ensureUploadDir,

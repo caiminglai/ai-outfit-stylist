@@ -89,28 +89,61 @@ export default function ExhibitionHall() {
   const [submitError, setSubmitError] = useState('')
 
   const iframeRef = useRef<HTMLIFrameElement>(null)
+  const operationGeneration = useRef(0)
+  const submissionController = useRef<AbortController | null>(null)
+  const syncController = useRef<AbortController | null>(null)
+
+  /** 退出、切账号、重算或删除时统一作废旧请求；代次 additionally 挡住不遵守 signal 的替身/迟到响应。 */
+  const cancelTransientRequests = useCallback(() => {
+    operationGeneration.current += 1
+    submissionController.current?.abort()
+    submissionController.current = null
+    syncController.current?.abort()
+    syncController.current = null
+    setSubmitting(false)
+    setSyncing(false)
+  }, [])
 
   // 提交数据 -> 获取推荐
   const handleSubmit = useCallback(
     async (p: CustomerProfile) => {
+      cancelTransientRequests()
+      const generation = operationGeneration.current
+      const controller = new AbortController()
+      submissionController.current = controller
+      const isCurrent = () =>
+        generation === operationGeneration.current && !controller.signal.aborted
       setSubmitting(true)
       // 每一次提交都重新计：上一屏留下的失败原话不许粘在这一屏上冒充"这次也失败了"（X2）
       setSubmitError('')
       setProfile(p)
       let createdSessionId: string | null = null
+      let reportReady = false
       try {
         if (serviceMode === 'store') {
-          const session = await createCustomerSession(p)
+          const session = await createCustomerSession(p, controller.signal)
           createdSessionId = session.session_id
+          if (!isCurrent()) return
           setSessionId(createdSessionId)
-          const result = await getCustomerRecommendation(createdSessionId, 'store')
+          const result = await getCustomerRecommendation(
+            createdSessionId,
+            'store',
+            controller.signal,
+          )
+          if (!isCurrent()) return
           setRecommendation(result.recommendation)
           setPrivacyNotice(result.privacy_notice || '')
           // 门店那一路走的是 `/customer/session/:id/recommend`（按会话里存的档案重算），
           // 本轮的天气接入只落在 `/engine` 上（§四·1 的入口写死了是它），⛔ 这里不许谎称带了天气
           setWeatherOutcome(null)
         } else {
-          const result = await getEngineRecommendation(p, 'personal', weatherCity || undefined)
+          const result = await getEngineRecommendation(
+            p,
+            'personal',
+            weatherCity || undefined,
+            controller.signal,
+          )
+          if (!isCurrent()) return
           setRecommendation(result.recommendation)
           setPrivacyNotice(result.privacy_notice || '')
           setWeatherOutcome(
@@ -122,25 +155,33 @@ export default function ExhibitionHall() {
           setProfileTags(result.archive?.tags || [])
           setSessionId(getSessionId())
         }
-        setStage('report')
+        if (isCurrent()) {
+          setStage('report')
+          reportReady = true
+        }
       } catch (e: unknown) {
-        // 门店模式:如果第1步成功但第2步失败,清理孤儿 session
-        if (serviceMode === 'store' && createdSessionId) {
+        if (!isCurrent()) return
+        if (serviceMode === 'store') setSessionId(null)
+        if (e instanceof Error && e.name === 'AbortError') return
+        toast.error(e instanceof Error ? e.message : '获取推荐失败')
+        setSubmitError(e instanceof Error ? e.message : '获取推荐失败')
+      } finally {
+        // 已创建但没形成报告的会话必须收尾；取消/晚到响应也不能留下孤儿。
+        if (serviceMode === 'store' && createdSessionId && !reportReady) {
           try {
             await deleteCustomerSession(createdSessionId)
           } catch {
             /* 静默清理 */
           }
-          setSessionId(null)
         }
-        toast.error(e instanceof Error ? e.message : '获取推荐失败')
-        setSubmitError(e instanceof Error ? e.message : '获取推荐失败')
-      } finally {
-        setSubmitting(false)
+        if (generation === operationGeneration.current) {
+          submissionController.current = null
+          setSubmitting(false)
+        }
       }
     },
     // 城市变了必须重算：`weatherCity` 不在依赖里的话，这一屏选了城市点"重算"还是拿旧的那份算（§四·1）
-    [serviceMode, weatherCity],
+    [serviceMode, weatherCity, cancelTransientRequests],
   )
 
   // 预填:在"选择模式"那一屏就把档案读回来.两个表单组件都只在挂载那一刻读一次 initial,
@@ -165,13 +206,6 @@ export default function ExhibitionHall() {
         /* 档案读取失败不影响正常填写 */
       })
   }, [stage, accountSession])
-
-  useEffect(
-    () => () => {
-      archiveReadGeneration.current += 1
-    },
-    [],
-  )
 
   // 草稿自动保存:填了一半没点生成也替他记住.游客没有账号可挂,直接不存
   const draftTimer = useRef<number | null>(null)
@@ -207,22 +241,41 @@ export default function ExhibitionHall() {
     [cancelDraft],
   )
 
-  // 卸载时收掉防抖定时器并取消在途保存，避免旧表单在离开后继续覆盖档案。
-  useEffect(() => cancelDraft, [cancelDraft])
+  // 卸载时收掉防抖定时器并取消在途保存/推荐/同步，避免旧表单在离开后继续覆盖档案。
+  useEffect(
+    () => () => {
+      archiveReadGeneration.current += 1
+      operationGeneration.current += 1
+      submissionController.current?.abort()
+      syncController.current?.abort()
+      cancelDraft()
+    },
+    [cancelDraft],
+  )
 
   const handleSync = useCallback(async () => {
     if (!sessionId) return
+    cancelTransientRequests()
+    const generation = operationGeneration.current
+    const controller = new AbortController()
+    syncController.current = controller
+    const isCurrent = () => generation === operationGeneration.current && !controller.signal.aborted
     setSyncing(true)
     try {
-      await syncCustomerToCloud(sessionId)
+      await syncCustomerToCloud(sessionId, controller.signal)
+      if (!isCurrent()) return
       setSynced(true)
       toast.success('数据已同步到门店')
     } catch (e: unknown) {
+      if (!isCurrent() || (e instanceof Error && e.name === 'AbortError')) return
       toast.error(e instanceof Error ? e.message : '同步失败')
     } finally {
-      setSyncing(false)
+      if (generation === operationGeneration.current) {
+        syncController.current = null
+        setSyncing(false)
+      }
     }
-  }, [sessionId])
+  }, [sessionId, cancelTransientRequests])
 
   /**
    * 清掉内存里那三份"预填/展示用的档案"。
@@ -235,65 +288,112 @@ export default function ExhibitionHall() {
     setProfileTags([])
   }, [])
 
-  /** 档案已删除或账号已切换时，旧草稿都不能继续写。 */
+  /** 档案已删除或账号已切换时，旧草稿、推荐、会话和预填都不能继续留。 */
   const handleArchiveCleared = useCallback(() => {
     archiveReadGeneration.current += 1
+    cancelTransientRequests()
     cancelDraft()
     clearArchiveMemory()
-  }, [cancelDraft, clearArchiveMemory])
+    setProfile(null)
+    setSessionId(null)
+    setRecommendation(null)
+    setWeatherCity(null)
+    setWeatherOutcome(null)
+    setPrivacyNotice('')
+    setSubmitError('')
+    setSynced(false)
+    setReportTab('recommendation')
+    setMobilePanel('service')
+    // 只重置服务状态，不碰账号面板：删除成功仍要保留登录入口。
+    setStage('mode-select')
+  }, [cancelDraft, cancelTransientRequests, clearArchiveMemory])
 
   useEffect(() => {
     const onAccountChange = (event: Event) => {
       const { account } = (event as CustomEvent<{ account: { sessionId: string } | null }>).detail
       archiveReadGeneration.current += 1
-      setAccountSession(account?.sessionId || null)
+      cancelTransientRequests()
       cancelDraft()
       clearArchiveMemory()
+      setAccountSession(account?.sessionId || null)
+      setProfile(null)
+      setSessionId(null)
+      setRecommendation(null)
+      setWeatherCity(null)
+      setWeatherOutcome(null)
+      setPrivacyNotice('')
+      setSubmitError('')
+      setSynced(false)
+      setReportTab('recommendation')
+      setMobilePanel('service')
+      // 退出登录和认证失效也必须保留账号入口，否则服务面板随 standby 一起卸载，
+      // 游客刚退出就看不到“我的账号”，认证失效时刚打开的登录框也会被立刻销毁。
+      setStage('mode-select')
     }
     window.addEventListener(ACCOUNT_CHANGE_EVENT, onAccountChange)
     return () => window.removeEventListener(ACCOUNT_CHANGE_EVENT, onAccountChange)
-  }, [cancelDraft, clearArchiveMemory])
+  }, [cancelDraft, cancelTransientRequests, clearArchiveMemory])
 
   const resetToStandby = useCallback(() => {
+    cancelTransientRequests()
     setStage('standby')
     setProfile(null)
     setSessionId(null)
     setRecommendation(null)
+    setWeatherCity(null)
+    setWeatherOutcome(null)
+    setPrivacyNotice('')
+    setSubmitError('')
     // 预填源必须一起清：档案/会话数据删掉之后 archiveProfile 还留在内存里，
     // 两个表单的 `initial={profile || archiveProfile}` 会继续把刚删掉的身体数据填回去
     // （不刷新页面就一直如此，用户看到"已删除"却还能再存一遍）
     clearArchiveMemory()
     setSynced(false)
     setReportTab('recommendation')
-  }, [clearArchiveMemory])
+  }, [clearArchiveMemory, cancelTransientRequests])
 
   const handleDelete = useCallback(async () => {
     if (!sessionId) return
-    // 删除一开始就废掉旧草稿，不能等 DELETE 回来；否则等待期间的定时器会先把刚删的数据写回去。
+    // 删除一开始就废掉旧草稿和旧请求，不能等 DELETE 回来；否则等待期间的定时器会先把刚删的数据写回去。
     cancelDraft()
+    cancelTransientRequests()
     try {
-      await deleteCustomerSession(sessionId)
-      toast.success('您的数据已删除')
+      const { paid_reports_retained, report_basis_retained } =
+        await deleteCustomerSession(sessionId)
+      const retained = []
+      if (paid_reports_retained > 0) retained.push(`${paid_reports_retained} 份已付费报告`)
+      if (report_basis_retained > 0) retained.push(`${report_basis_retained} 条复读依据`)
+      toast.success(
+        `门店会话与免费记录已删除${
+          retained.length ? `；为保障已购权益，保留了 ${retained.join('及 ')}` : ''
+        }`,
+      )
       resetToStandby()
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : '删除失败')
     }
-  }, [sessionId, resetToStandby, cancelDraft])
+  }, [sessionId, resetToStandby, cancelDraft, cancelTransientRequests])
 
   const handleBack = useCallback(() => {
+    cancelTransientRequests()
     setStage('form')
     setRecommendation(null)
-  }, [])
+  }, [cancelTransientRequests])
 
   const startService = useCallback(() => {
+    cancelTransientRequests()
     setStage('mode-select')
     setMobilePanel('service')
-  }, [])
+  }, [cancelTransientRequests])
 
-  const selectMode = useCallback((mode: ServiceMode) => {
-    setServiceMode(mode)
-    setStage('form')
-  }, [])
+  const selectMode = useCallback(
+    (mode: ServiceMode) => {
+      cancelTransientRequests()
+      setServiceMode(mode)
+      setStage('form')
+    },
+    [cancelTransientRequests],
+  )
 
   useEffect(() => {
     const handler = (e: MessageEvent) => {
@@ -431,11 +531,14 @@ export default function ExhibitionHall() {
         </div>
         <div className="flex-1 relative overflow-hidden">
           <div
+            aria-hidden={mobilePanel !== 'model'}
+            inert={mobilePanel !== 'model'}
             className={`absolute inset-0 transition-opacity duration-300 ${mobilePanel === 'model' ? 'opacity-100 z-10' : 'opacity-0 z-0 pointer-events-none'}`}
           >
             <ModelViewer iframeRef={iframeRef} onLoad={handleIframeLoad} />
             <button
-              onClick={() => setStage('standby')}
+              onClick={resetToStandby}
+              aria-label="退出展厅"
               className="absolute top-3 left-3 z-10 w-9 h-9 rounded-full flex items-center justify-center text-lg ghost-btn"
               style={{ background: 'rgba(13,17,23,0.8)', backdropFilter: 'blur(12px)' }}
             >
@@ -443,6 +546,8 @@ export default function ExhibitionHall() {
             </button>
           </div>
           <div
+            aria-hidden={mobilePanel !== 'service'}
+            inert={mobilePanel !== 'service'}
             className={`absolute inset-0 transition-opacity duration-300 ${mobilePanel === 'service' ? 'opacity-100 z-10 overflow-y-auto' : 'opacity-0 z-0 pointer-events-none'}`}
             style={{ background: 'var(--panel)' }}
           >
@@ -498,7 +603,8 @@ export default function ExhibitionHall() {
       >
         <ModelViewer iframeRef={iframeRef} onLoad={handleIframeLoad} />
         <button
-          onClick={() => setStage('standby')}
+          onClick={resetToStandby}
+          aria-label="退出展厅"
           className="absolute top-3 left-3 z-10 w-9 h-9 rounded-full flex items-center justify-center text-lg ghost-btn"
           style={{ background: 'rgba(13,17,23,0.8)', backdropFilter: 'blur(12px)' }}
         >
