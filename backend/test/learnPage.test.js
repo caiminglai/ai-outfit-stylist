@@ -234,7 +234,8 @@ test('ext 锚点只判形状：一律 E:/website/ 开头，⛔ 不判在不在�
   const bad = list.filter((a) => !splitRef(a)[0].startsWith('E:/website/'))
   assert.deepStrictEqual(bad, [], '这些 ext 不是仓外路径的写法：\n  ' + bad.join('\n  '))
   // 附录 C 承诺过的那些手册，名字得真出现在正文里（拼错的路径读者照着找会找不到）
-  for (const n of ['html文档', 'ai-outfit-stylist临时文件', '三站运维手册', '技术选型与学习路线']) { // 11-26 目录改名，附录 C 现指这四个名
+  for (const n of ['html文档', 'ai-outfit-stylist临时文件', '三站运维手册', '技术选型与学习路线']) {
+    // 11-26 目录改名，附录 C 现指这四个名
     assert.ok(html.includes(n), `正文里找不到「${n}」`)
   }
 })
