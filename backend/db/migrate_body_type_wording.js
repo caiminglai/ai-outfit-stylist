@@ -413,6 +413,6 @@ if (process.argv.includes('--seed')) runSeedMode()
 else runDbMode()
 
 // 试跑法（不碰活库）：
-//   复制库到盘外 ⇒ cp backend/db/styleai.db "E:/website/站3产生临时文件/xxx/mig.db"
-//   跑副本       ⇒ STYLEAI_DB_PATH="E:/website/站3产生临时文件/xxx/mig.db" node db/migrate_body_type_wording.js
+//   复制库到盘外 ⇒ cp backend/db/styleai.db "$TMPDIR/mig.db"（Windows 用系统临时目录）
+//   跑副本       ⇒ STYLEAI_DB_PATH="$TMPDIR/mig.db" node db/migrate_body_type_wording.js
 //   跑第二遍     ⇒ 同一条命令，应报「词形改掉 0 条 / 挪到 bmi_level 0 条」

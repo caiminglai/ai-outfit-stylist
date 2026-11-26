@@ -14,7 +14,7 @@ const { resolveColor } = require('./resolve')
 //    出处＝docs/依据/papers/人体肤色数据库（2025年版，CIE 2562025）.xlsx，族群＝CN 子集
 //    3,555 行／404 人，按人聚合（同一受试者多部位取均值，h 由 atan2(meanB,meanA) 重算）；
 //    分位口径与落位核对见 docs/依据/04 §1.4，提取工装与全部统计留痕在
-//    盘外 E:\website\站3产生临时文件\skin-exp\extract.mjs → cn-person-anchors.json。
+//    盘外（作者工作目录，不随仓库分发）skin-exp\extract.mjs → cn-person-anchors.json。
 //    逐档子样出处（n＝该子样人数）：
 //      白皙  ＝中性 h 人群 L 前 10% 中位（n=11）     旧值 L68 在 P95=65.87 之上＝外推，已纠正
 //      自然白＝中性 h 人群 L 前 20~30% 中位（n=11）

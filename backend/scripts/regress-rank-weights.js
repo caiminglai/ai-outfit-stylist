@@ -27,7 +27,7 @@
  *   node scripts/regress-rank-weights.js --source=item          # 改读 item_feedback（色彩＋廓形两维）
  *   node scripts/regress-rank-weights.js --model=logistic        # 二分类换逻辑回归（带截距与温度）
  *   node scripts/regress-rank-weights.js --json                  # 机器可读，给自己排定时任务用
- *   对副本校验：STYLEAI_DB_PATH="E:/website/站3产生临时文件/xxx/copy.db" node scripts/regress-rank-weights.js
+ *   对副本校验：STYLEAI_DB_PATH="$TMPDIR/copy.db" node scripts/regress-rank-weights.js（Windows 用系统临时目录）
  */
 const Database = require('better-sqlite3')
 

@@ -156,8 +156,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
-      SMOKE_ENV_FILE: ${{ runner.temp }}/styleai-smoke.env
-      SMOKE_OVERRIDE_FILE: ${{ runner.temp }}/styleai-smoke.compose.yml
+      SMOKE_ENV_FILE: ${{ github.workspace }}/.styleai-smoke.env
+      SMOKE_OVERRIDE_FILE: ${{ github.workspace }}/.styleai-smoke.compose.yml
 
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4

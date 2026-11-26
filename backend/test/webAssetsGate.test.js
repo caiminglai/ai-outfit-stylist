@@ -6,7 +6,7 @@
  * 也一样，app 侧 `globalIgnores(['dist','public'])`）。新门自己也得有正负两向证据：
  *   ① 真仓库现在这份必须 PASS（否则这道门一挂上 CI 就红）；
  *   ② 造一份坏 fixture 必须 FAIL —— 只会亮绿的门等于没有门。
- * fixture 建在系统临时目录里，不往仓库与 `E:/website/files` 落任何东西。
+ * fixture 建在系统临时目录里，不往仓库与任何仓外资料目录落任何东西。
  *
  * 运行: node --test test/webAssetsGate.test.js
  */

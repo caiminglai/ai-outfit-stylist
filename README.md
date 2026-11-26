@@ -1,5 +1,14 @@
 # Style AI · 私人形象定制工作台
 
+[![CI](https://github.com/caiminglai/ai-outfit-stylist-public/actions/workflows/ci.yml/badge.svg)](https://github.com/caiminglai/ai-outfit-stylist-public/actions/workflows/ci.yml)
+
+**在线演示：** <https://style.sparklove.cn/>  
+**技术栈：** React 19 · TypeScript · Vite · Three.js · Node.js 24 · Express · SQLite · Docker · GitHub Actions
+
+游客可直接体验建档、搭配推荐和报告查看；公开演示库不包含真实用户、支付凭据或第三方人物模型。
+
+![首页截图](docs/images/home.png)
+
 一个可本地复现的穿搭建议与 3D 形象展示项目。核心推荐由**数据驱动规则引擎**完成，
 不是自研大模型；推荐文案当前是确定性本地模板，天气、同步照片试穿是在接入后才启用的可选外部能力。
 
