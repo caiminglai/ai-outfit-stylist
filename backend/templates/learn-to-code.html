@@ -689,10 +689,10 @@ node --test test/bmi.test.js</code></pre>
             <code>skip-worktree</code> 钉住（提交不进版本，发布另有自检脚本），你在上面随手一写，
             就等于随手改了线上业务数据。先<b>复制</b>一份到仓外。
           </div>
-          <pre><button class="cp">复制</button><code>mkdir -p E:/website/files/learn-l3
-cp E:/website/ai-outfit-stylist/backend/db/styleai.db E:/website/files/learn-l3/copy.db
+          <pre><button class="cp">复制</button><code>mkdir -p E:/website/ai-outfit-stylist临时文件/learn-l3
+cp E:/website/ai-outfit-stylist/backend/db/styleai.db E:/website/ai-outfit-stylist临时文件/learn-l3/copy.db
 cd E:/website/ai-outfit-stylist/backend
-node -e "const D=require('better-sqlite3')('E:/website/files/learn-l3/copy.db',{readonly:true});console.log(D.prepare(\"SELECT name FROM sqlite_master WHERE type='table' ORDER BY name\").all().length+' 张表');console.log(D.prepare('SELECT key,value FROM app_settings ORDER BY key').all())"</code></pre>
+node -e "const D=require('better-sqlite3')('E:/website/ai-outfit-stylist临时文件/learn-l3/copy.db',{readonly:true});console.log(D.prepare(\"SELECT name FROM sqlite_master WHERE type='table' ORDER BY name\").all().length+' 张表');console.log(D.prepare('SELECT key,value FROM app_settings ORDER BY key').all())"</code></pre>
           <p>
             看到表数与 <code>app_settings</code> 里那些键值（收款金额就在里面），这一课就通了。
             <code>{readonly:true}</code>
@@ -874,7 +874,7 @@ test('我自己加的：18.45 的人显示成 18.5，就该按 18.5 归正常', 
   assert.strictEqual(healthBand(18.44).bmi_level, '偏瘦', '18.44 取整 18.4，仍在偏瘦')
   assert.ok(bmiValue(165, 62) > 22 && bmiValue(165, 62) &lt; 23)
 })</code></pre>
-          <pre><button class="cp">复制</button><code>node --test E:/website/files/learn-l5-selftest.test.js</code></pre>
+          <pre><button class="cp">复制</button><code>node --test E:/website/ai-outfit-stylist临时文件/learn-l5-selftest.test.js</code></pre>
           <p>
             练完再玩一次破坏：把 <code>healthBand(18.44)</code> 那行的期望改成
             <code>'正常'</code>，跑——它必须红。<b>一条测不出任何东西的测试，比没有测试更危险</b>，
@@ -954,10 +954,10 @@ test('我自己加的：18.45 的人显示成 18.5，就该按 18.5 归正常', 
 
           <h3>现在就做：一次把三扇门跑完并留下退出码（10 分钟）</h3>
           <pre><button class="cp">复制</button><code>cd E:/website/ai-outfit-stylist/backend
-npm run format:check > E:/website/files/learn-l6-format.log 2>&1; echo "format rc=$?"
-npm run lint         > E:/website/files/learn-l6-lint.log  2>&1; echo "lint   rc=$?"
-npm test             > E:/website/files/learn-l6-test.log  2>&1; echo "test   rc=$?"
-tail -6 E:/website/files/learn-l6-test.log</code></pre>
+npm run format:check > E:/website/ai-outfit-stylist临时文件/learn-l6-format.log 2>&1; echo "format rc=$?"
+npm run lint         > E:/website/ai-outfit-stylist临时文件/learn-l6-lint.log  2>&1; echo "lint   rc=$?"
+npm test             > E:/website/ai-outfit-stylist临时文件/learn-l6-test.log  2>&1; echo "test   rc=$?"
+tail -6 E:/website/ai-outfit-stylist临时文件/learn-l6-test.log</code></pre>
           <p>
             三个 <code>rc=</code> 都应是 0，最后一行给你
             <code>tests / pass / fail</code> 的分母。<b>读数要带分母和时刻</b>——下次跑数字一定变（写这页那轮是 806
@@ -1005,7 +1005,7 @@ tail -6 E:/website/files/learn-l6-test.log</code></pre>
             <tr>
               <td>② 副本实例（教材正解）</td>
               <td>
-                <code>PORT=5001 STYLEAI_DB_PATH=E:/website/files/learn-l7/copy.db node server.js</code>
+                <code>PORT=5001 STYLEAI_DB_PATH=E:/website/ai-outfit-stylist临时文件/learn-l7/copy.db node server.js</code>
               </td>
               <td>盘外<b>只读练手副本</b></td>
               <td>任何"我想试试看改完会怎样"——用这条。</td>
@@ -1122,7 +1122,7 @@ git log --oneline -3</code></pre>
           <pre><button class="cp">复制</button><code>git add -u
 git restore --staged backend/db/styleai.db
 git add backend/templates/learn-to-code.html
-git commit -F E:/website/files/commit-msg.txt
+git commit -F E:/website/ai-outfit-stylist临时文件/commit-msg.txt
 git status --porcelain
 git log --oneline -1</code></pre>
           <ul>
@@ -1163,9 +1163,9 @@ git log --oneline -1</code></pre>
           <h2>第 9 课 · 用脚本量一个项目</h2>
           <p class="aim">
             这是你最强的一课：<b>不靠感觉、不靠别人说的数，自己现量。</b>教材是
-            <span class="ext">E:/website/站3产生临时文件/</span> 里那 20 来个
+            <span class="ext">E:/website/ai-outfit-stylist临时文件/</span> 里那 20 来个
             <code>.cjs</code> 工装，和它们旁边的台账
-            <span class="ext">E:/website/站3产生临时文件/这个文件夹里有什么-20261012.md</span>（14 KB，写明哪些件不能删、每件多大、为什么留）。
+            <span class="ext">E:/website/ai-outfit-stylist临时文件/这个文件夹里有什么-20261012.md</span>（14 KB，写明哪些件不能删、每件多大、为什么留）。
           </p>
 
           <h3>一条探针长什么样</h3>
@@ -1188,7 +1188,7 @@ let lines = 0
 })('E:/website/ai-outfit-stylist/backend')
 console.log('文件', files, '行', lines)</code></pre>
           <p>
-            跑法：<code>node E:/website/files/我的探针.cjs</code>。它不连库、不发请求、不写文件，
+            跑法：<code>node E:/website/ai-outfit-stylist临时文件/我的探针.cjs</code>。它不连库、不发请求、不写文件，
             <b>只读</b>——这就是安全边界。更常见的量法不用写脚本，一条命令就够：
           </p>
           <pre><button class="cp">复制</button><code>cd E:/website/ai-outfit-stylist
@@ -1213,7 +1213,7 @@ ls backend/test/*.test.js | wc -l</code></pre>
               那种要展开再搜）、工具可能静默失效。写"没有"之前，先证明"我的搜索确实能读到东西"（拿一个已知在的东西同批搜一遍）。
             </li>
             <li>
-              <b>用完就清。</b>临时件写进 <span class="ext">E:/website/站3产生临时文件/</span>
+              <b>用完就清。</b>临时件写进 <span class="ext">E:/website/ai-outfit-stylist临时文件/</span>
               这类<b>仓外</b>目录，用完当场删掉并报一句"删前几件、删后几件"。仓库里
               <code>??</code> 长期只留交付物，别人（包括未来的你）才看得清哪些是货、哪些是垃圾。
             </li>
@@ -1224,7 +1224,7 @@ ls backend/test/*.test.js | wc -l</code></pre>
             ><input type="checkbox" data-k="L9a" />自己跑过那两条 <code>find ... wc -l</code>，并记下自己的读数</label
           >
           <label class="chk"
-            ><input type="checkbox" data-k="L9b" />打开过 <span class="ext">E:/website/站3产生临时文件</span>
+            ><input type="checkbox" data-k="L9b" />打开过 <span class="ext">E:/website/ai-outfit-stylist临时文件</span>
             那份台账，知道哪些件不能删</label
           >
           <label class="chk"
@@ -1379,20 +1379,21 @@ ls backend/test/*.test.js | wc -l</code></pre>
           <h2>附录 C · 你手里已有的手册，配哪一课</h2>
           <p class="aim">
             这些不是网上下载的，是你自己攒在
-            <span class="ext">E:/website/files/9.html文档/</span> 里的（整个目录 78 件／约 39.9
+            <span class="ext">E:/website/files/html文档/</span> 里的（整个目录 56 件／约 59.95
             MiB）。它们讲<b>通用</b>链路，我这页讲<b>你这一套</b>；配着看，别只看一边。⚠️
             它们是本地文件，点不了链接——按路径去资源管理器里双击打开。
           </p>
           <table>
             <tr><th>课</th><th>配这份</th><th>看它的哪部分</th></tr>
-            <tr><td>0</td><td><span class="ext">E:/website/files/9.html文档/vscode配置/2026-8-21/VSCode中国宝宝完全体配置手册_v3.0.md</span></td><td>快捷键与面板布局；同目录那份 <code>settings.json</code> 是你的配置真身</td></tr>
-            <tr><td>1、2、5</td><td><span class="ext">E:/website/files/9.html文档/Web开发完整链路指南_A4打印版 2.0.html</span>（202,824 B）</td><td>「第三部分：后端框架选型指南」之前的链路章节，对着本页第 2 课那张表看</td></tr>
-            <tr><td>3、4</td><td><span class="ext">E:/website/files/9.html文档/Web项目结构拆解指南_A4打印版 3.0.html</span>（68,246 B）</td><td>「第三部分：后端项目拆解」——用它校准：你项目里 <code>routes/services/db</code> 三层的分工是不是通用的那种</td></tr>
-            <tr><td>6、7 与附录 B</td><td><span class="ext">E:/website/files/9.html文档/Web项目问题排查与解决指南 4.0.html</span>（74,280 B）</td><td>「第三部分：后端问题排查」；本页附录 B 专收<b>你这套系统真报过的</b></td></tr>
-            <tr><td>7</td><td><span class="ext">E:/website/files/9.html文档/全栈运维手册_整合版.html</span>（68,888 B）</td><td>服务器运维与故障排查；本机 Docker 那套看 <span class="ext">E:/website/compose/SERVER-OPS.md</span></td></tr>
-            <tr><td>第 9 课之后想深挖算法</td><td><span class="ext">E:/website/files/9.html文档/算法知识大全.html</span>（77,193 B）与 <span class="ext">E:/website/files/9.html文档/三个网站项目算法选择完整指南.html</span></td><td>通用算法分类；你项目里那条"规则初筛→算法重排→Top N"读 <span class="loc">backend/services/recommendEngine.js</span>（687 行，11-03 拆分轮把它的四个阶段挪进 <span class="loc">backend/services/recommend/</span> 那 7 份，最后才碰它）</td></tr>
-            <tr><td>规矩本身</td><td><span class="ext">E:/website/files/9.html文档/开发规则/1.全局规则/3.全局规则_融合版v4.md</span></td><td>你自己写的那 40 条硬规矩——本页第 9、10 课那三条纪律就是它的一部分投影</td></tr>
-            <tr><td>三站对照</td><td><span class="ext">E:/website/files/9.html文档/三站知识库·整合超大版_A4打印版 1.0.html</span>（1,022,897 B，最大那份）</td><td>别当教材读，当字典查</td></tr>
+            <tr><td>0</td><td><span class="ext">E:/website/files/html文档/vscode配置/2026-8-21/VSCode中国宝宝完全体配置手册_v3.0.md</span></td><td>快捷键与面板布局；同目录那份 <code>settings.json</code> 是你的配置真身</td></tr>
+            <tr><td>1、2、5</td><td><span class="ext">E:/website/files/html文档/编程知识/01 技术选型与学习路线_A4打印版.html</span>（55,506 B）与 <span class="ext">E:/website/files/html文档/编程知识/02 环境搭建与部署_A4打印版.html</span>（111,964 B）</td><td>01 讲选型与学习顺序，02 讲 Node/Git/编辑器一路到部署的整条链路，对着本页第 2 课那张表看</td></tr>
+            <tr><td>3、4</td><td><span class="ext">E:/website/files/html文档/编程知识/03 项目结构拆解_A4打印版.html</span>（64,209 B）</td><td>后端项目三层拆法那一章——用它校准：你项目里 <code>routes/services/db</code> 三层的分工是不是通用的那种</td></tr>
+            <tr><td>6、7 与附录 B</td><td><span class="ext">E:/website/files/html文档/编程知识/04 排错手册_A4打印版.html</span>（87,618 B）</td><td>通用报错与排查套路；本页附录 B 专收<b>你这套系统真报过的</b></td></tr>
+            <tr><td>7</td><td><span class="ext">E:/website/files/html文档/编程知识/06 三站运维手册_A4打印版.html</span>（191,136 B）</td><td>服务器运维与故障排查；本机 Docker 那套看 <span class="ext">E:/website/compose/SERVER-OPS.md</span></td></tr>
+            <tr><td>第 9 课之后想深挖算法</td><td><span class="ext">E:/website/files/html文档/编程知识/05 算法怎么选_A4打印版.html</span>（82,813 B）</td><td>通用算法分类与选型；你项目里那条"规则初筛→算法重排→Top N"读 <span class="loc">backend/services/recommendEngine.js</span>（687 行，11-03 拆分轮把它的四个阶段挪进 <span class="loc">backend/services/recommend/</span> 那 7 份，最后才碰它）</td></tr>
+            <tr><td>规矩本身</td><td><span class="ext">E:/website/files/html文档/开发规则/1.全局规则/3.全局规则_融合版v4.md</span></td><td>你自己写的那 40 条硬规矩——本页第 9、10 课那三条纪律就是它的一部分投影</td></tr>
+            <tr><td>先看索引</td><td><span class="ext">E:/website/files/html文档/编程知识/00 总纲与地图_A4打印版.html</span>（27,410 B）</td><td>它讲 01～08 各管什么，先看它再挑册；旧那套整合超大版已挪进 <span class="ext">E:/website/files/备用/编程知识-改前-20261023/</span></td></tr>
+            <tr><td>前端基础不牢</td><td><span class="ext">E:/website/files/html文档/编程知识/08 HTML-CSS-JS 基础速成_屏显版.html</span>（55,000 B）</td><td>屏显版，不排版打印；本页第 1 课那张"前端三件套"图就是它的最小版</td></tr>
           </table>
           <p>
             还有两处值得知道：
