@@ -105,7 +105,7 @@
 
 ## 运行入口
 
-- 仓库：`https://github.com/caiminglai/ai-outfit-stylist-public`
+- 仓库：`https://github.com/caiminglai/ai-outfit-stylist`
 - Compose：在仓库根目录执行 `docker compose up -d --build`，不依赖仓库外 Compose 文件。
 - 主页 `/`：React SPA；`/gallery`：Express 直出的 3D 页面；两者渲染路径不同。
 - 健康检查：`/health` 与 `/api/health` 都会执行真实 SQLite `SELECT 1`。

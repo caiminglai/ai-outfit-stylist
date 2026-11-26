@@ -29,7 +29,7 @@
 
 如遇骚扰或不当行为，请通过 GitHub 私密安全报告联系维护者：
 
-<https://github.com/caiminglai/ai-outfit-stylist-public/security/advisories/new>
+<https://github.com/caiminglai/ai-outfit-stylist/security/advisories/new>
 
 请提供事件经过、相关链接和必要上下文，并避免附带无关隐私。维护者将尽可能保密地审查和调查，保护报告者及被举报者免受报复。
 

@@ -1,6 +1,6 @@
 # Style AI · 私人形象定制工作台
 
-[![CI](https://github.com/caiminglai/ai-outfit-stylist-public/actions/workflows/ci.yml/badge.svg)](https://github.com/caiminglai/ai-outfit-stylist-public/actions/workflows/ci.yml)
+[![CI](https://github.com/caiminglai/ai-outfit-stylist/actions/workflows/ci.yml/badge.svg)](https://github.com/caiminglai/ai-outfit-stylist/actions/workflows/ci.yml)
 
 **在线演示：** <https://style.sparklove.cn/>  
 **技术栈：** React 19 · TypeScript · Vite · Three.js · Node.js 24 · Express · SQLite · Docker · GitHub Actions

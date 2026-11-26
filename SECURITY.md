@@ -13,7 +13,7 @@
 
 发现安全漏洞时，请勿创建公开 Issue 或 PR。使用 GitHub 的私密漏洞报告渠道联系维护者：
 
-<https://github.com/caiminglai/ai-outfit-stylist-public/security/advisories/new>
+<https://github.com/caiminglai/ai-outfit-stylist/security/advisories/new>
 
 报告应包含：受影响版本或提交号、影响与利用前提、最小复现步骤，以及必要的脱敏日志。无法稳定复现也可报告，但请明确标注。维护者可能通过同一私密渠道要求补充信息。
 
